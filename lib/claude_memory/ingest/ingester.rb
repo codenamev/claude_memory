@@ -5,8 +5,9 @@ require "digest"
 module ClaudeMemory
   module Ingest
     class Ingester
-      def initialize(store)
+      def initialize(store, fts: nil)
         @store = store
+        @fts = fts || Index::LexicalFTS.new(store)
       end
 
       def ingest(source:, session_id:, transcript_path:)
@@ -25,6 +26,7 @@ module ClaudeMemory
           raw_text: delta
         )
 
+        @fts.index_content_item(content_id, delta)
         @store.update_delta_cursor(session_id, transcript_path, new_offset)
 
         {status: :ingested, content_id: content_id, bytes_read: delta.bytesize}

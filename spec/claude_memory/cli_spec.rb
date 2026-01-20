@@ -121,4 +121,39 @@ RSpec.describe ClaudeMemory::CLI do
       expect(stderr.string).to include("File not found")
     end
   end
+
+  describe "search command" do
+    let(:db_path) { File.join(Dir.tmpdir, "cli_search_test_#{Process.pid}.sqlite3") }
+    let(:transcript_path) { File.join(Dir.tmpdir, "transcript_search_#{Process.pid}.jsonl") }
+
+    before do
+      File.write(transcript_path, "We are using PostgreSQL for our database.\n")
+      run_cli("ingest", "--session-id", "sess-1", "--transcript-path", transcript_path, "--db", db_path)
+      stdout.truncate(0)
+      stdout.rewind
+    end
+
+    after do
+      FileUtils.rm_f(db_path)
+      FileUtils.rm_f(transcript_path)
+    end
+
+    it "requires a query" do
+      expect(run_cli("search")).to eq(1)
+      expect(stderr.string).to include("Usage:")
+    end
+
+    it "finds matching content" do
+      code = run_cli("search", "PostgreSQL", "--db", db_path)
+      expect(code).to eq(0)
+      expect(stdout.string).to include("Found 1 result")
+      expect(stdout.string).to include("PostgreSQL")
+    end
+
+    it "reports no results" do
+      code = run_cli("search", "MongoDB", "--db", db_path)
+      expect(code).to eq(0)
+      expect(stdout.string).to include("No results found")
+    end
+  end
 end

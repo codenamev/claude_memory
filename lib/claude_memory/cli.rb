@@ -27,6 +27,8 @@ module ClaudeMemory
         0
       when "ingest"
         ingest
+      when "search"
+        search
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -46,6 +48,7 @@ module ClaudeMemory
           db:init    Initialize the SQLite database
           help       Show this help message
           ingest     Ingest transcript delta
+          search     Search indexed content
           version    Show version number
 
         Run 'claude-memory <command> --help' for more information on a command.
@@ -111,6 +114,38 @@ module ClaudeMemory
       end
 
       opts
+    end
+
+    def search
+      query = @args[1]
+      unless query
+        @stderr.puts "Usage: claude-memory search <query> [--db PATH] [--limit N]"
+        return 1
+      end
+
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, limit: 10}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+        o.on("--limit N", Integer, "Max results") { |v| opts[:limit] = v }
+      end.parse!(@args[2..])
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      fts = ClaudeMemory::Index::LexicalFTS.new(store)
+
+      ids = fts.search(query, limit: opts[:limit])
+      if ids.empty?
+        @stdout.puts "No results found."
+      else
+        @stdout.puts "Found #{ids.size} result(s):"
+        ids.each do |id|
+          text = store.execute("SELECT raw_text FROM content_items WHERE id = ?", [id]).first&.first
+          preview = text&.slice(0, 100)&.gsub(/\s+/, " ")
+          @stdout.puts "  [#{id}] #{preview}..."
+        end
+      end
+
+      store.close
+      0
     end
   end
 end
