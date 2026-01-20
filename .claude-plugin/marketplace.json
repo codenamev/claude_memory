@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "claude-memory",
-      "source": ".",
+      "source": "./",
       "description": "Long-term self-managed memory for Claude Code"
     }
   ]
