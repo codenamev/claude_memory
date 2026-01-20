@@ -10,3 +10,4 @@
 # rspec failure tracking
 .rspec_status
 .claude_memory.sqlite3
+.claude/mind.*

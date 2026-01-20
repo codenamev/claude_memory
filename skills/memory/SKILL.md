@@ -1,6 +1,6 @@
 ---
 name: memory
-description: Store and recall long-term memory. Use this skill to persist facts learned during conversations and recall them later.
+description: Store and recall long-term memory. Use when persisting facts learned during conversations or recalling stored knowledge about projects and preferences.
 ---
 
 # Memory Skill

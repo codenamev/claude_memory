@@ -1,6 +1,7 @@
 ---
-name: analyze
-description: Analyze a project to understand its tech stack, frameworks, tools, and conventions, then store facts in memory.
+name: project-analysis
+description: Knowledge about analyzing projects for tech stack, frameworks, tools, and conventions. Use when asked to understand or learn about a project's structure.
+user-invocable: false
 ---
 
 # Analyze Project Skill
