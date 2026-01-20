@@ -1,43 +1,136 @@
 # ClaudeMemory
 
-TODO: Delete this and the text below, and describe your gem
+Turn-key Ruby gem providing Claude Code with instant, high-quality, long-term, self-managed memory using **Claude Code Hooks + MCP + Output Style**, with minimal dependencies (SQLite by default).
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/claude_memory`. To experiment with that code, run `bin/console` for an interactive prompt.
+## Features
+
+- **Automated ingestion**: Claude Code hooks trigger delta-based transcript ingestion
+- **Fact extraction**: Heuristic-based distiller extracts entities, facts, and decisions
+- **Truth maintenance**: Deterministic conflict/supersession resolution
+- **Full-text search**: SQLite FTS5 for fast recall without embeddings
+- **MCP integration**: Memory tools accessible directly in Claude Code
+- **Snapshot publishing**: Curated memory files for Claude Code's built-in system
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
-
-Install the gem and add to the application's Gemfile by executing:
-
 ```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+gem install claude_memory
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Or add to your Gemfile:
 
-```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem 'claude_memory'
 ```
 
-## Usage
+## Quick Start
 
-TODO: Write usage instructions here
+```bash
+# Initialize in your project
+cd your-project
+claude-memory init
+
+# Follow the instructions to configure:
+# 1. Claude Code hooks
+# 2. MCP server
+# 3. Output style (optional)
+
+# Verify setup
+claude-memory doctor
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `init` | Initialize ClaudeMemory in a project |
+| `db:init` | Initialize the SQLite database |
+| `ingest` | Ingest transcript delta |
+| `search` | Search indexed content |
+| `recall` | Recall facts matching a query |
+| `explain` | Explain a fact with provenance receipts |
+| `conflicts` | Show open conflicts |
+| `changes` | Show recent fact changes |
+| `publish` | Publish snapshot to Claude Code memory |
+| `sweep` | Run maintenance/pruning |
+| `serve-mcp` | Start MCP server for Claude Code |
+| `doctor` | Check system health |
+
+## Usage Examples
+
+### Ingest Content
+
+```bash
+claude-memory ingest \
+  --source claude_code \
+  --session-id sess-123 \
+  --transcript-path ~/.claude/projects/myproject/transcripts/latest.jsonl
+```
+
+### Recall Facts
+
+```bash
+claude-memory recall "database"
+# Returns facts + provenance receipts
+
+claude-memory explain 42
+# Detailed explanation with supersession/conflict links
+```
+
+### Publish Snapshot
+
+```bash
+# Publish to .claude/rules/ (shared)
+claude-memory publish
+
+# Publish to local file
+claude-memory publish --mode local
+```
+
+### MCP Tools
+
+When configured, these tools are available in Claude Code:
+
+- `memory.recall` - Search for relevant facts
+- `memory.explain` - Get detailed fact provenance
+- `memory.changes` - Recent fact updates
+- `memory.conflicts` - Open contradictions
+- `memory.sweep_now` - Run maintenance
+- `memory.status` - System health check
+
+## Architecture
+
+```
+Transcripts → Ingest → FTS Index
+                    ↓
+              Distill → Extract entities/facts/signals
+                    ↓
+              Resolve → Truth maintenance (conflicts/supersession)
+                    ↓
+              Store → SQLite (facts, provenance, entities)
+                    ↓
+              Publish → .claude/rules/claude_memory.generated.md
+```
+
+## Configuration
+
+The database location defaults to `.claude_memory.sqlite3` in the project root.
+
+Override with `--db PATH` on any command.
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/claude_memory. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/claude_memory/blob/main/CODE_OF_CONDUCT.md).
+```bash
+git clone https://github.com/codenamev/claude_memory
+cd claude_memory
+bin/setup
+bundle exec rspec
+```
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+MIT License - see [LICENSE.txt](LICENSE.txt)
 
-## Code of Conduct
+## Contributing
 
-Everyone interacting in the ClaudeMemory project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/claude_memory/blob/main/CODE_OF_CONDUCT.md).
+Bug reports and pull requests welcome at https://github.com/codenamev/claude_memory
