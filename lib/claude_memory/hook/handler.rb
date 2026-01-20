@@ -15,15 +15,17 @@ module ClaudeMemory
       def ingest(payload)
         session_id = payload["session_id"] || @env["CLAUDE_SESSION_ID"]
         transcript_path = payload["transcript_path"] || @env["CLAUDE_TRANSCRIPT_PATH"]
+        project_path = payload["project_path"] || @env["CLAUDE_PROJECT_DIR"] || Dir.pwd
 
         raise PayloadError, "Missing required field: session_id" if session_id.nil? || session_id.empty?
         raise PayloadError, "Missing required field: transcript_path" if transcript_path.nil? || transcript_path.empty?
 
-        ingester = Ingest::Ingester.new(@store)
+        ingester = Ingest::Ingester.new(@store, env: @env)
         ingester.ingest(
           source: "claude_code",
           session_id: session_id,
-          transcript_path: transcript_path
+          transcript_path: transcript_path,
+          project_path: project_path
         )
       end
 

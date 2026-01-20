@@ -7,8 +7,10 @@ module ClaudeMemory
         @store = store
       end
 
-      def apply(extraction, content_item_id: nil, occurred_at: nil)
+      def apply(extraction, content_item_id: nil, occurred_at: nil, project_path: nil, scope: "project")
         occurred_at ||= Time.now.utc.iso8601
+        @current_project_path = project_path
+        @current_scope = scope
 
         result = {
           entities_created: 0,
@@ -78,7 +80,9 @@ module ClaudeMemory
           object_literal: object_val,
           polarity: fact_data[:polarity] || "positive",
           confidence: fact_data[:confidence] || 1.0,
-          valid_from: occurred_at
+          valid_from: occurred_at,
+          scope: @current_scope,
+          project_path: @current_project_path
         )
         outcome[:created] = 1
 
@@ -118,7 +122,9 @@ module ClaudeMemory
           polarity: new_fact_data[:polarity] || "positive",
           confidence: new_fact_data[:confidence] || 1.0,
           status: "disputed",
-          valid_from: occurred_at
+          valid_from: occurred_at,
+          scope: @current_scope,
+          project_path: @current_project_path
         )
 
         @store.insert_conflict(
