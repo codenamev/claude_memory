@@ -392,6 +392,12 @@ module ClaudeMemory
         return 1
       end
 
+      unless %w[ingest sweep publish].include?(subcommand)
+        @stderr.puts "Unknown hook command: #{subcommand}"
+        @stderr.puts "Available: ingest, sweep, publish"
+        return 1
+      end
+
       opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
       OptionParser.new do |o|
         o.on("--db PATH", "Database path") { |v| opts[:db] = v }
@@ -410,11 +416,6 @@ module ClaudeMemory
         hook_sweep(handler, payload)
       when "publish"
         hook_publish(handler, payload)
-      else
-        @stderr.puts "Unknown hook command: #{subcommand}"
-        @stderr.puts "Available: ingest, sweep, publish"
-        store.close
-        return 1
       end
 
       store.close

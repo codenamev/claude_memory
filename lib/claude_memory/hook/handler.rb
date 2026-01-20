@@ -42,7 +42,6 @@ module ClaudeMemory
         publisher = Publish.new(@store)
         publisher.publish!(mode: mode, since: since)
       end
-
     end
   end
 end
