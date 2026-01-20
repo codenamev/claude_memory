@@ -37,6 +37,8 @@ module ClaudeMemory
         conflicts_cmd
       when "changes"
         changes_cmd
+      when "sweep"
+        sweep_cmd
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -61,6 +63,7 @@ module ClaudeMemory
           ingest     Ingest transcript delta
           recall     Recall facts matching a query
           search     Search indexed content
+          sweep      Run maintenance/pruning
           version    Show version number
 
         Run 'claude-memory <command> --help' for more information on a command.
@@ -299,6 +302,31 @@ module ClaudeMemory
         quote_preview = r[:quote]&.slice(0, 80)&.gsub(/\s+/, " ")
         @stdout.puts "    - [#{r[:strength]}] \"#{quote_preview}...\""
       end
+    end
+
+    def sweep_cmd
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, budget: 5}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+        o.on("--budget SECONDS", Integer, "Time budget in seconds") { |v| opts[:budget] = v }
+      end.parse!(@args[1..])
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      sweeper = ClaudeMemory::Sweep::Sweeper.new(store)
+
+      @stdout.puts "Running sweep with #{opts[:budget]}s budget..."
+      stats = sweeper.run!(budget_seconds: opts[:budget])
+
+      @stdout.puts "Sweep complete:"
+      @stdout.puts "  Proposed facts expired: #{stats[:proposed_facts_expired]}"
+      @stdout.puts "  Disputed facts expired: #{stats[:disputed_facts_expired]}"
+      @stdout.puts "  Orphaned provenance deleted: #{stats[:orphaned_provenance_deleted]}"
+      @stdout.puts "  Old content pruned: #{stats[:old_content_pruned]}"
+      @stdout.puts "  Elapsed: #{stats[:elapsed_seconds].round(2)}s"
+      @stdout.puts "  Budget honored: #{stats[:budget_honored]}"
+
+      store.close
+      0
     end
   end
 end
