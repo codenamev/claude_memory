@@ -35,6 +35,43 @@ These items are **modifications to the original plan’s approach**, driven by C
 ## New aspects added to the plan (and how to execute them)
 The sections below describe the **newly added capabilities** and where they fit into implementation milestones.
 
+### F) Project-scoped memory for global installations
+**Goal:** When installed globally, memory should still be project-aware.
+
+**Problem**
+- Global DB (`~/.claude/claude_memory.sqlite3`) serves all projects
+- Without scoping, Project A's decisions pollute Project B's recall
+- Need both cross-project knowledge AND project-specific knowledge
+
+**Solution: Dual-layer scoping**
+
+1. **Ingest tags content with project scope**
+   - Detect project via `$CLAUDE_PROJECT_DIR` or working directory
+   - Store `project_path` (normalized) on `content_items` and `facts`
+   - Some facts are explicitly `scope: global` (user preferences, cross-project conventions)
+
+2. **Recall searches both layers**
+   - First: project-specific facts (highest relevance)
+   - Then: global facts (cross-project knowledge)
+   - Merge with project facts taking precedence for conflicts
+
+3. **Schema additions**
+   - `content_items.project_path` (nullable, null = global)
+   - `facts.scope` enum: `project`, `global`
+   - `facts.project_path` (when scope = project)
+
+4. **Publish respects scope**
+   - `--mode shared` publishes current project's facts to `.claude/rules/`
+   - `--mode home` publishes to `~/.claude/claude_memory/<project>.md`
+   - Global facts can optionally be included in all project snapshots
+
+**Alignment with Organizational Memory Playbook**
+- Axiom 2: Truth is temporal → extends to spatial (project context)
+- Axiom 4: Provenance includes WHERE (which project)
+- Scale 2: "Which belief is in force?" → scope determines applicability
+
+---
+
 ### A) Settings-driven hook installation (instead of standalone templates)
 **Goal:** Make setup “Claude-native” by writing hooks into the real settings locations Claude Code reads.
 
@@ -278,17 +315,36 @@ Acceptance checks
 
 ---
 
-### Milestone 11: End-to-end demo + doctor (1–2 commits)
+### Milestone 11: Project-scoped memory (2–4 commits)
+**Goal:** Support dual-layer recall for global installations.
+
+Tasks
+- Add `project_path` column to `content_items` table
+- Add `scope` (project/global) and `project_path` columns to `facts` table
+- Migration for existing databases
+- Update `Ingester` to detect and store project context from `$CLAUDE_PROJECT_DIR` or `Dir.pwd`
+- Update `Recall` to search project-first, then global
+- Add `--scope` flag to `recall`, `conflicts`, `changes` commands
+- Update `Publish` to filter by project scope
+
+Acceptance checks
+- Ingest from project A stores facts with `project_path: /path/to/A`
+- Recall in project A returns A's facts + global facts
+- Recall in project B does NOT return project A's facts
+
+---
+
+### Milestone 12: End-to-end demo + doctor (1–2 commits)
 Goal: verify full loop; doctor detects managed-hook limitations.
 
 ---
 
-### Milestone 12: Packaging + Release hygiene (2–4 commits)
+### Milestone 13: Packaging + Release hygiene (2–4 commits)
 Goal: make it usable by others.
 
 ---
 
-### Milestone 13 (NEW, Phase 2): Plugin packaging (optional but recommended for teams) (4–10 commits)
+### Milestone 14 (Phase 2): Plugin packaging (optional but recommended for teams) (4–10 commits)
 **Goal:** Distribute ClaudeMemory via a Claude plugin.
 
 Tasks
@@ -304,17 +360,22 @@ Acceptance checks
 ---
 
 ## Command surface (updated)
-- `claude-memory init`
-- `claude-memory ingest --source claude_code --session_id ... --transcript_path ...`
-- `claude-memory hook ingest|sweep|publish` (stdin JSON)
-- `claude-memory recall "..." [--scope ...]`
+- `claude-memory init [--global]`
+- `claude-memory ingest --source claude_code --session_id ... --transcript_path ... [--project PATH]`
+- `claude-memory hook ingest|sweep|publish` (reads stdin JSON + env vars)
+- `claude-memory recall "..." [--scope project|global|all]`
 - `claude-memory explain FACT_ID`
-- `claude-memory conflicts [--scope ...]`
-- `claude-memory changes --since ... [--scope ...]`
+- `claude-memory conflicts [--scope project|global|all]`
+- `claude-memory changes --since ... [--scope project|global|all]`
 - `claude-memory sweep --budget 5s`
 - `claude-memory publish [--mode shared|local|home] [--granularity repo|paths|nested] [--since <iso>]`
 - `claude-memory serve-mcp`
 - `claude-memory doctor`
+
+**Scope options:**
+- `project` (default): current project's facts only
+- `global`: cross-project facts only
+- `all`: both layers, project facts take precedence
 
 ---
 
