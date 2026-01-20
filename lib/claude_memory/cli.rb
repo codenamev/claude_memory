@@ -45,6 +45,8 @@ module ClaudeMemory
         serve_mcp
       when "publish"
         publish_cmd
+      when "doctor"
+        doctor_cmd
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -64,6 +66,7 @@ module ClaudeMemory
           changes    Show recent fact changes
           conflicts  Show open conflicts
           db:init    Initialize the SQLite database
+          doctor     Check system health
           explain    Explain a fact with receipts
           help       Show this help message
           init       Initialize ClaudeMemory in a project
@@ -417,6 +420,89 @@ module ClaudeMemory
       @stdout.puts "3. Run 'claude-memory publish' after ingesting some transcripts"
       @stdout.puts "4. Run 'claude-memory doctor' to verify setup"
 
+      0
+    end
+
+    def doctor_cmd
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+      end.parse!(@args[1..])
+
+      issues = []
+      warnings = []
+
+      @stdout.puts "Claude Memory Doctor\n"
+      @stdout.puts "=" * 40
+
+      if File.exist?(opts[:db])
+        @stdout.puts "✓ Database exists: #{opts[:db]}"
+        begin
+          store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+          @stdout.puts "✓ Database opens successfully"
+          @stdout.puts "  Schema version: #{store.schema_version}"
+
+          fact_count = store.execute("SELECT COUNT(*) FROM facts").first.first
+          @stdout.puts "  Facts: #{fact_count}"
+
+          content_count = store.execute("SELECT COUNT(*) FROM content_items").first.first
+          @stdout.puts "  Content items: #{content_count}"
+
+          conflict_count = store.execute("SELECT COUNT(*) FROM conflicts WHERE status = 'open'").first.first
+          if conflict_count > 0
+            warnings << "#{conflict_count} open conflict(s) need resolution"
+          end
+          @stdout.puts "  Open conflicts: #{conflict_count}"
+
+          last_ingest = store.execute("SELECT MAX(ingested_at) FROM content_items").first.first
+          if last_ingest
+            @stdout.puts "  Last ingest: #{last_ingest}"
+          else
+            warnings << "No content has been ingested yet"
+          end
+
+          store.close
+        rescue => e
+          issues << "Database error: #{e.message}"
+        end
+      else
+        issues << "Database not found: #{opts[:db]}"
+      end
+
+      if File.exist?(".claude/rules/claude_memory.generated.md")
+        @stdout.puts "✓ Published snapshot exists"
+      else
+        warnings << "No published snapshot found. Run 'claude-memory publish'"
+      end
+
+      if File.exist?(".claude/CLAUDE.md")
+        content = File.read(".claude/CLAUDE.md")
+        if content.include?("claude_memory.generated.md")
+          @stdout.puts "✓ CLAUDE.md imports snapshot"
+        else
+          warnings << "CLAUDE.md does not import snapshot"
+        end
+      else
+        warnings << "No .claude/CLAUDE.md found"
+      end
+
+      @stdout.puts
+
+      if warnings.any?
+        @stdout.puts "Warnings:"
+        warnings.each { |w| @stdout.puts "  ⚠ #{w}" }
+        @stdout.puts
+      end
+
+      if issues.any?
+        @stdout.puts "Issues:"
+        issues.each { |i| @stderr.puts "  ✗ #{i}" }
+        @stdout.puts
+        @stdout.puts "Run 'claude-memory init' to set up."
+        return 1
+      end
+
+      @stdout.puts "All checks passed!"
       0
     end
   end
