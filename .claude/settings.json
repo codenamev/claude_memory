@@ -1,4 +1,14 @@
 {
+  "commands": {
+    "analyze": {
+      "description": "Analyze project and store facts in memory",
+      "prompt": "Analyze this project to understand its tech stack, frameworks, tools, and conventions. Read key files like Gemfile, package.json, pyproject.toml, README.md, Dockerfile, and config files. Then use memory.store_extraction to store what you learn as facts. Include entities for languages, frameworks, tools, and databases. Use predicate names like uses_language, uses_framework, uses_tool, uses_database, uses_package_manager, uses_ci. Include quotes referencing where you found each fact."
+    },
+    "remember": {
+      "description": "Recall what you know about this project",
+      "prompt": "Use memory.recall to search for facts about this project. Try queries like 'uses', 'framework', 'database', 'tool' to find relevant facts. Summarize what you know about this project's tech stack and conventions."
+    }
+  },
   "hooks": {
     "Stop": [
       {
