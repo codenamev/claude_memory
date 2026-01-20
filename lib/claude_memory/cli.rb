@@ -29,6 +29,14 @@ module ClaudeMemory
         ingest
       when "search"
         search
+      when "recall"
+        recall_cmd
+      when "explain"
+        explain_cmd
+      when "conflicts"
+        conflicts_cmd
+      when "changes"
+        changes_cmd
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -45,9 +53,13 @@ module ClaudeMemory
         Usage: claude-memory <command> [options]
 
         Commands:
+          changes    Show recent fact changes
+          conflicts  Show open conflicts
           db:init    Initialize the SQLite database
+          explain    Explain a fact with receipts
           help       Show this help message
           ingest     Ingest transcript delta
+          recall     Recall facts matching a query
           search     Search indexed content
           version    Show version number
 
@@ -146,6 +158,147 @@ module ClaudeMemory
 
       store.close
       0
+    end
+
+    def recall_cmd
+      query = @args[1]
+      unless query
+        @stderr.puts "Usage: claude-memory recall <query> [--db PATH] [--limit N]"
+        return 1
+      end
+
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, limit: 10}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+        o.on("--limit N", Integer, "Max results") { |v| opts[:limit] = v }
+      end.parse!(@args[2..])
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      recall = ClaudeMemory::Recall.new(store)
+
+      results = recall.query(query, limit: opts[:limit])
+      if results.empty?
+        @stdout.puts "No facts found."
+      else
+        @stdout.puts "Found #{results.size} fact(s):\n\n"
+        results.each do |result|
+          print_fact(result[:fact])
+          print_receipts(result[:receipts])
+          @stdout.puts
+        end
+      end
+
+      store.close
+      0
+    end
+
+    def explain_cmd
+      fact_id = @args[1]&.to_i
+      unless fact_id && fact_id > 0
+        @stderr.puts "Usage: claude-memory explain <fact_id> [--db PATH]"
+        return 1
+      end
+
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+      end.parse!(@args[2..])
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      recall = ClaudeMemory::Recall.new(store)
+
+      explanation = recall.explain(fact_id)
+      if explanation.nil?
+        @stderr.puts "Fact #{fact_id} not found."
+        store.close
+        return 1
+      end
+
+      @stdout.puts "Fact ##{fact_id}:"
+      print_fact(explanation[:fact])
+      print_receipts(explanation[:receipts])
+
+      if explanation[:supersedes].any?
+        @stdout.puts "  Supersedes: #{explanation[:supersedes].join(", ")}"
+      end
+      if explanation[:superseded_by].any?
+        @stdout.puts "  Superseded by: #{explanation[:superseded_by].join(", ")}"
+      end
+      if explanation[:conflicts].any?
+        @stdout.puts "  Conflicts: #{explanation[:conflicts].map { |c| c[:id] }.join(", ")}"
+      end
+
+      store.close
+      0
+    end
+
+    def conflicts_cmd
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+      end.parse!(@args[1..])
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      conflicts = store.open_conflicts
+
+      if conflicts.empty?
+        @stdout.puts "No open conflicts."
+      else
+        @stdout.puts "Open conflicts (#{conflicts.size}):\n\n"
+        conflicts.each do |c|
+          @stdout.puts "  Conflict ##{c[:id]}: Fact #{c[:fact_a_id]} vs Fact #{c[:fact_b_id]}"
+          @stdout.puts "    Status: #{c[:status]}, Detected: #{c[:detected_at]}"
+          @stdout.puts "    Notes: #{c[:notes]}" if c[:notes]
+          @stdout.puts
+        end
+      end
+
+      store.close
+      0
+    end
+
+    def changes_cmd
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, since: nil, limit: 20}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+        o.on("--since ISO", "Since timestamp") { |v| opts[:since] = v }
+        o.on("--limit N", Integer, "Max results") { |v| opts[:limit] = v }
+      end.parse!(@args[1..])
+
+      opts[:since] ||= (Time.now - 86400 * 7).utc.iso8601
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      recall = ClaudeMemory::Recall.new(store)
+
+      changes = recall.changes(since: opts[:since], limit: opts[:limit])
+      if changes.empty?
+        @stdout.puts "No changes since #{opts[:since]}."
+      else
+        @stdout.puts "Changes since #{opts[:since]} (#{changes.size}):\n\n"
+        changes.each do |change|
+          @stdout.puts "  [#{change[:id]}] #{change[:predicate]}: #{change[:object_literal]} (#{change[:status]})"
+          @stdout.puts "    Created: #{change[:created_at]}"
+        end
+      end
+
+      store.close
+      0
+    end
+
+    def print_fact(fact)
+      @stdout.puts "  #{fact[:subject_name]}.#{fact[:predicate]} = #{fact[:object_literal]}"
+      @stdout.puts "    Status: #{fact[:status]}, Confidence: #{fact[:confidence]}"
+      @stdout.puts "    Valid: #{fact[:valid_from]} - #{fact[:valid_to] || "present"}"
+    end
+
+    def print_receipts(receipts)
+      return if receipts.empty?
+
+      @stdout.puts "  Receipts:"
+      receipts.each do |r|
+        quote_preview = r[:quote]&.slice(0, 80)&.gsub(/\s+/, " ")
+        @stdout.puts "    - [#{r[:strength]}] \"#{quote_preview}...\""
+      end
     end
   end
 end
