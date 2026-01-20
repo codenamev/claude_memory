@@ -1,0 +1,59 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH && claude-memory sweep --budget 15"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH && claude-memory sweep --budget 15"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory sweep --budget 5"
+          }
+        ]
+      }
+    ]
+  }
+}

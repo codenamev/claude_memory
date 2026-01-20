@@ -25,6 +25,8 @@ module ClaudeMemory
       when "db:init"
         db_init
         0
+      when "init"
+        init_project
       when "ingest"
         ingest
       when "search"
@@ -62,6 +64,7 @@ module ClaudeMemory
           db:init    Initialize the SQLite database
           explain    Explain a fact with receipts
           help       Show this help message
+          init       Initialize ClaudeMemory in a project
           ingest     Ingest transcript delta
           recall     Recall facts matching a query
           search     Search indexed content
@@ -342,6 +345,51 @@ module ClaudeMemory
       server = ClaudeMemory::MCP::Server.new(store)
       server.run
       store.close
+      0
+    end
+
+    def init_project
+      templates_dir = File.expand_path("templates", __dir__)
+
+      store = ClaudeMemory::Store::SQLiteStore.new(ClaudeMemory::DEFAULT_DB_PATH)
+      @stdout.puts "Created database: #{ClaudeMemory::DEFAULT_DB_PATH}"
+      store.close
+
+      FileUtils.mkdir_p(".claude/rules")
+      @stdout.puts "Created .claude/rules directory"
+
+      hooks_example = File.read(File.join(templates_dir, "hooks.example.json"))
+      @stdout.puts "\n=== Hooks Configuration ===\n"
+      @stdout.puts "Add this to your Claude Code hooks config:\n\n"
+      @stdout.puts hooks_example
+      @stdout.puts
+
+      mcp_config = <<~JSON
+        {
+          "mcpServers": {
+            "claude-memory": {
+              "command": "claude-memory",
+              "args": ["serve-mcp", "--db", "#{File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)}"]
+            }
+          }
+        }
+      JSON
+
+      @stdout.puts "\n=== MCP Server Configuration ===\n"
+      @stdout.puts "Add this to your Claude Code MCP config:\n\n"
+      @stdout.puts mcp_config
+
+      output_style = File.read(File.join(templates_dir, "output-styles", "memory-aware.md"))
+      @stdout.puts "\n=== Output Style ===\n"
+      @stdout.puts "Consider using this output style:\n\n"
+      @stdout.puts output_style
+
+      @stdout.puts "\n=== Next Steps ===\n"
+      @stdout.puts "1. Configure Claude Code hooks (see above)"
+      @stdout.puts "2. Configure MCP server (see above)"
+      @stdout.puts "3. Run 'claude-memory publish' after ingesting some transcripts"
+      @stdout.puts "4. Run 'claude-memory doctor' to verify setup"
+
       0
     end
   end
