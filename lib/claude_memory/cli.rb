@@ -43,6 +43,8 @@ module ClaudeMemory
         sweep_cmd
       when "serve-mcp"
         serve_mcp
+      when "publish"
+        publish_cmd
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -66,6 +68,7 @@ module ClaudeMemory
           help       Show this help message
           init       Initialize ClaudeMemory in a project
           ingest     Ingest transcript delta
+          publish    Publish snapshot to Claude Code memory
           recall     Recall facts matching a query
           search     Search indexed content
           serve-mcp  Start MCP server
@@ -344,6 +347,30 @@ module ClaudeMemory
       store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
       server = ClaudeMemory::MCP::Server.new(store)
       server.run
+      store.close
+      0
+    end
+
+    def publish_cmd
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, mode: :shared, since: nil}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+        o.on("--mode MODE", "Mode: shared or local") { |v| opts[:mode] = v.to_sym }
+        o.on("--since ISO", "Include changes since timestamp") { |v| opts[:since] = v }
+      end.parse!(@args[1..])
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      publish = ClaudeMemory::Publish.new(store)
+
+      result = publish.publish!(mode: opts[:mode], since: opts[:since])
+
+      case result[:status]
+      when :updated
+        @stdout.puts "Published snapshot to #{result[:path]}"
+      when :unchanged
+        @stdout.puts "No changes - #{result[:path]} is up to date"
+      end
+
       store.close
       0
     end
