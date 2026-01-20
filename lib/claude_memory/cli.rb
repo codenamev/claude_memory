@@ -25,6 +25,8 @@ module ClaudeMemory
       when "db:init"
         db_init
         0
+      when "ingest"
+        ingest
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -43,6 +45,7 @@ module ClaudeMemory
         Commands:
           db:init    Initialize the SQLite database
           help       Show this help message
+          ingest     Ingest transcript delta
           version    Show version number
 
         Run 'claude-memory <command> --help' for more information on a command.
@@ -59,6 +62,55 @@ module ClaudeMemory
       @stdout.puts "Database initialized at #{db_path}"
       @stdout.puts "Schema version: #{store.schema_version}"
       store.close
+    end
+
+    def ingest
+      opts = parse_ingest_options
+      return 1 unless opts
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      ingester = ClaudeMemory::Ingest::Ingester.new(store)
+
+      result = ingester.ingest(
+        source: opts[:source],
+        session_id: opts[:session_id],
+        transcript_path: opts[:transcript_path]
+      )
+
+      case result[:status]
+      when :ingested
+        @stdout.puts "Ingested #{result[:bytes_read]} bytes (content_id: #{result[:content_id]})"
+      when :no_change
+        @stdout.puts "No new content to ingest"
+      end
+
+      store.close
+      0
+    rescue ClaudeMemory::Ingest::TranscriptReader::FileNotFoundError => e
+      @stderr.puts "Error: #{e.message}"
+      1
+    end
+
+    def parse_ingest_options
+      opts = {source: "claude_code", db: ClaudeMemory::DEFAULT_DB_PATH}
+
+      parser = OptionParser.new do |o|
+        o.banner = "Usage: claude-memory ingest [options]"
+        o.on("--source SOURCE", "Source identifier (default: claude_code)") { |v| opts[:source] = v }
+        o.on("--session-id ID", "Session identifier (required)") { |v| opts[:session_id] = v }
+        o.on("--transcript-path PATH", "Path to transcript file (required)") { |v| opts[:transcript_path] = v }
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+      end
+
+      parser.parse!(@args[1..])
+
+      unless opts[:session_id] && opts[:transcript_path]
+        @stderr.puts parser.help
+        @stderr.puts "\nError: --session-id and --transcript-path are required"
+        return nil
+      end
+
+      opts
     end
   end
 end

@@ -79,4 +79,46 @@ RSpec.describe ClaudeMemory::CLI do
       expect(stdout.string).to include("Database initialized")
     end
   end
+
+  describe "ingest command" do
+    let(:db_path) { File.join(Dir.tmpdir, "cli_ingest_test_#{Process.pid}.sqlite3") }
+    let(:transcript_path) { File.join(Dir.tmpdir, "transcript_cli_#{Process.pid}.jsonl") }
+
+    before { File.write(transcript_path, "some content\n") }
+
+    after do
+      FileUtils.rm_f(db_path)
+      FileUtils.rm_f(transcript_path)
+    end
+
+    it "requires session-id and transcript-path" do
+      expect(run_cli("ingest")).to eq(1)
+      expect(stderr.string).to include("--session-id")
+      expect(stderr.string).to include("--transcript-path")
+    end
+
+    it "ingests content" do
+      code = run_cli("ingest", "--session-id", "sess-1", "--transcript-path", transcript_path, "--db", db_path)
+      expect(code).to eq(0)
+      expect(stdout.string).to include("Ingested")
+      expect(stdout.string).to include("13 bytes")
+    end
+
+    it "reports no change on second run" do
+      run_cli("ingest", "--session-id", "sess-1", "--transcript-path", transcript_path, "--db", db_path)
+      stdout.truncate(0)
+      stdout.rewind
+
+      code = run_cli("ingest", "--session-id", "sess-1", "--transcript-path", transcript_path, "--db", db_path)
+      expect(code).to eq(0)
+      expect(stdout.string).to include("No new content")
+    end
+
+    it "handles missing file" do
+      FileUtils.rm_f(transcript_path)
+      code = run_cli("ingest", "--session-id", "sess-1", "--transcript-path", transcript_path, "--db", db_path)
+      expect(code).to eq(1)
+      expect(stderr.string).to include("File not found")
+    end
+  end
 end
