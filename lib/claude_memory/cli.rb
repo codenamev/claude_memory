@@ -50,6 +50,8 @@ module ClaudeMemory
         hook_cmd
       when "doctor"
         doctor_cmd
+      when "promote"
+        promote_cmd
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -75,6 +77,7 @@ module ClaudeMemory
           hook       Run hook entrypoints (ingest|sweep|publish)
           init       Initialize ClaudeMemory in a project
           ingest     Ingest transcript delta
+          promote    Promote a project fact to global memory
           publish    Publish snapshot to Claude Code memory
           recall     Recall facts matching a query
           search     Search indexed content
@@ -91,11 +94,39 @@ module ClaudeMemory
     end
 
     def db_init
-      db_path = @args[1] || ClaudeMemory::DEFAULT_DB_PATH
-      store = ClaudeMemory::Store::SQLiteStore.new(db_path)
-      @stdout.puts "Database initialized at #{db_path}"
-      @stdout.puts "Schema version: #{store.schema_version}"
-      store.close
+      opts = parse_db_init_options
+      manager = ClaudeMemory::Store::StoreManager.new
+
+      if opts[:global]
+        manager.ensure_global!
+        @stdout.puts "Global database initialized at #{manager.global_db_path}"
+        @stdout.puts "Schema version: #{manager.global_store.schema_version}"
+      end
+
+      if opts[:project]
+        manager.ensure_project!
+        @stdout.puts "Project database initialized at #{manager.project_db_path}"
+        @stdout.puts "Schema version: #{manager.project_store.schema_version}"
+      end
+
+      manager.close
+    end
+
+    def parse_db_init_options
+      opts = {global: false, project: false}
+
+      parser = OptionParser.new do |o|
+        o.banner = "Usage: claude-memory db:init [options]"
+        o.on("--global", "Initialize global database (~/.claude/memory.sqlite3)") { opts[:global] = true }
+        o.on("--project", "Initialize project database (.claude/memory.sqlite3)") { opts[:project] = true }
+      end
+
+      parser.parse!(@args[1..])
+
+      opts[:global] = true if !opts[:global] && !opts[:project]
+      opts[:project] = true if !opts[:global] && !opts[:project]
+
+      opts
     end
 
     def ingest
@@ -126,7 +157,7 @@ module ClaudeMemory
     end
 
     def parse_ingest_options
-      opts = {source: "claude_code", db: ClaudeMemory::DEFAULT_DB_PATH}
+      opts = {source: "claude_code", db: ClaudeMemory.project_db_path}
 
       parser = OptionParser.new do |o|
         o.banner = "Usage: claude-memory ingest [options]"
@@ -154,13 +185,14 @@ module ClaudeMemory
         return 1
       end
 
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, limit: 10}
+      opts = {limit: 10, scope: "all"}
       OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
         o.on("--limit N", Integer, "Max results") { |v| opts[:limit] = v }
+        o.on("--scope SCOPE", "Scope: project, global, or all") { |v| opts[:scope] = v }
       end.parse!(@args[2..])
 
-      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      manager = ClaudeMemory::Store::StoreManager.new
+      store = manager.store_for_scope((opts[:scope] == "global") ? "global" : "project")
       fts = ClaudeMemory::Index::LexicalFTS.new(store)
 
       ids = fts.search(query, limit: opts[:limit])
@@ -175,26 +207,25 @@ module ClaudeMemory
         end
       end
 
-      store.close
+      manager.close
       0
     end
 
     def recall_cmd
       query = @args[1]
       unless query
-        @stderr.puts "Usage: claude-memory recall <query> [--db PATH] [--limit N] [--scope project|global|all]"
+        @stderr.puts "Usage: claude-memory recall <query> [--limit N] [--scope project|global|all]"
         return 1
       end
 
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, limit: 10, scope: "all"}
+      opts = {limit: 10, scope: "all"}
       OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
         o.on("--limit N", Integer, "Max results") { |v| opts[:limit] = v }
         o.on("--scope SCOPE", "Scope: project, global, or all") { |v| opts[:scope] = v }
       end.parse!(@args[2..])
 
-      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
-      recall = ClaudeMemory::Recall.new(store)
+      manager = ClaudeMemory::Store::StoreManager.new
+      recall = ClaudeMemory::Recall.new(manager)
 
       results = recall.query(query, limit: opts[:limit], scope: opts[:scope])
       if results.empty?
@@ -202,39 +233,39 @@ module ClaudeMemory
       else
         @stdout.puts "Found #{results.size} fact(s):\n\n"
         results.each do |result|
-          print_fact(result[:fact])
+          print_fact(result[:fact], source: result[:source])
           print_receipts(result[:receipts])
           @stdout.puts
         end
       end
 
-      store.close
+      manager.close
       0
     end
 
     def explain_cmd
       fact_id = @args[1]&.to_i
       unless fact_id && fact_id > 0
-        @stderr.puts "Usage: claude-memory explain <fact_id> [--db PATH]"
+        @stderr.puts "Usage: claude-memory explain <fact_id> [--scope project|global]"
         return 1
       end
 
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
+      opts = {scope: "project"}
       OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+        o.on("--scope SCOPE", "Scope: project or global") { |v| opts[:scope] = v }
       end.parse!(@args[2..])
 
-      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
-      recall = ClaudeMemory::Recall.new(store)
+      manager = ClaudeMemory::Store::StoreManager.new
+      recall = ClaudeMemory::Recall.new(manager)
 
-      explanation = recall.explain(fact_id)
+      explanation = recall.explain(fact_id, scope: opts[:scope])
       if explanation.nil?
-        @stderr.puts "Fact #{fact_id} not found."
-        store.close
+        @stderr.puts "Fact #{fact_id} not found in #{opts[:scope]} database."
+        manager.close
         return 1
       end
 
-      @stdout.puts "Fact ##{fact_id}:"
+      @stdout.puts "Fact ##{fact_id} (#{opts[:scope]}):"
       print_fact(explanation[:fact])
       print_receipts(explanation[:receipts])
 
@@ -248,19 +279,18 @@ module ClaudeMemory
         @stdout.puts "  Conflicts: #{explanation[:conflicts].map { |c| c[:id] }.join(", ")}"
       end
 
-      store.close
+      manager.close
       0
     end
 
     def conflicts_cmd
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, scope: "all"}
+      opts = {scope: "all"}
       OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
         o.on("--scope SCOPE", "Scope: project, global, or all") { |v| opts[:scope] = v }
       end.parse!(@args[1..])
 
-      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
-      recall = ClaudeMemory::Recall.new(store)
+      manager = ClaudeMemory::Store::StoreManager.new
+      recall = ClaudeMemory::Recall.new(manager)
       conflicts = recall.conflicts(scope: opts[:scope])
 
       if conflicts.empty?
@@ -268,21 +298,21 @@ module ClaudeMemory
       else
         @stdout.puts "Open conflicts (#{conflicts.size}):\n\n"
         conflicts.each do |c|
-          @stdout.puts "  Conflict ##{c[:id]}: Fact #{c[:fact_a_id]} vs Fact #{c[:fact_b_id]}"
+          source_label = c[:source] ? " [#{c[:source]}]" : ""
+          @stdout.puts "  Conflict ##{c[:id]}: Fact #{c[:fact_a_id]} vs Fact #{c[:fact_b_id]}#{source_label}"
           @stdout.puts "    Status: #{c[:status]}, Detected: #{c[:detected_at]}"
           @stdout.puts "    Notes: #{c[:notes]}" if c[:notes]
           @stdout.puts
         end
       end
 
-      store.close
+      manager.close
       0
     end
 
     def changes_cmd
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, since: nil, limit: 20, scope: "all"}
+      opts = {since: nil, limit: 20, scope: "all"}
       OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
         o.on("--since ISO", "Since timestamp") { |v| opts[:since] = v }
         o.on("--limit N", Integer, "Max results") { |v| opts[:limit] = v }
         o.on("--scope SCOPE", "Scope: project, global, or all") { |v| opts[:scope] = v }
@@ -290,8 +320,8 @@ module ClaudeMemory
 
       opts[:since] ||= (Time.now - 86400 * 7).utc.iso8601
 
-      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
-      recall = ClaudeMemory::Recall.new(store)
+      manager = ClaudeMemory::Store::StoreManager.new
+      recall = ClaudeMemory::Recall.new(manager)
 
       changes = recall.changes(since: opts[:since], limit: opts[:limit], scope: opts[:scope])
       if changes.empty?
@@ -299,18 +329,19 @@ module ClaudeMemory
       else
         @stdout.puts "Changes since #{opts[:since]} (#{changes.size}):\n\n"
         changes.each do |change|
-          scope_info = (change[:scope] == "global") ? " [global]" : ""
-          @stdout.puts "  [#{change[:id]}] #{change[:predicate]}: #{change[:object_literal]} (#{change[:status]})#{scope_info}"
+          source_label = change[:source] ? " [#{change[:source]}]" : ""
+          @stdout.puts "  [#{change[:id]}] #{change[:predicate]}: #{change[:object_literal]} (#{change[:status]})#{source_label}"
           @stdout.puts "    Created: #{change[:created_at]}"
         end
       end
 
-      store.close
+      manager.close
       0
     end
 
-    def print_fact(fact)
-      @stdout.puts "  #{fact[:subject_name]}.#{fact[:predicate]} = #{fact[:object_literal]}"
+    def print_fact(fact, source: nil)
+      source_label = source ? " [#{source}]" : ""
+      @stdout.puts "  #{fact[:subject_name]}.#{fact[:predicate]} = #{fact[:object_literal]}#{source_label}"
       @stdout.puts "    Status: #{fact[:status]}, Confidence: #{fact[:confidence]}"
       @stdout.puts "    Valid: #{fact[:valid_from]} - #{fact[:valid_to] || "present"}"
     end
@@ -326,16 +357,17 @@ module ClaudeMemory
     end
 
     def sweep_cmd
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, budget: 5}
+      opts = {budget: 5, scope: "project"}
       OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
         o.on("--budget SECONDS", Integer, "Time budget in seconds") { |v| opts[:budget] = v }
+        o.on("--scope SCOPE", "Scope: project or global") { |v| opts[:scope] = v }
       end.parse!(@args[1..])
 
-      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      manager = ClaudeMemory::Store::StoreManager.new
+      store = manager.store_for_scope(opts[:scope])
       sweeper = ClaudeMemory::Sweep::Sweeper.new(store)
 
-      @stdout.puts "Running sweep with #{opts[:budget]}s budget..."
+      @stdout.puts "Running sweep on #{opts[:scope]} database with #{opts[:budget]}s budget..."
       stats = sweeper.run!(budget_seconds: opts[:budget])
 
       @stdout.puts "Sweep complete:"
@@ -346,45 +378,64 @@ module ClaudeMemory
       @stdout.puts "  Elapsed: #{stats[:elapsed_seconds].round(2)}s"
       @stdout.puts "  Budget honored: #{stats[:budget_honored]}"
 
-      store.close
+      manager.close
       0
     end
 
     def serve_mcp
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
-      OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
-      end.parse!(@args[1..])
-
-      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
-      server = ClaudeMemory::MCP::Server.new(store)
+      manager = ClaudeMemory::Store::StoreManager.new
+      server = ClaudeMemory::MCP::Server.new(manager)
       server.run
-      store.close
+      manager.close
       0
     end
 
     def publish_cmd
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, mode: :shared, granularity: :repo, since: nil}
+      opts = {mode: :shared, granularity: :repo, since: nil, scope: "project"}
       OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
         o.on("--mode MODE", "Mode: shared, local, or home") { |v| opts[:mode] = v.to_sym }
         o.on("--granularity LEVEL", "Granularity: repo, paths, or nested") { |v| opts[:granularity] = v.to_sym }
         o.on("--since ISO", "Include changes since timestamp") { |v| opts[:since] = v }
+        o.on("--scope SCOPE", "Scope: project or global") { |v| opts[:scope] = v }
       end.parse!(@args[1..])
 
-      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      manager = ClaudeMemory::Store::StoreManager.new
+      store = manager.store_for_scope(opts[:scope])
       publish = ClaudeMemory::Publish.new(store)
 
       result = publish.publish!(mode: opts[:mode], granularity: opts[:granularity], since: opts[:since])
 
       case result[:status]
       when :updated
-        @stdout.puts "Published snapshot to #{result[:path]}"
+        @stdout.puts "Published #{opts[:scope]} snapshot to #{result[:path]}"
       when :unchanged
         @stdout.puts "No changes - #{result[:path]} is up to date"
       end
 
-      store.close
+      manager.close
+      0
+    end
+
+    def promote_cmd
+      fact_id = @args[1]&.to_i
+      unless fact_id && fact_id > 0
+        @stderr.puts "Usage: claude-memory promote <fact_id>"
+        @stderr.puts "\nPromotes a project fact to the global database."
+        return 1
+      end
+
+      manager = ClaudeMemory::Store::StoreManager.new
+      global_fact_id = manager.promote_fact(fact_id)
+
+      if global_fact_id
+        @stdout.puts "Promoted fact ##{fact_id} to global database as fact ##{global_fact_id}"
+      else
+        @stderr.puts "Fact ##{fact_id} not found in project database."
+        manager.close
+        return 1
+      end
+
+      manager.close
       0
     end
 
@@ -403,7 +454,7 @@ module ClaudeMemory
         return 1
       end
 
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
+      opts = {db: ClaudeMemory.project_db_path}
       OptionParser.new do |o|
         o.on("--db PATH", "Database path") { |v| opts[:db] = v }
       end.parse!(@args[2..])
@@ -488,9 +539,12 @@ module ClaudeMemory
     def init_local
       @stdout.puts "Initializing ClaudeMemory (project-local)...\n\n"
 
-      store = ClaudeMemory::Store::SQLiteStore.new(ClaudeMemory::DEFAULT_DB_PATH)
-      @stdout.puts "✓ Created database: #{ClaudeMemory::DEFAULT_DB_PATH}"
-      store.close
+      manager = ClaudeMemory::Store::StoreManager.new
+      manager.ensure_global!
+      @stdout.puts "✓ Global database: #{manager.global_db_path}"
+      manager.ensure_project!
+      @stdout.puts "✓ Project database: #{manager.project_db_path}"
+      manager.close
 
       FileUtils.mkdir_p(".claude/rules")
       @stdout.puts "✓ Created .claude/rules directory"
@@ -501,43 +555,40 @@ module ClaudeMemory
 
       @stdout.puts "\n=== Setup Complete ===\n"
       @stdout.puts "ClaudeMemory is now configured for this project."
+      @stdout.puts "\nDatabases:"
+      @stdout.puts "  Global: ~/.claude/memory.sqlite3 (user-wide knowledge)"
+      @stdout.puts "  Project: .claude/memory.sqlite3 (project-specific)"
       @stdout.puts "\nNext steps:"
       @stdout.puts "  1. Restart Claude Code to load the new configuration"
       @stdout.puts "  2. Use Claude Code normally - transcripts will be ingested automatically"
-      @stdout.puts "  3. Run 'claude-memory publish' periodically to update the snapshot"
+      @stdout.puts "  3. Run 'claude-memory promote <fact_id>' to move facts to global"
       @stdout.puts "  4. Run 'claude-memory doctor' to verify setup"
 
       0
     end
 
     def init_global
-      @stdout.puts "Initializing ClaudeMemory (global)...\n\n"
+      @stdout.puts "Initializing ClaudeMemory (global only)...\n\n"
 
-      global_claude_dir = File.join(Dir.home, ".claude")
-      global_db_path = File.join(global_claude_dir, "claude_memory.sqlite3")
+      manager = ClaudeMemory::Store::StoreManager.new
+      manager.ensure_global!
+      @stdout.puts "✓ Created global database: #{manager.global_db_path}"
+      manager.close
 
-      FileUtils.mkdir_p(global_claude_dir)
-
-      store = ClaudeMemory::Store::SQLiteStore.new(global_db_path)
-      @stdout.puts "✓ Created database: #{global_db_path}"
-      store.close
-
-      configure_global_hooks(global_db_path)
-      configure_global_mcp(global_db_path)
-      configure_global_memory(global_claude_dir)
+      configure_global_hooks
+      configure_global_mcp
+      configure_global_memory
 
       @stdout.puts "\n=== Global Setup Complete ===\n"
-      @stdout.puts "ClaudeMemory is now configured globally for all projects."
-      @stdout.puts "\nNext steps:"
-      @stdout.puts "  1. Restart Claude Code to load the new configuration"
-      @stdout.puts "  2. Use Claude Code in any project - transcripts will be ingested automatically"
-      @stdout.puts "  3. Run 'claude-memory doctor' to verify setup"
+      @stdout.puts "ClaudeMemory is now configured globally."
+      @stdout.puts "\nNote: Run 'claude-memory init' in each project for project-specific memory."
 
       0
     end
 
-    def configure_global_hooks(db_path)
+    def configure_global_hooks
       settings_path = File.join(Dir.home, ".claude", "settings.json")
+      db_path = ClaudeMemory.global_db_path
 
       ingest_cmd = "claude-memory hook ingest --db #{db_path}"
       sweep_cmd = "claude-memory hook sweep --db #{db_path}"
@@ -552,28 +603,23 @@ module ClaudeMemory
       @stdout.puts "✓ Configured hooks in #{settings_path}"
     end
 
-    def configure_global_mcp(db_path)
+    def configure_global_mcp
       mcp_path = File.join(Dir.home, ".claude.json")
-
-      mcp_config = {
-        "mcpServers" => {
-          "claude-memory" => {
-            "type" => "stdio",
-            "command" => "claude-memory",
-            "args" => ["serve-mcp", "--db", db_path]
-          }
-        }
-      }
 
       existing = load_json_file(mcp_path)
       existing["mcpServers"] ||= {}
-      existing["mcpServers"]["claude-memory"] = mcp_config["mcpServers"]["claude-memory"]
+      existing["mcpServers"]["claude-memory"] = {
+        "type" => "stdio",
+        "command" => "claude-memory",
+        "args" => ["serve-mcp"]
+      }
 
       File.write(mcp_path, JSON.pretty_generate(existing))
       @stdout.puts "✓ Configured MCP server in #{mcp_path}"
     end
 
-    def configure_global_memory(global_claude_dir)
+    def configure_global_memory
+      global_claude_dir = File.join(Dir.home, ".claude")
       claude_md_path = File.join(global_claude_dir, "CLAUDE.md")
 
       memory_instruction = <<~MD
@@ -602,7 +648,7 @@ module ClaudeMemory
 
     def configure_project_hooks
       hooks_path = ".claude/settings.json"
-      db_path = File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)
+      db_path = File.expand_path(ClaudeMemory.project_db_path)
 
       ingest_cmd = "claude-memory hook ingest --db #{db_path}"
       sweep_cmd = "claude-memory hook sweep --db #{db_path}"
@@ -620,14 +666,13 @@ module ClaudeMemory
 
     def configure_project_mcp
       mcp_path = ".mcp.json"
-      db_path = File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)
 
       existing = load_json_file(mcp_path)
       existing["mcpServers"] ||= {}
       existing["mcpServers"]["claude-memory"] = {
         "type" => "stdio",
         "command" => "claude-memory",
-        "args" => ["serve-mcp", "--db", db_path]
+        "args" => ["serve-mcp"]
       }
 
       File.write(mcp_path, JSON.pretty_generate(existing))
@@ -645,50 +690,21 @@ module ClaudeMemory
     end
 
     def doctor_cmd
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
-      OptionParser.new do |o|
-        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
-      end.parse!(@args[1..])
-
       issues = []
       warnings = []
 
       @stdout.puts "Claude Memory Doctor\n"
       @stdout.puts "=" * 40
 
-      if File.exist?(opts[:db])
-        @stdout.puts "✓ Database exists: #{opts[:db]}"
-        begin
-          store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
-          @stdout.puts "✓ Database opens successfully"
-          @stdout.puts "  Schema version: #{store.schema_version}"
+      manager = ClaudeMemory::Store::StoreManager.new
 
-          fact_count = store.execute("SELECT COUNT(*) FROM facts").first.first
-          @stdout.puts "  Facts: #{fact_count}"
+      @stdout.puts "\n## Global Database"
+      check_database(manager.global_db_path, "global", issues, warnings)
 
-          content_count = store.execute("SELECT COUNT(*) FROM content_items").first.first
-          @stdout.puts "  Content items: #{content_count}"
+      @stdout.puts "\n## Project Database"
+      check_database(manager.project_db_path, "project", issues, warnings)
 
-          conflict_count = store.execute("SELECT COUNT(*) FROM conflicts WHERE status = 'open'").first.first
-          if conflict_count > 0
-            warnings << "#{conflict_count} open conflict(s) need resolution"
-          end
-          @stdout.puts "  Open conflicts: #{conflict_count}"
-
-          last_ingest = store.execute("SELECT MAX(ingested_at) FROM content_items").first.first
-          if last_ingest
-            @stdout.puts "  Last ingest: #{last_ingest}"
-          else
-            warnings << "No content has been ingested yet"
-          end
-
-          store.close
-        rescue => e
-          issues << "Database error: #{e.message}"
-        end
-      else
-        issues << "Database not found: #{opts[:db]}"
-      end
+      manager.close
 
       if File.exist?(".claude/rules/claude_memory.generated.md")
         @stdout.puts "✓ Published snapshot exists"
@@ -727,6 +743,43 @@ module ClaudeMemory
 
       @stdout.puts "All checks passed!"
       0
+    end
+
+    def check_database(db_path, label, issues, warnings)
+      if File.exist?(db_path)
+        @stdout.puts "✓ #{label.capitalize} database exists: #{db_path}"
+        begin
+          store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+          @stdout.puts "  Schema version: #{store.schema_version}"
+
+          fact_count = store.db.execute("SELECT COUNT(*) FROM facts").first.first
+          @stdout.puts "  Facts: #{fact_count}"
+
+          content_count = store.db.execute("SELECT COUNT(*) FROM content_items").first.first
+          @stdout.puts "  Content items: #{content_count}"
+
+          conflict_count = store.db.execute("SELECT COUNT(*) FROM conflicts WHERE status = 'open'").first.first
+          if conflict_count > 0
+            warnings << "#{label}: #{conflict_count} open conflict(s) need resolution"
+          end
+          @stdout.puts "  Open conflicts: #{conflict_count}"
+
+          last_ingest = store.db.execute("SELECT MAX(ingested_at) FROM content_items").first.first
+          if last_ingest
+            @stdout.puts "  Last ingest: #{last_ingest}"
+          elsif label == "project"
+            warnings << "#{label}: No content has been ingested yet"
+          end
+
+          store.close
+        rescue => e
+          issues << "#{label} database error: #{e.message}"
+        end
+      elsif label == "global"
+        issues << "Global database not found: #{db_path}"
+      else
+        warnings << "Project database not found: #{db_path} (run 'claude-memory init')"
+      end
     end
 
     def check_hooks_config(warnings)

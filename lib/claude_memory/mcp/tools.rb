@@ -5,16 +5,21 @@ require "json"
 module ClaudeMemory
   module MCP
     class Tools
-      def initialize(store)
-        @store = store
-        @recall = Recall.new(store)
+      def initialize(store_or_manager)
+        @recall = Recall.new(store_or_manager)
+
+        if store_or_manager.is_a?(Store::StoreManager)
+          @manager = store_or_manager
+        else
+          @legacy_store = store_or_manager
+        end
       end
 
       def definitions
         [
           {
             name: "memory.recall",
-            description: "Recall facts matching a query. Returns facts with their scope (global or project-specific).",
+            description: "Recall facts matching a query. Searches both global and project databases.",
             inputSchema: {
               type: "object",
               properties: {
@@ -31,59 +36,62 @@ module ClaudeMemory
             inputSchema: {
               type: "object",
               properties: {
-                fact_id: {type: "integer", description: "Fact ID to explain"}
+                fact_id: {type: "integer", description: "Fact ID to explain"},
+                scope: {type: "string", enum: ["global", "project"], description: "Which database to look in", default: "project"}
               },
               required: ["fact_id"]
             }
           },
           {
             name: "memory.changes",
-            description: "List recent fact changes",
+            description: "List recent fact changes from both databases",
             inputSchema: {
               type: "object",
               properties: {
                 since: {type: "string", description: "ISO timestamp"},
-                limit: {type: "integer", default: 20}
+                limit: {type: "integer", default: 20},
+                scope: {type: "string", enum: ["all", "global", "project"], default: "all"}
               }
             }
           },
           {
             name: "memory.conflicts",
-            description: "List open conflicts",
+            description: "List open conflicts from both databases",
             inputSchema: {
               type: "object",
-              properties: {}
+              properties: {
+                scope: {type: "string", enum: ["all", "global", "project"], default: "all"}
+              }
             }
           },
           {
             name: "memory.sweep_now",
-            description: "Run maintenance sweep",
+            description: "Run maintenance sweep on a database",
             inputSchema: {
               type: "object",
               properties: {
-                budget_seconds: {type: "integer", default: 5}
+                budget_seconds: {type: "integer", default: 5},
+                scope: {type: "string", enum: ["global", "project"], default: "project"}
               }
             }
           },
           {
             name: "memory.status",
-            description: "Get memory system status",
+            description: "Get memory system status for both databases",
             inputSchema: {
               type: "object",
               properties: {}
             }
           },
           {
-            name: "memory.set_scope",
-            description: "Change a fact's scope to global or project. Use this when the user says a preference should apply everywhere (global) or only to the current project.",
+            name: "memory.promote",
+            description: "Promote a project fact to global memory. Use when user says a preference should apply everywhere.",
             inputSchema: {
               type: "object",
               properties: {
-                fact_id: {type: "integer", description: "Fact ID to update"},
-                scope: {type: "string", enum: ["global", "project"], description: "New scope for the fact"},
-                project_path: {type: "string", description: "Project path (only needed when setting scope to 'project')"}
+                fact_id: {type: "integer", description: "Project fact ID to promote to global"}
               },
-              required: ["fact_id", "scope"]
+              required: ["fact_id"]
             }
           }
         ]
@@ -98,13 +106,13 @@ module ClaudeMemory
         when "memory.changes"
           changes(arguments)
         when "memory.conflicts"
-          conflicts
+          conflicts(arguments)
         when "memory.sweep_now"
           sweep_now(arguments)
         when "memory.status"
           status
-        when "memory.set_scope"
-          set_scope(arguments)
+        when "memory.promote"
+          promote(arguments)
         else
           {error: "Unknown tool: #{name}"}
         end
@@ -123,8 +131,7 @@ module ClaudeMemory
               predicate: r[:fact][:predicate],
               object: r[:fact][:object_literal],
               status: r[:fact][:status],
-              scope: r[:fact][:scope] || "project",
-              project_path: r[:fact][:project_path],
+              source: r[:source],
               receipts: r[:receipts].map { |p| {quote: p[:quote], strength: p[:strength]} }
             }
           end
@@ -132,8 +139,9 @@ module ClaudeMemory
       end
 
       def explain(args)
-        explanation = @recall.explain(args["fact_id"])
-        return {error: "Fact not found"} unless explanation
+        scope = args["scope"] || "project"
+        explanation = @recall.explain(args["fact_id"], scope: scope)
+        return {error: "Fact not found in #{scope} database"} unless explanation
 
         {
           fact: {
@@ -145,6 +153,7 @@ module ClaudeMemory
             valid_from: explanation[:fact][:valid_from],
             valid_to: explanation[:fact][:valid_to]
           },
+          source: scope,
           receipts: explanation[:receipts].map { |p| {quote: p[:quote], strength: p[:strength]} },
           supersedes: explanation[:supersedes],
           superseded_by: explanation[:superseded_by],
@@ -154,27 +163,49 @@ module ClaudeMemory
 
       def changes(args)
         since = args["since"] || (Time.now - 86400 * 7).utc.iso8601
-        list = @recall.changes(since: since, limit: args["limit"] || 20)
+        scope = args["scope"] || "all"
+        list = @recall.changes(since: since, limit: args["limit"] || 20, scope: scope)
         {
           since: since,
           changes: list.map do |c|
-            {id: c[:id], predicate: c[:predicate], object: c[:object_literal], status: c[:status], created_at: c[:created_at]}
+            {
+              id: c[:id],
+              predicate: c[:predicate],
+              object: c[:object_literal],
+              status: c[:status],
+              created_at: c[:created_at],
+              source: c[:source]
+            }
           end
         }
       end
 
-      def conflicts
-        list = @store.open_conflicts
+      def conflicts(args)
+        scope = args["scope"] || "all"
+        list = @recall.conflicts(scope: scope)
         {
           count: list.size,
-          conflicts: list.map { |c| {id: c[:id], fact_a: c[:fact_a_id], fact_b: c[:fact_b_id], status: c[:status]} }
+          conflicts: list.map do |c|
+            {
+              id: c[:id],
+              fact_a: c[:fact_a_id],
+              fact_b: c[:fact_b_id],
+              status: c[:status],
+              source: c[:source]
+            }
+          end
         }
       end
 
       def sweep_now(args)
-        sweeper = Sweep::Sweeper.new(@store)
+        scope = args["scope"] || "project"
+        store = get_store_for_scope(scope)
+        return {error: "Database not available"} unless store
+
+        sweeper = Sweep::Sweeper.new(store)
         stats = sweeper.run!(budget_seconds: args["budget_seconds"] || 5)
         {
+          scope: scope,
           proposed_expired: stats[:proposed_facts_expired],
           disputed_expired: stats[:disputed_facts_expired],
           orphaned_deleted: stats[:orphaned_provenance_deleted],
@@ -184,42 +215,64 @@ module ClaudeMemory
       end
 
       def status
-        {
-          facts_total: @store.facts.count,
-          facts_active: @store.facts.where(status: "active").count,
-          content_items: @store.content_items.count,
-          open_conflicts: @store.conflicts.where(status: "open").count,
-          schema_version: @store.schema_version
-        }
+        result = {databases: {}}
+
+        if @manager
+          if @manager.global_exists?
+            @manager.ensure_global!
+            result[:databases][:global] = db_stats(@manager.global_store)
+          else
+            result[:databases][:global] = {exists: false}
+          end
+
+          if @manager.project_exists?
+            @manager.ensure_project!
+            result[:databases][:project] = db_stats(@manager.project_store)
+          else
+            result[:databases][:project] = {exists: false}
+          end
+        else
+          result[:databases][:legacy] = db_stats(@legacy_store)
+        end
+
+        result
       end
 
-      def set_scope(args)
+      def promote(args)
+        return {error: "Promote requires StoreManager"} unless @manager
+
         fact_id = args["fact_id"]
-        scope = args["scope"]
-        project_path = args["project_path"]
+        global_fact_id = @manager.promote_fact(fact_id)
 
-        return {error: "Invalid scope. Must be 'global' or 'project'"} unless %w[global project].include?(scope)
-
-        explanation = @recall.explain(fact_id)
-        return {error: "Fact not found"} unless explanation
-
-        old_scope = explanation[:fact][:scope] || "project"
-        old_project = explanation[:fact][:project_path]
-
-        success = @store.update_fact(fact_id, scope: scope, project_path: project_path)
-
-        if success
+        if global_fact_id
           {
-            fact_id: fact_id,
-            old_scope: old_scope,
-            new_scope: scope,
-            old_project_path: old_project,
-            new_project_path: (scope == "global") ? nil : project_path,
-            message: (scope == "global") ? "Fact now applies globally across all projects" : "Fact now scoped to project"
+            success: true,
+            project_fact_id: fact_id,
+            global_fact_id: global_fact_id,
+            message: "Fact promoted to global memory"
           }
         else
-          {error: "Failed to update fact scope"}
+          {error: "Fact #{fact_id} not found in project database"}
         end
+      end
+
+      def get_store_for_scope(scope)
+        if @manager
+          @manager.store_for_scope(scope)
+        else
+          @legacy_store
+        end
+      end
+
+      def db_stats(store)
+        {
+          exists: true,
+          facts_total: store.facts.count,
+          facts_active: store.facts.where(status: "active").count,
+          content_items: store.content_items.count,
+          open_conflicts: store.conflicts.where(status: "open").count,
+          schema_version: store.schema_version
+        }
       end
     end
   end

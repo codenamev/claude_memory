@@ -67,7 +67,7 @@ RSpec.describe ClaudeMemory::MCP::Server do
       content = response["result"]["content"]
       expect(content.first["type"]).to eq("text")
       result = JSON.parse(content.first["text"])
-      expect(result["schema_version"]).to eq(2)
+      expect(result["databases"]["legacy"]["schema_version"]).to eq(2)
     end
   end
 

@@ -3,12 +3,23 @@
 module ClaudeMemory
   class Error < StandardError; end
 
-  DEFAULT_DB_PATH = ".claude_memory.sqlite3"
+  LEGACY_DB_PATH = ".claude_memory.sqlite3"
+  PROJECT_DB_PATH = ".claude/memory.sqlite3"
+
+  def self.global_db_path(env = ENV)
+    home = env["HOME"] || File.expand_path("~")
+    File.join(home, ".claude", "memory.sqlite3")
+  end
+
+  def self.project_db_path(project_path = Dir.pwd)
+    File.join(project_path, ".claude", "memory.sqlite3")
+  end
 end
 
 require_relative "claude_memory/version"
 require_relative "claude_memory/cli"
 require_relative "claude_memory/store/sqlite_store"
+require_relative "claude_memory/store/store_manager"
 require_relative "claude_memory/ingest/transcript_reader"
 require_relative "claude_memory/ingest/ingester"
 require_relative "claude_memory/index/lexical_fts"

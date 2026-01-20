@@ -7,9 +7,9 @@ module ClaudeMemory
     class Server
       PROTOCOL_VERSION = "2024-11-05"
 
-      def initialize(store, input: $stdin, output: $stdout)
-        @store = store
-        @tools = Tools.new(store)
+      def initialize(store_or_manager, input: $stdin, output: $stdout)
+        @store_or_manager = store_or_manager
+        @tools = Tools.new(store_or_manager)
         @input = input
         @output = output
         @running = false

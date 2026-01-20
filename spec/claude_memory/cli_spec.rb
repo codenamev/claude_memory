@@ -60,23 +60,39 @@ RSpec.describe ClaudeMemory::CLI do
   end
 
   describe "db:init command" do
-    let(:db_path) { File.join(Dir.tmpdir, "cli_test_#{Process.pid}.sqlite3") }
+    let(:fake_home) { Dir.mktmpdir("cli_dbinit_#{Process.pid}") }
+    let(:fake_project) { Dir.mktmpdir("cli_dbinit_project_#{Process.pid}") }
 
-    after { FileUtils.rm_f(db_path) }
+    before do
+      @original_home = ENV["HOME"]
+      @original_pwd = Dir.pwd
+      ENV["HOME"] = fake_home
+      Dir.chdir(fake_project)
+    end
 
-    it "creates the database file" do
-      expect(run_cli("db:init", db_path)).to eq(0)
-      expect(File.exist?(db_path)).to be true
-      expect(stdout.string).to include("Database initialized")
+    after do
+      Dir.chdir(@original_pwd)
+      ENV["HOME"] = @original_home
+      FileUtils.rm_rf(fake_home)
+      FileUtils.rm_rf(fake_project)
+    end
+
+    it "creates global database with --global" do
+      expect(run_cli("db:init", "--global")).to eq(0)
+      expect(File.exist?(File.join(fake_home, ".claude", "memory.sqlite3"))).to be true
+      expect(stdout.string).to include("Global database initialized")
       expect(stdout.string).to include("Schema version: 2")
     end
 
-    it "is idempotent" do
-      run_cli("db:init", db_path)
-      stdout.truncate(0)
-      stdout.rewind
-      expect(run_cli("db:init", db_path)).to eq(0)
-      expect(stdout.string).to include("Database initialized")
+    it "creates project database with --project" do
+      expect(run_cli("db:init", "--project")).to eq(0)
+      expect(File.exist?(File.join(fake_project, ".claude", "memory.sqlite3"))).to be true
+      expect(stdout.string).to include("Project database initialized")
+    end
+
+    it "creates both databases by default" do
+      expect(run_cli("db:init")).to eq(0)
+      expect(stdout.string).to include("Global database initialized")
     end
   end
 
@@ -123,10 +139,18 @@ RSpec.describe ClaudeMemory::CLI do
   end
 
   describe "search command" do
-    let(:db_path) { File.join(Dir.tmpdir, "cli_search_test_#{Process.pid}.sqlite3") }
+    let(:fake_home) { Dir.mktmpdir("cli_search_home_#{Process.pid}") }
+    let(:fake_project) { Dir.mktmpdir("cli_search_project_#{Process.pid}") }
     let(:transcript_path) { File.join(Dir.tmpdir, "transcript_search_#{Process.pid}.jsonl") }
+    let(:db_path) { File.join(fake_project, ".claude", "memory.sqlite3") }
 
     before do
+      @original_home = ENV["HOME"]
+      @original_pwd = Dir.pwd
+      ENV["HOME"] = fake_home
+      Dir.chdir(fake_project)
+
+      FileUtils.mkdir_p(File.dirname(db_path))
       File.write(transcript_path, "We are using PostgreSQL for our database.\n")
       run_cli("ingest", "--session-id", "sess-1", "--transcript-path", transcript_path, "--db", db_path)
       stdout.truncate(0)
@@ -134,7 +158,10 @@ RSpec.describe ClaudeMemory::CLI do
     end
 
     after do
-      FileUtils.rm_f(db_path)
+      Dir.chdir(@original_pwd)
+      ENV["HOME"] = @original_home
+      FileUtils.rm_rf(fake_home)
+      FileUtils.rm_rf(fake_project)
       FileUtils.rm_f(transcript_path)
     end
 
@@ -144,14 +171,14 @@ RSpec.describe ClaudeMemory::CLI do
     end
 
     it "finds matching content" do
-      code = run_cli("search", "PostgreSQL", "--db", db_path)
+      code = run_cli("search", "PostgreSQL")
       expect(code).to eq(0)
       expect(stdout.string).to include("Found 1 result")
       expect(stdout.string).to include("PostgreSQL")
     end
 
     it "reports no results" do
-      code = run_cli("search", "MongoDB", "--db", db_path)
+      code = run_cli("search", "MongoDB")
       expect(code).to eq(0)
       expect(stdout.string).to include("No results found")
     end
@@ -281,7 +308,7 @@ RSpec.describe ClaudeMemory::CLI do
 
         expect(code).to eq(0)
         expect(stdout.string).to include("global")
-        expect(File.exist?(File.join(fake_home, ".claude", "claude_memory.sqlite3"))).to be true
+        expect(File.exist?(File.join(fake_home, ".claude", "memory.sqlite3"))).to be true
       end
 
       it "configures hooks in ~/.claude/settings.json" do
@@ -311,6 +338,48 @@ RSpec.describe ClaudeMemory::CLI do
         expect(File.exist?(claude_md)).to be true
         expect(File.read(claude_md)).to include("ClaudeMemory")
       end
+    end
+  end
+
+  describe "promote command" do
+    let(:fake_home) { Dir.mktmpdir("cli_promote_home_#{Process.pid}") }
+    let(:fake_project) { Dir.mktmpdir("cli_promote_project_#{Process.pid}") }
+
+    before do
+      @original_home = ENV["HOME"]
+      @original_pwd = Dir.pwd
+      ENV["HOME"] = fake_home
+      Dir.chdir(fake_project)
+    end
+
+    after do
+      Dir.chdir(@original_pwd)
+      ENV["HOME"] = @original_home
+      FileUtils.rm_rf(fake_home)
+      FileUtils.rm_rf(fake_project)
+    end
+
+    it "requires a fact ID" do
+      expect(run_cli("promote")).to eq(1)
+      expect(stderr.string).to include("Usage:")
+    end
+
+    it "promotes a project fact to global" do
+      run_cli("db:init")
+
+      manager = ClaudeMemory::Store::StoreManager.new
+      manager.ensure_project!
+      entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test")
+      fact_id = manager.project_store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "test",
+        object_literal: "value"
+      )
+      manager.close
+
+      code = run_cli("promote", fact_id.to_s)
+      expect(code).to eq(0)
+      expect(stdout.string).to include("Promoted")
     end
   end
 end

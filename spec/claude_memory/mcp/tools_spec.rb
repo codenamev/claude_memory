@@ -31,16 +31,21 @@ RSpec.describe ClaudeMemory::MCP::Tools do
         "memory.conflicts", "memory.sweep_now", "memory.status"
       )
     end
+
+    it "includes promote tool" do
+      defs = tools.definitions
+      expect(defs.map { |d| d[:name] }).to include("memory.promote")
+    end
   end
 
   describe "#call" do
     describe "memory.status" do
-      it "returns system status" do
+      it "returns system status with legacy store" do
         create_fact("convention", "test_rule")
         result = tools.call("memory.status", {})
 
-        expect(result[:facts_total]).to eq(1)
-        expect(result[:schema_version]).to eq(ClaudeMemory::Store::SQLiteStore::SCHEMA_VERSION)
+        expect(result[:databases][:legacy][:facts_total]).to eq(1)
+        expect(result[:databases][:legacy][:schema_version]).to eq(ClaudeMemory::Store::SQLiteStore::SCHEMA_VERSION)
       end
     end
 
@@ -74,47 +79,16 @@ RSpec.describe ClaudeMemory::MCP::Tools do
 
       it "returns error for missing fact" do
         result = tools.call("memory.explain", {"fact_id" => 999})
-        expect(result[:error]).to eq("Fact not found")
+        expect(result[:error]).to include("Fact not found")
       end
     end
 
-    describe "memory.set_scope" do
-      it "promotes a fact to global scope" do
+    describe "memory.promote" do
+      it "returns error when using legacy store" do
         fact_id = create_fact("convention", "use tabs")
-        result = tools.call("memory.set_scope", {"fact_id" => fact_id, "scope" => "global"})
+        result = tools.call("memory.promote", {"fact_id" => fact_id})
 
-        expect(result[:fact_id]).to eq(fact_id)
-        expect(result[:new_scope]).to eq("global")
-        expect(result[:message]).to include("globally")
-
-        row = store.facts.where(id: fact_id).first
-        expect(row[:scope]).to eq("global")
-        expect(row[:project_path]).to be_nil
-      end
-
-      it "scopes a fact to a project" do
-        fact_id = create_fact("decision", "use postgres")
-        store.update_fact(fact_id, scope: "global")
-
-        result = tools.call("memory.set_scope", {
-          "fact_id" => fact_id,
-          "scope" => "project",
-          "project_path" => "/path/to/myproject"
-        })
-
-        expect(result[:new_scope]).to eq("project")
-        expect(result[:new_project_path]).to eq("/path/to/myproject")
-      end
-
-      it "returns error for non-existent fact" do
-        result = tools.call("memory.set_scope", {"fact_id" => 999, "scope" => "global"})
-        expect(result[:error]).to eq("Fact not found")
-      end
-
-      it "returns error for invalid scope" do
-        fact_id = create_fact("convention", "test")
-        result = tools.call("memory.set_scope", {"fact_id" => fact_id, "scope" => "invalid"})
-        expect(result[:error]).to include("Invalid scope")
+        expect(result[:error]).to include("StoreManager")
       end
     end
 
@@ -122,6 +96,62 @@ RSpec.describe ClaudeMemory::MCP::Tools do
       it "returns error" do
         result = tools.call("unknown.tool", {})
         expect(result[:error]).to include("Unknown tool")
+      end
+    end
+  end
+
+  describe "with StoreManager" do
+    let(:tmpdir) { Dir.mktmpdir("mcp_tools_manager_#{Process.pid}") }
+    let(:global_db) { File.join(tmpdir, "global.sqlite3") }
+    let(:project_db) { File.join(tmpdir, "project.sqlite3") }
+    let(:manager) do
+      ClaudeMemory::Store::StoreManager.new(
+        global_db_path: global_db,
+        project_db_path: project_db
+      )
+    end
+    let(:manager_tools) { described_class.new(manager) }
+
+    before do
+      manager.ensure_both!
+    end
+
+    after do
+      manager.close
+      FileUtils.rm_rf(tmpdir)
+    end
+
+    describe "memory.status" do
+      it "returns status for both databases" do
+        result = manager_tools.call("memory.status", {})
+
+        expect(result[:databases][:global][:exists]).to be true
+        expect(result[:databases][:project][:exists]).to be true
+      end
+    end
+
+    describe "memory.promote" do
+      it "promotes a project fact to global" do
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test-repo")
+        fact_id = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "convention",
+          object_literal: "use tabs"
+        )
+
+        result = manager_tools.call("memory.promote", {"fact_id" => fact_id})
+
+        expect(result[:success]).to be true
+        expect(result[:project_fact_id]).to eq(fact_id)
+        expect(result[:global_fact_id]).to be_a(Integer)
+
+        global_fact = manager.global_store.facts.first
+        expect(global_fact[:object_literal]).to eq("use tabs")
+      end
+
+      it "returns error for non-existent fact" do
+        result = manager_tools.call("memory.promote", {"fact_id" => 999})
+        expect(result[:error]).to include("not found")
       end
     end
   end

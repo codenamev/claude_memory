@@ -1,5 +1,22 @@
 # Updated ClaudeMemory Plan (for Claude Code)
 
+## Architecture Overview
+
+ClaudeMemory uses a **dual-database architecture**:
+
+```
+~/.claude/memory.sqlite3          # Global DB - user-wide knowledge
+.claude/memory.sqlite3            # Project DB - project-specific facts
+```
+
+**Key components:**
+- `Store::StoreManager` — manages both database connections
+- `Recall` — queries both databases, merges results (project facts prioritized)
+- `promote` command — graduates project facts to global memory
+- MCP server — exposes tools that query both databases
+
+---
+
 ## What changed from the original plan (specifically changed, not brand new)
 These items are **modifications to the original plan’s approach**, driven by Claude Code’s official docs for Settings, Memory, Plugins, and Hooks.
 
@@ -35,40 +52,47 @@ These items are **modifications to the original plan’s approach**, driven by C
 ## New aspects added to the plan (and how to execute them)
 The sections below describe the **newly added capabilities** and where they fit into implementation milestones.
 
-### F) Project-scoped memory for global installations
-**Goal:** When installed globally, memory should still be project-aware.
+### F) Dual-database architecture ✅ IMPLEMENTED
+**Goal:** Separate global and project-specific memory into distinct databases.
 
 **Problem**
-- Global DB (`~/.claude/claude_memory.sqlite3`) serves all projects
-- Without scoping, Project A's decisions pollute Project B's recall
-- Need both cross-project knowledge AND project-specific knowledge
+- Single database approach conflates cross-project knowledge with project-specific facts
+- Project A's decisions can pollute Project B's recall
+- Need both persistent user-wide knowledge AND project-specific knowledge
 
-**Solution: Dual-layer scoping**
+**Solution: Two separate SQLite databases**
 
-1. **Ingest tags content with project scope**
-   - Detect project via `$CLAUDE_PROJECT_DIR` or working directory
-   - Store `project_path` (normalized) on `content_items` and `facts`
-   - Some facts are explicitly `scope: global` (user preferences, cross-project conventions)
+1. **Database locations**
+   - **Global DB**: `~/.claude/memory.sqlite3` — user-wide knowledge that persists across all projects
+   - **Project DB**: `.claude/memory.sqlite3` — project-specific facts, lives in project directory
 
-2. **Recall searches both layers**
-   - First: project-specific facts (highest relevance)
-   - Then: global facts (cross-project knowledge)
-   - Merge with project facts taking precedence for conflicts
+2. **StoreManager class**
+   - Manages both database connections via `Store::StoreManager`
+   - Lazy initialization: databases created on first use
+   - `ensure_global!`, `ensure_project!`, `ensure_both!` methods
+   - `promote_fact(fact_id)` copies a project fact to global DB
 
-3. **Schema additions**
-   - `content_items.project_path` (nullable, null = global)
-   - `facts.scope` enum: `project`, `global`
-   - `facts.project_path` (when scope = project)
+3. **Recall searches both databases**
+   - Queries both databases when `scope: all` (default)
+   - Deduplicates by fact signature (subject:predicate:object)
+   - Project facts take precedence over global facts
+   - `--scope project` queries only project DB
+   - `--scope global` queries only global DB
 
-4. **Publish respects scope**
-   - `--mode shared` publishes current project's facts to `.claude/rules/`
-   - `--mode home` publishes to `~/.claude/claude_memory/<project>.md`
-   - Global facts can optionally be included in all project snapshots
+4. **Promote command for fact graduation**
+   - `claude-memory promote <fact_id>` copies a project fact to global
+   - Copies entity, fact, and provenance records
+   - Use when user says a preference should apply everywhere
+
+5. **MCP tools updated**
+   - `memory.status` returns stats for both databases
+   - `memory.promote` promotes facts via MCP
+   - `memory.explain` accepts `scope` parameter
 
 **Alignment with Organizational Memory Playbook**
 - Axiom 2: Truth is temporal → extends to spatial (project context)
-- Axiom 4: Provenance includes WHERE (which project)
-- Scale 2: "Which belief is in force?" → scope determines applicability
+- Axiom 4: Provenance includes WHERE (which project/database)
+- Scale 2: "Which belief is in force?" → database + scope determines applicability
 
 ---
 
@@ -190,10 +214,10 @@ This is the consolidated plan that Claude Code should execute.
 
 ## Success criteria (MVP)
 1) `claude-memory init` creates a working setup in a repo:
-   - local SQLite DB
+   - **Dual databases**: global (`~/.claude/memory.sqlite3`) + project (`.claude/memory.sqlite3`)
    - **merges hook config into `.claude/settings.json`** (and optionally `.claude/settings.local.json`)
    - Output Style file template
-   - MCP server config instructions
+   - MCP server config in `.mcp.json`
 2) When Claude Code runs in the repo, hooks trigger via the hook entrypoints:
    - **ingest** on Stop + safety events
    - **sweep** on idle_prompt + safety events
@@ -315,22 +339,24 @@ Acceptance checks
 
 ---
 
-### Milestone 11: Project-scoped memory (2–4 commits)
-**Goal:** Support dual-layer recall for global installations.
+### Milestone 11: Dual-database architecture ✅ COMPLETE
+**Goal:** Separate global and project memory into distinct databases.
 
-Tasks
-- Add `project_path` column to `content_items` table
-- Add `scope` (project/global) and `project_path` columns to `facts` table
-- Migration for existing databases
-- Update `Ingester` to detect and store project context from `$CLAUDE_PROJECT_DIR` or `Dir.pwd`
-- Update `Recall` to search project-first, then global
-- Add `--scope` flag to `recall`, `conflicts`, `changes` commands
-- Update `Publish` to filter by project scope
+Tasks ✅
+- Created `Store::StoreManager` class to manage both databases
+- Global DB at `~/.claude/memory.sqlite3`
+- Project DB at `.claude/memory.sqlite3`
+- Updated `Recall` to query both databases and merge results
+- Added `promote` command and MCP tool to graduate facts to global
+- Updated all CLI commands to use `StoreManager`
+- Removed `--db` option from most commands (paths derived automatically)
+- Added `--scope` flag to `recall`, `conflicts`, `changes`, `sweep`, `publish`
 
-Acceptance checks
-- Ingest from project A stores facts with `project_path: /path/to/A`
-- Recall in project A returns A's facts + global facts
-- Recall in project B does NOT return project A's facts
+Acceptance checks ✅
+- `claude-memory init` creates both databases
+- `claude-memory recall` queries both, project facts prioritized
+- `claude-memory promote <id>` copies fact to global DB
+- `claude-memory doctor` reports status of both databases
 
 ---
 
@@ -360,22 +386,55 @@ Acceptance checks
 ---
 
 ## Command surface (updated)
-- `claude-memory init [--global]`
-- `claude-memory ingest --source claude_code --session_id ... --transcript_path ... [--project PATH]`
-- `claude-memory hook ingest|sweep|publish` (reads stdin JSON + env vars)
-- `claude-memory recall "..." [--scope project|global|all]`
-- `claude-memory explain FACT_ID`
+
+### Database management
+- `claude-memory db:init [--global] [--project]` — initialize databases
+- `claude-memory init [--global]` — full project setup (creates both DBs, hooks, MCP config)
+
+### Ingestion
+- `claude-memory ingest --session-id ... --transcript-path ... [--db PATH]`
+- `claude-memory hook ingest|sweep|publish [--db PATH]` — reads stdin JSON
+
+### Recall & query
+- `claude-memory recall "..." [--limit N] [--scope project|global|all]`
+- `claude-memory search "..." [--limit N] [--scope project|global]`
+- `claude-memory explain <fact_id> [--scope project|global]`
 - `claude-memory conflicts [--scope project|global|all]`
-- `claude-memory changes --since ... [--scope project|global|all]`
-- `claude-memory sweep --budget 5s`
-- `claude-memory publish [--mode shared|local|home] [--granularity repo|paths|nested] [--since <iso>]`
-- `claude-memory serve-mcp`
-- `claude-memory doctor`
+- `claude-memory changes [--since ISO] [--limit N] [--scope project|global|all]`
+
+### Maintenance
+- `claude-memory sweep [--budget N] [--scope project|global]`
+- `claude-memory publish [--mode shared|local|home] [--granularity repo|paths|nested] [--scope project|global]`
+- `claude-memory promote <fact_id>` — copy project fact to global DB
+
+### Services
+- `claude-memory serve-mcp` — start MCP server (queries both DBs)
+- `claude-memory doctor` — health check for both databases
+
+**Database locations:**
+- Global: `~/.claude/memory.sqlite3`
+- Project: `.claude/memory.sqlite3`
 
 **Scope options:**
-- `project` (default): current project's facts only
-- `global`: cross-project facts only
-- `all`: both layers, project facts take precedence
+- `project`: current project's database only
+- `global`: global database only
+- `all` (default for recall): both databases, project facts take precedence
+
+---
+
+## MCP Tools (updated)
+
+The MCP server exposes these tools to Claude Code:
+
+| Tool | Description |
+|------|-------------|
+| `memory.recall` | Search both databases for matching facts |
+| `memory.explain` | Get detailed fact with provenance (requires `scope` param) |
+| `memory.changes` | List recent fact changes from both databases |
+| `memory.conflicts` | List open conflicts from both databases |
+| `memory.sweep_now` | Run maintenance sweep on specified database |
+| `memory.status` | Get stats for both global and project databases |
+| `memory.promote` | Promote a project fact to global memory |
 
 ---
 
