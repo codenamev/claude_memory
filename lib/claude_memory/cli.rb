@@ -359,17 +359,18 @@ module ClaudeMemory
     end
 
     def publish_cmd
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, mode: :shared, since: nil}
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, mode: :shared, granularity: :repo, since: nil}
       OptionParser.new do |o|
         o.on("--db PATH", "Database path") { |v| opts[:db] = v }
-        o.on("--mode MODE", "Mode: shared or local") { |v| opts[:mode] = v.to_sym }
+        o.on("--mode MODE", "Mode: shared, local, or home") { |v| opts[:mode] = v.to_sym }
+        o.on("--granularity LEVEL", "Granularity: repo, paths, or nested") { |v| opts[:granularity] = v.to_sym }
         o.on("--since ISO", "Include changes since timestamp") { |v| opts[:since] = v }
       end.parse!(@args[1..])
 
       store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
       publish = ClaudeMemory::Publish.new(store)
 
-      result = publish.publish!(mode: opts[:mode], since: opts[:since])
+      result = publish.publish!(mode: opts[:mode], granularity: opts[:granularity], since: opts[:since])
 
       case result[:status]
       when :updated
@@ -680,6 +681,8 @@ module ClaudeMemory
         warnings << "No .claude/CLAUDE.md found"
       end
 
+      check_hooks_config(warnings)
+
       @stdout.puts
 
       if warnings.any?
@@ -698,6 +701,41 @@ module ClaudeMemory
 
       @stdout.puts "All checks passed!"
       0
+    end
+
+    def check_hooks_config(warnings)
+      settings_path = ".claude/settings.json"
+      local_settings_path = ".claude/settings.local.json"
+
+      hooks_found = false
+
+      [settings_path, local_settings_path].each do |path|
+        next unless File.exist?(path)
+
+        begin
+          config = JSON.parse(File.read(path))
+          if config["hooks"]&.any?
+            hooks_found = true
+            @stdout.puts "✓ Hooks configured in #{path}"
+
+            expected_hooks = %w[Stop SessionStart PreCompact SessionEnd]
+            missing = expected_hooks - config["hooks"].keys
+            if missing.any?
+              warnings << "Missing recommended hooks in #{path}: #{missing.join(", ")}"
+            end
+          end
+        rescue JSON::ParserError
+          warnings << "Invalid JSON in #{path}"
+        end
+      end
+
+      unless hooks_found
+        warnings << "No hooks configured. Run 'claude-memory init' or configure manually."
+        @stdout.puts "\n  Manual fallback available:"
+        @stdout.puts "    claude-memory ingest --session-id <id> --transcript-path <path>"
+        @stdout.puts "    claude-memory sweep --budget 5"
+        @stdout.puts "    claude-memory publish"
+      end
     end
   end
 end

@@ -40,18 +40,13 @@ module ClaudeMemory
 
     def publish!(mode: :shared, granularity: :repo, since: nil)
       content = generate_snapshot(since: since)
-      path = case mode
-      when :shared
-        File.join(RULES_DIR, GENERATED_FILE)
-      when :local
-        ".claude_memory.local.md"
-      end
+      path = output_path(mode)
 
       FileUtils.mkdir_p(File.dirname(path))
 
       if should_write?(path, content)
         File.write(path, content)
-        ensure_import_exists if mode == :shared
+        ensure_import_exists(mode, path)
         {status: :updated, path: path}
       else
         {status: :unchanged, path: path}
@@ -59,6 +54,20 @@ module ClaudeMemory
     end
 
     private
+
+    def output_path(mode)
+      case mode
+      when :shared
+        File.join(RULES_DIR, GENERATED_FILE)
+      when :local
+        ".claude_memory.local.md"
+      when :home
+        project_name = File.basename(Dir.pwd)
+        File.join(Dir.home, ".claude", "claude_memory", "#{project_name}.md")
+      else
+        File.join(RULES_DIR, GENERATED_FILE)
+      end
+    end
 
     def fetch_active_facts
       rows = @store.execute(<<~SQL)
@@ -158,9 +167,18 @@ module ClaudeMemory
       existing_hash != new_hash
     end
 
-    def ensure_import_exists
+    def ensure_import_exists(mode, path)
+      return if mode == :local
+
       claude_md = ".claude/CLAUDE.md"
-      import_line = "@#{RULES_DIR}/#{GENERATED_FILE}"
+      import_line = case mode
+      when :shared
+        "@#{RULES_DIR}/#{GENERATED_FILE}"
+      when :home
+        "@~/#{path.sub(Dir.home + "/", "")}"
+      else
+        "@#{path}"
+      end
 
       if File.exist?(claude_md)
         content = File.read(claude_md)

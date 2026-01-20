@@ -117,6 +117,39 @@ RSpec.describe ClaudeMemory::Publish do
         expect(result[:status]).to eq(:updated)
         expect(File.exist?(".claude_memory.local.md")).to be true
       end
+
+      it "does not create CLAUDE.md import" do
+        create_fact("convention", "test rule")
+        publish.publish!(mode: :local)
+
+        expect(File.exist?(".claude/CLAUDE.md")).to be false
+      end
+    end
+
+    context "home mode" do
+      let(:home_memory_dir) { File.join(Dir.home, ".claude", "claude_memory") }
+      let(:project_name) { File.basename(test_dir) }
+      let(:home_file) { File.join(home_memory_dir, "#{project_name}.md") }
+
+      after { FileUtils.rm_f(home_file) }
+
+      it "writes to user home directory" do
+        create_fact("convention", "test rule")
+        result = publish.publish!(mode: :home)
+
+        expect(result[:status]).to eq(:updated)
+        expect(result[:path]).to eq(home_file)
+        expect(File.exist?(home_file)).to be true
+      end
+
+      it "creates CLAUDE.md with home import" do
+        create_fact("convention", "test rule")
+        publish.publish!(mode: :home)
+
+        expect(File.exist?(".claude/CLAUDE.md")).to be true
+        content = File.read(".claude/CLAUDE.md")
+        expect(content).to include("@~/.claude/claude_memory/")
+      end
     end
 
     context "no-churn strategy" do
