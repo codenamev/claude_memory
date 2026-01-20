@@ -20,9 +20,10 @@ module ClaudeMemory
         return [] if query.nil? || query.strip.empty?
 
         if query.strip == "*"
-          return @db[:content_fts]
-            .limit(limit)
-            .select_map(:content_item_id)
+          return @db[:content_items]
+              .order(Sequel.desc(:id))
+              .limit(limit)
+              .select_map(:id)
         end
 
         escaped_query = escape_fts_query(query)
@@ -34,11 +35,14 @@ module ClaudeMemory
       end
 
       def escape_fts_query(query)
-        query.split(/\s+/).map do |word|
+        words = query.split(/\s+/).map do |word|
           next word if word == "*"
           escaped = word.gsub('"', '""')
           %("#{escaped}")
-        end.compact.join(" ")
+        end.compact
+
+        return words.first if words.size == 1
+        words.join(" OR ")
       end
 
       private
