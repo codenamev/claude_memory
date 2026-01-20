@@ -39,6 +39,8 @@ module ClaudeMemory
         changes_cmd
       when "sweep"
         sweep_cmd
+      when "serve-mcp"
+        serve_mcp
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -63,6 +65,7 @@ module ClaudeMemory
           ingest     Ingest transcript delta
           recall     Recall facts matching a query
           search     Search indexed content
+          serve-mcp  Start MCP server
           sweep      Run maintenance/pruning
           version    Show version number
 
@@ -325,6 +328,19 @@ module ClaudeMemory
       @stdout.puts "  Elapsed: #{stats[:elapsed_seconds].round(2)}s"
       @stdout.puts "  Budget honored: #{stats[:budget_honored]}"
 
+      store.close
+      0
+    end
+
+    def serve_mcp
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+      end.parse!(@args[1..])
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      server = ClaudeMemory::MCP::Server.new(store)
+      server.run
       store.close
       0
     end
