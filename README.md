@@ -46,6 +46,9 @@ claude-memory doctor
 | `init` | Initialize ClaudeMemory in a project |
 | `db:init` | Initialize the SQLite database |
 | `ingest` | Ingest transcript delta |
+| `hook ingest` | Hook entrypoint for ingest (reads stdin JSON) |
+| `hook sweep` | Hook entrypoint for sweep (reads stdin JSON) |
+| `hook publish` | Hook entrypoint for publish (reads stdin JSON) |
 | `search` | Search indexed content |
 | `recall` | Recall facts matching a query |
 | `explain` | Explain a fact with provenance receipts |
@@ -80,11 +83,14 @@ claude-memory explain 42
 ### Publish Snapshot
 
 ```bash
-# Publish to .claude/rules/ (shared)
+# Publish to .claude/rules/ (shared, default)
 claude-memory publish
 
-# Publish to local file
+# Publish to local file (not committed)
 claude-memory publish --mode local
+
+# Publish to user home directory
+claude-memory publish --mode home
 ```
 
 ### MCP Tools
