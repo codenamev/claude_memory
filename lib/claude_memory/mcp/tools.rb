@@ -14,12 +14,13 @@ module ClaudeMemory
         [
           {
             name: "memory.recall",
-            description: "Recall facts matching a query",
+            description: "Recall facts matching a query. Returns facts with their scope (global or project-specific).",
             inputSchema: {
               type: "object",
               properties: {
                 query: {type: "string", description: "Search query"},
-                limit: {type: "integer", description: "Max results", default: 10}
+                limit: {type: "integer", description: "Max results", default: 10},
+                scope: {type: "string", enum: ["all", "global", "project"], description: "Filter by scope: 'all' (default), 'global', or 'project'", default: "all"}
               },
               required: ["query"]
             }
@@ -71,6 +72,19 @@ module ClaudeMemory
               type: "object",
               properties: {}
             }
+          },
+          {
+            name: "memory.set_scope",
+            description: "Change a fact's scope to global or project. Use this when the user says a preference should apply everywhere (global) or only to the current project.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                fact_id: {type: "integer", description: "Fact ID to update"},
+                scope: {type: "string", enum: ["global", "project"], description: "New scope for the fact"},
+                project_path: {type: "string", description: "Project path (only needed when setting scope to 'project')"}
+              },
+              required: ["fact_id", "scope"]
+            }
           }
         ]
       end
@@ -89,6 +103,8 @@ module ClaudeMemory
           sweep_now(arguments)
         when "memory.status"
           status
+        when "memory.set_scope"
+          set_scope(arguments)
         else
           {error: "Unknown tool: #{name}"}
         end
@@ -97,7 +113,8 @@ module ClaudeMemory
       private
 
       def recall(args)
-        results = @recall.query(args["query"], limit: args["limit"] || 10)
+        scope = args["scope"] || "all"
+        results = @recall.query(args["query"], limit: args["limit"] || 10, scope: scope)
         {
           facts: results.map do |r|
             {
@@ -106,6 +123,8 @@ module ClaudeMemory
               predicate: r[:fact][:predicate],
               object: r[:fact][:object_literal],
               status: r[:fact][:status],
+              scope: r[:fact][:scope] || "project",
+              project_path: r[:fact][:project_path],
               receipts: r[:receipts].map { |p| {quote: p[:quote], strength: p[:strength]} }
             }
           end
@@ -165,18 +184,42 @@ module ClaudeMemory
       end
 
       def status
-        fact_count = @store.execute("SELECT COUNT(*) FROM facts").first.first
-        active_count = @store.execute("SELECT COUNT(*) FROM facts WHERE status = 'active'").first.first
-        content_count = @store.execute("SELECT COUNT(*) FROM content_items").first.first
-        conflict_count = @store.execute("SELECT COUNT(*) FROM conflicts WHERE status = 'open'").first.first
-
         {
-          facts_total: fact_count,
-          facts_active: active_count,
-          content_items: content_count,
-          open_conflicts: conflict_count,
+          facts_total: @store.facts.count,
+          facts_active: @store.facts.where(status: "active").count,
+          content_items: @store.content_items.count,
+          open_conflicts: @store.conflicts.where(status: "open").count,
           schema_version: @store.schema_version
         }
+      end
+
+      def set_scope(args)
+        fact_id = args["fact_id"]
+        scope = args["scope"]
+        project_path = args["project_path"]
+
+        return {error: "Invalid scope. Must be 'global' or 'project'"} unless %w[global project].include?(scope)
+
+        explanation = @recall.explain(fact_id)
+        return {error: "Fact not found"} unless explanation
+
+        old_scope = explanation[:fact][:scope] || "project"
+        old_project = explanation[:fact][:project_path]
+
+        success = @store.update_fact(fact_id, scope: scope, project_path: project_path)
+
+        if success
+          {
+            fact_id: fact_id,
+            old_scope: old_scope,
+            new_scope: scope,
+            old_project_path: old_project,
+            new_project_path: (scope == "global") ? nil : project_path,
+            message: (scope == "global") ? "Fact now applies globally across all projects" : "Fact now scoped to project"
+          }
+        else
+          {error: "Failed to update fact scope"}
+        end
       end
     end
   end

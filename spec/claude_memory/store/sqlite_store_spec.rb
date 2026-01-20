@@ -38,8 +38,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore do
   describe "table existence" do
     %w[meta content_items delta_cursors entities entity_aliases facts provenance fact_links conflicts].each do |table|
       it "creates #{table} table" do
-        result = store.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [table])
-        expect(result.first).to eq([table])
+        expect(store.db.table_exists?(table.to_sym)).to be true
       end
     end
   end

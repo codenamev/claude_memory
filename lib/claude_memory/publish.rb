@@ -70,37 +70,40 @@ module ClaudeMemory
     end
 
     def fetch_active_facts
-      rows = @store.execute(<<~SQL)
-        SELECT f.id, f.predicate, f.object_literal, f.status, f.confidence, f.created_at,
-               e.canonical_name as subject_name
-        FROM facts f
-        LEFT JOIN entities e ON f.subject_entity_id = e.id
-        WHERE f.status = 'active'
-        ORDER BY f.created_at DESC
-        LIMIT 100
-      SQL
-
-      rows.map do |r|
-        {id: r[0], predicate: r[1], object_literal: r[2], status: r[3], confidence: r[4], created_at: r[5], subject_name: r[6]}
-      end
+      @store.facts
+        .left_join(:entities, id: :subject_entity_id)
+        .select(
+          Sequel[:facts][:id],
+          Sequel[:facts][:predicate],
+          Sequel[:facts][:object_literal],
+          Sequel[:facts][:status],
+          Sequel[:facts][:confidence],
+          Sequel[:facts][:created_at],
+          Sequel[:entities][:canonical_name].as(:subject_name)
+        )
+        .where(Sequel[:facts][:status] => "active")
+        .order(Sequel.desc(Sequel[:facts][:created_at]))
+        .limit(100)
+        .all
     end
 
     def fetch_recent_supersessions(since)
       return [] unless since
 
-      rows = @store.execute(<<~SQL, [since])
-        SELECT f.id, f.predicate, f.object_literal, f.valid_to,
-               e.canonical_name as subject_name
-        FROM facts f
-        LEFT JOIN entities e ON f.subject_entity_id = e.id
-        WHERE f.status = 'superseded' AND f.valid_to >= ?
-        ORDER BY f.valid_to DESC
-        LIMIT 20
-      SQL
-
-      rows.map do |r|
-        {id: r[0], predicate: r[1], object_literal: r[2], valid_to: r[3], subject_name: r[4]}
-      end
+      @store.facts
+        .left_join(:entities, id: :subject_entity_id)
+        .select(
+          Sequel[:facts][:id],
+          Sequel[:facts][:predicate],
+          Sequel[:facts][:object_literal],
+          Sequel[:facts][:valid_to],
+          Sequel[:entities][:canonical_name].as(:subject_name)
+        )
+        .where(Sequel[:facts][:status] => "superseded")
+        .where { Sequel[:facts][:valid_to] >= since }
+        .order(Sequel.desc(Sequel[:facts][:valid_to]))
+        .limit(20)
+        .all
     end
 
     def generate_decisions_section(facts)

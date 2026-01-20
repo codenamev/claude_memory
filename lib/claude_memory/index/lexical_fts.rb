@@ -10,35 +10,24 @@ module ClaudeMemory
       end
 
       def index_content_item(content_item_id, text)
-        existing = @db.get_first_value(
-          "SELECT content_item_id FROM content_fts WHERE content_item_id = ?",
-          [content_item_id]
-        )
+        existing = @db[:content_fts].where(content_item_id: content_item_id).get(:content_item_id)
         return if existing
 
-        @db.execute(
-          "INSERT INTO content_fts (content_item_id, text) VALUES (?, ?)",
-          [content_item_id, text]
-        )
+        @db[:content_fts].insert(content_item_id: content_item_id, text: text)
       end
 
       def search(query, limit: 20)
-        rows = @db.execute(
-          <<~SQL,
-            SELECT content_item_id FROM content_fts 
-            WHERE text MATCH ? 
-            ORDER BY rank 
-            LIMIT ?
-          SQL
-          [query, limit]
-        )
-        rows.map(&:first)
+        @db[:content_fts]
+          .where(Sequel.lit("text MATCH ?", query))
+          .order(:rank)
+          .limit(limit)
+          .select_map(:content_item_id)
       end
 
       private
 
       def ensure_fts_table!
-        @db.execute(<<~SQL)
+        @db.run(<<~SQL)
           CREATE VIRTUAL TABLE IF NOT EXISTS content_fts 
           USING fts5(content_item_id UNINDEXED, text, tokenize='porter unicode61')
         SQL

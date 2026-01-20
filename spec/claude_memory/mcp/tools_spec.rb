@@ -78,6 +78,46 @@ RSpec.describe ClaudeMemory::MCP::Tools do
       end
     end
 
+    describe "memory.set_scope" do
+      it "promotes a fact to global scope" do
+        fact_id = create_fact("convention", "use tabs")
+        result = tools.call("memory.set_scope", {"fact_id" => fact_id, "scope" => "global"})
+
+        expect(result[:fact_id]).to eq(fact_id)
+        expect(result[:new_scope]).to eq("global")
+        expect(result[:message]).to include("globally")
+
+        row = store.facts.where(id: fact_id).first
+        expect(row[:scope]).to eq("global")
+        expect(row[:project_path]).to be_nil
+      end
+
+      it "scopes a fact to a project" do
+        fact_id = create_fact("decision", "use postgres")
+        store.update_fact(fact_id, scope: "global")
+
+        result = tools.call("memory.set_scope", {
+          "fact_id" => fact_id,
+          "scope" => "project",
+          "project_path" => "/path/to/myproject"
+        })
+
+        expect(result[:new_scope]).to eq("project")
+        expect(result[:new_project_path]).to eq("/path/to/myproject")
+      end
+
+      it "returns error for non-existent fact" do
+        result = tools.call("memory.set_scope", {"fact_id" => 999, "scope" => "global"})
+        expect(result[:error]).to eq("Fact not found")
+      end
+
+      it "returns error for invalid scope" do
+        fact_id = create_fact("convention", "test")
+        result = tools.call("memory.set_scope", {"fact_id" => fact_id, "scope" => "invalid"})
+        expect(result[:error]).to include("Invalid scope")
+      end
+    end
+
     describe "unknown tool" do
       it "returns error" do
         result = tools.call("unknown.tool", {})

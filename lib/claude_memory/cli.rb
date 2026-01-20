@@ -169,7 +169,7 @@ module ClaudeMemory
       else
         @stdout.puts "Found #{ids.size} result(s):"
         ids.each do |id|
-          text = store.execute("SELECT raw_text FROM content_items WHERE id = ?", [id]).first&.first
+          text = store.content_items.where(id: id).get(:raw_text)
           preview = text&.slice(0, 100)&.gsub(/\s+/, " ")
           @stdout.puts "  [#{id}] #{preview}..."
         end
@@ -299,7 +299,7 @@ module ClaudeMemory
       else
         @stdout.puts "Changes since #{opts[:since]} (#{changes.size}):\n\n"
         changes.each do |change|
-          scope_info = change[:scope] == "global" ? " [global]" : ""
+          scope_info = (change[:scope] == "global") ? " [global]" : ""
           @stdout.puts "  [#{change[:id]}] #{change[:predicate]}: #{change[:object_literal]} (#{change[:status]})#{scope_info}"
           @stdout.puts "    Created: #{change[:created_at]}"
         end
@@ -588,11 +588,11 @@ module ClaudeMemory
 
       if File.exist?(claude_md_path)
         content = File.read(claude_md_path)
-        unless content.include?("ClaudeMemory")
+        if content.include?("ClaudeMemory")
+          @stdout.puts "✓ #{claude_md_path} already has ClaudeMemory instructions"
+        else
           File.write(claude_md_path, content + "\n" + memory_instruction)
           @stdout.puts "✓ Added ClaudeMemory instructions to #{claude_md_path}"
-        else
-          @stdout.puts "✓ #{claude_md_path} already has ClaudeMemory instructions"
         end
       else
         File.write(claude_md_path, memory_instruction)

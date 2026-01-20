@@ -55,19 +55,14 @@ module ClaudeMemory
     end
 
     def changes(since:, limit: 50, scope: SCOPE_ALL)
-      scope_clause, scope_params = build_scope_clause(scope)
+      ds = @store.facts
+        .select(:id, :subject_entity_id, :predicate, :object_literal, :status, :created_at, :scope, :project_path)
+        .where { created_at >= since }
+        .order(Sequel.desc(:created_at))
+        .limit(limit)
 
-      rows = @store.execute(
-        <<~SQL,
-          SELECT id, subject_entity_id, predicate, object_literal, status, created_at, scope, project_path
-          FROM facts 
-          WHERE created_at >= ? #{scope_clause}
-          ORDER BY created_at DESC 
-          LIMIT ?
-        SQL
-        [since] + scope_params + [limit]
-      )
-      rows.map { |r| {id: r[0], subject_entity_id: r[1], predicate: r[2], object_literal: r[3], status: r[4], created_at: r[5], scope: r[6], project_path: r[7]} }
+      ds = apply_scope_filter(ds, scope)
+      ds.all
     end
 
     def conflicts(scope: SCOPE_ALL)
@@ -100,14 +95,14 @@ module ClaudeMemory
       end
     end
 
-    def build_scope_clause(scope)
+    def apply_scope_filter(dataset, scope)
       case scope
       when SCOPE_PROJECT
-        ["AND scope = 'project' AND project_path = ?", [@project_path]]
+        dataset.where(scope: "project", project_path: @project_path)
       when SCOPE_GLOBAL
-        ["AND scope = 'global'", []]
+        dataset.where(scope: "global")
       else
-        ["", []]
+        dataset
       end
     end
 
@@ -122,71 +117,63 @@ module ClaudeMemory
     end
 
     def find_provenance_by_content(content_id)
-      @store.execute(
-        "SELECT id, fact_id, content_item_id, quote, strength FROM provenance WHERE content_item_id = ?",
-        [content_id]
-      ).map { |r| {id: r[0], fact_id: r[1], content_item_id: r[2], quote: r[3], strength: r[4]} }
+      @store.provenance
+        .select(:id, :fact_id, :content_item_id, :quote, :strength)
+        .where(content_item_id: content_id)
+        .all
     end
 
     def find_fact(fact_id)
-      row = @store.execute(
-        <<~SQL,
-          SELECT f.id, f.predicate, f.object_literal, f.status, f.confidence, f.valid_from, f.valid_to, f.created_at,
-                 e.canonical_name as subject_name, f.scope, f.project_path
-          FROM facts f
-          LEFT JOIN entities e ON f.subject_entity_id = e.id
-          WHERE f.id = ?
-        SQL
-        [fact_id]
-      ).first
-      return nil unless row
-
-      {
-        id: row[0],
-        predicate: row[1],
-        object_literal: row[2],
-        status: row[3],
-        confidence: row[4],
-        valid_from: row[5],
-        valid_to: row[6],
-        created_at: row[7],
-        subject_name: row[8],
-        scope: row[9],
-        project_path: row[10]
-      }
+      @store.facts
+        .left_join(:entities, id: :subject_entity_id)
+        .select(
+          Sequel[:facts][:id],
+          Sequel[:facts][:predicate],
+          Sequel[:facts][:object_literal],
+          Sequel[:facts][:status],
+          Sequel[:facts][:confidence],
+          Sequel[:facts][:valid_from],
+          Sequel[:facts][:valid_to],
+          Sequel[:facts][:created_at],
+          Sequel[:entities][:canonical_name].as(:subject_name),
+          Sequel[:facts][:scope],
+          Sequel[:facts][:project_path]
+        )
+        .where(Sequel[:facts][:id] => fact_id)
+        .first
     end
 
     def find_receipts(fact_id)
-      @store.execute(
-        <<~SQL,
-          SELECT p.id, p.quote, p.strength, c.session_id, c.occurred_at
-          FROM provenance p
-          LEFT JOIN content_items c ON p.content_item_id = c.id
-          WHERE p.fact_id = ?
-        SQL
-        [fact_id]
-      ).map { |r| {id: r[0], quote: r[1], strength: r[2], session_id: r[3], occurred_at: r[4]} }
+      @store.provenance
+        .left_join(:content_items, id: :content_item_id)
+        .select(
+          Sequel[:provenance][:id],
+          Sequel[:provenance][:quote],
+          Sequel[:provenance][:strength],
+          Sequel[:content_items][:session_id],
+          Sequel[:content_items][:occurred_at]
+        )
+        .where(Sequel[:provenance][:fact_id] => fact_id)
+        .all
     end
 
     def find_superseded_by(fact_id)
-      @store.execute(
-        "SELECT from_fact_id FROM fact_links WHERE to_fact_id = ? AND link_type = 'supersedes'",
-        [fact_id]
-      ).map(&:first)
+      @store.fact_links
+        .where(to_fact_id: fact_id, link_type: "supersedes")
+        .select_map(:from_fact_id)
     end
 
     def find_supersedes(fact_id)
-      @store.execute(
-        "SELECT to_fact_id FROM fact_links WHERE from_fact_id = ? AND link_type = 'supersedes'",
-        [fact_id]
-      ).map(&:first)
+      @store.fact_links
+        .where(from_fact_id: fact_id, link_type: "supersedes")
+        .select_map(:to_fact_id)
     end
 
     def find_conflicts(fact_id)
-      @store.execute(
-        "SELECT id, fact_a_id, fact_b_id, status FROM conflicts WHERE fact_a_id = ? OR fact_b_id = ?",
-        [fact_id, fact_id]
-      ).map { |r| {id: r[0], fact_a_id: r[1], fact_b_id: r[2], status: r[3]} }
+      @store.conflicts
+        .select(:id, :fact_a_id, :fact_b_id, :status)
+        .where(Sequel.or(fact_a_id: fact_id, fact_b_id: fact_id))
+        .all
     end
   end
 end

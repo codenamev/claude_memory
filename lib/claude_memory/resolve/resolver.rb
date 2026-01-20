@@ -73,6 +73,9 @@ module ClaudeMemory
           end
         end
 
+        fact_scope = fact_data[:scope_hint] || @current_scope
+        fact_project = (fact_scope == "global") ? nil : @current_project_path
+
         fact_id = @store.insert_fact(
           subject_entity_id: subject_id,
           predicate: predicate,
@@ -81,8 +84,8 @@ module ClaudeMemory
           polarity: fact_data[:polarity] || "positive",
           confidence: fact_data[:confidence] || 1.0,
           valid_from: occurred_at,
-          scope: @current_scope,
-          project_path: @current_project_path
+          scope: fact_scope,
+          project_path: fact_project
         )
         outcome[:created] = 1
 

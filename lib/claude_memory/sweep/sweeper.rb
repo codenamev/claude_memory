@@ -46,38 +46,34 @@ module ClaudeMemory
 
       def expire_proposed_facts
         cutoff = (Time.now - @config[:proposed_fact_ttl_days] * 86400).utc.iso8601
-        @store.execute(
-          "UPDATE facts SET status = 'expired' WHERE status = 'proposed' AND created_at < ?",
-          [cutoff]
-        )
-        @stats[:proposed_facts_expired] = @store.db.changes
+        @stats[:proposed_facts_expired] = @store.facts
+          .where(status: "proposed")
+          .where { created_at < cutoff }
+          .update(status: "expired")
       end
 
       def expire_disputed_facts
         cutoff = (Time.now - @config[:disputed_fact_ttl_days] * 86400).utc.iso8601
-        @store.execute(
-          "UPDATE facts SET status = 'expired' WHERE status = 'disputed' AND created_at < ?",
-          [cutoff]
-        )
-        @stats[:disputed_facts_expired] = @store.db.changes
+        @stats[:disputed_facts_expired] = @store.facts
+          .where(status: "disputed")
+          .where { created_at < cutoff }
+          .update(status: "expired")
       end
 
       def prune_orphaned_provenance
-        @store.execute(<<~SQL)
-          DELETE FROM provenance 
-          WHERE fact_id NOT IN (SELECT id FROM facts)
-        SQL
-        @stats[:orphaned_provenance_deleted] = @store.db.changes
+        fact_ids = @store.facts.select(:id)
+        @stats[:orphaned_provenance_deleted] = @store.provenance
+          .exclude(fact_id: fact_ids)
+          .delete
       end
 
       def prune_old_content
         cutoff = (Time.now - @config[:content_retention_days] * 86400).utc.iso8601
-        @store.execute(<<~SQL, [cutoff])
-          DELETE FROM content_items 
-          WHERE ingested_at < ? 
-          AND id NOT IN (SELECT content_item_id FROM provenance WHERE content_item_id IS NOT NULL)
-        SQL
-        @stats[:old_content_pruned] = @store.db.changes
+        referenced_ids = @store.provenance.exclude(content_item_id: nil).select(:content_item_id)
+        @stats[:old_content_pruned] = @store.content_items
+          .where { ingested_at < cutoff }
+          .exclude(id: referenced_ids)
+          .delete
       end
     end
   end

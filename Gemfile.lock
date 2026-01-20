@@ -2,12 +2,14 @@ PATH
   remote: .
   specs:
     claude_memory (0.1.0)
+      sequel (~> 5.0)
       sqlite3 (~> 2.0)
 
 GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.3)
+    bigdecimal (4.0.1)
     date (3.5.1)
     diff-lcs (1.6.2)
     erb (6.0.1)
@@ -72,6 +74,8 @@ GEM
       rubocop (>= 1.75.0, < 2.0)
       rubocop-ast (>= 1.47.1, < 2.0)
     ruby-progressbar (1.13.0)
+    sequel (5.100.0)
+      bigdecimal
     sqlite3 (2.9.0-x86_64-darwin)
     standard (1.53.0)
       language_server-protocol (~> 3.17.0.2)
@@ -103,6 +107,7 @@ DEPENDENCIES
 
 CHECKSUMS
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
+  bigdecimal (4.0.1) sha256=8b07d3d065a9f921c80ceaea7c9d4ae596697295b584c296fe599dd0ad01c4a7
   claude_memory (0.1.0)
   date (3.5.1) sha256=750d06384d7b9c15d562c76291407d89e368dda4d4fff957eb94962d325a0dc0
   diff-lcs (1.6.2) sha256=9ae0d2cba7d4df3075fe8cd8602a8604993efc0dfa934cff568969efb1909962
@@ -133,6 +138,7 @@ CHECKSUMS
   rubocop-ast (1.49.0) sha256=49c3676d3123a0923d333e20c6c2dbaaae2d2287b475273fddee0c61da9f71fd
   rubocop-performance (1.26.1) sha256=cd19b936ff196df85829d264b522fd4f98b6c89ad271fa52744a8c11b8f71834
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33
+  sequel (5.100.0) sha256=cb0329b62287a01db68eead46759c14497a3fae01b174e2c41da108a9e9b4a12
   sqlite3 (2.9.0-x86_64-darwin) sha256=59fe51baa3cb33c36d27ce78b4ed9360cd33ccca09498c2ae63850c97c0a6026
   standard (1.53.0) sha256=f3c9493385db7079d0abce6f7582f553122156997b81258cd361d3480eeacf9c
   standard-custom (1.0.2) sha256=424adc84179a074f1a2a309bb9cf7cd6bfdb2b6541f20c6bf9436c0ba22a652b

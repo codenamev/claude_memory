@@ -74,6 +74,12 @@ claude-memory ingest \
 claude-memory recall "database"
 # Returns facts + provenance receipts
 
+claude-memory recall "database" --scope project
+# Only facts scoped to current project
+
+claude-memory recall "preferences" --scope global
+# Only global facts (apply to all projects)
+
 claude-memory explain 42
 # Detailed explanation with supersession/conflict links
 ```
@@ -95,23 +101,37 @@ claude-memory publish --mode home
 
 When configured, these tools are available in Claude Code:
 
-- `memory.recall` - Search for relevant facts
+- `memory.recall` - Search for relevant facts (supports scope filtering)
 - `memory.explain` - Get detailed fact provenance
+- `memory.set_scope` - Promote a fact to global or restrict to project
 - `memory.changes` - Recent fact updates
 - `memory.conflicts` - Open contradictions
 - `memory.sweep_now` - Run maintenance
 - `memory.status` - System health check
+
+## Scope: Global vs Project
+
+Facts are scoped to control where they apply:
+
+| Scope | Description | Example |
+|-------|-------------|---------|
+| `project` | Applies only to the current project | "This app uses PostgreSQL" |
+| `global` | Applies across all projects | "I prefer 4-space indentation" |
+
+**Automatic detection**: The distiller recognizes signals like "always", "in all projects", or "my preference" and sets `scope_hint: "global"`.
+
+**Manual promotion**: Use `memory.set_scope` in Claude Code or the user can say "make that preference global" and Claude will call the tool.
 
 ## Architecture
 
 ```
 Transcripts → Ingest → FTS Index
                     ↓
-              Distill → Extract entities/facts/signals
+              Distill → Extract entities/facts/signals + scope hints
                     ↓
               Resolve → Truth maintenance (conflicts/supersession)
                     ↓
-              Store → SQLite (facts, provenance, entities)
+              Store → SQLite (facts, provenance, entities, scope)
                     ↓
               Publish → .claude/rules/claude_memory.generated.md
 ```

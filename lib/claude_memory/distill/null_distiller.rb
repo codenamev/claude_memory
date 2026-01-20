@@ -25,6 +25,16 @@ module ClaudeMemory
         "platform" => /\b(aws|gcp|azure|heroku|vercel|netlify|docker|kubernetes)\b/i
       }.freeze
 
+      GLOBAL_SCOPE_PATTERNS = [
+        /\bi\s+always\b/i,
+        /\bin\s+all\s+(?:my\s+)?projects\b/i,
+        /\beverywhere\b/i,
+        /\bacross\s+all\s+(?:my\s+)?(?:projects|repos|codebases)\b/i,
+        /\bmy\s+(?:personal\s+)?(?:preference|convention|standard)\b/i,
+        /\bglobally\b/i,
+        /\buniversally\b/i
+      ].freeze
+
       def distill(text, content_item_id: nil)
         entities = extract_entities(text)
         facts = extract_facts(text, entities)
@@ -53,15 +63,16 @@ module ClaudeMemory
 
       def extract_facts(text, entities)
         facts = []
+        scope_hint = global_scope_signal?(text) ? "global" : "project"
 
         entities.each do |entity|
           case entity[:type]
           when "database"
-            facts << build_fact("uses_database", entity[:name], text)
+            facts << build_fact("uses_database", entity[:name], text, scope_hint)
           when "framework"
-            facts << build_fact("uses_framework", entity[:name], text)
+            facts << build_fact("uses_framework", entity[:name], text, scope_hint)
           when "platform"
-            facts << build_fact("deployment_platform", entity[:name], text)
+            facts << build_fact("deployment_platform", entity[:name], text, scope_hint)
           end
         end
 
@@ -86,10 +97,15 @@ module ClaudeMemory
         signals = []
         signals << {kind: "supersession", value: true} if text.match?(/\b(no longer|stopped using|switched from|replaced|deprecated)\b/i)
         signals << {kind: "conflict", value: true} if text.match?(/\b(disagree|conflict|contradiction|but.*said|however.*different)\b/i)
+        signals << {kind: "global_scope", value: true} if global_scope_signal?(text)
         signals
       end
 
-      def build_fact(predicate, object, text)
+      def global_scope_signal?(text)
+        GLOBAL_SCOPE_PATTERNS.any? { |pattern| text.match?(pattern) }
+      end
+
+      def build_fact(predicate, object, text, scope_hint = "project")
         quote = text.slice(0, 200)
         {
           subject: "repo",
@@ -98,7 +114,8 @@ module ClaudeMemory
           polarity: "positive",
           confidence: 0.7,
           quote: quote,
-          strength: "inferred"
+          strength: "inferred",
+          scope_hint: scope_hint
         }
       end
     end

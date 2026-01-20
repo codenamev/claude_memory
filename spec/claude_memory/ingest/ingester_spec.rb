@@ -89,8 +89,8 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
 
         expect(result[:project_path]).to eq("/path/to/my-project")
 
-        row = store.execute("SELECT project_path FROM content_items WHERE id = ?", [result[:content_id]]).first
-        expect(row.first).to eq("/path/to/my-project")
+        row = store.content_items.where(id: result[:content_id]).first
+        expect(row[:project_path]).to eq("/path/to/my-project")
       end
 
       it "detects project_path from CLAUDE_PROJECT_DIR env var" do

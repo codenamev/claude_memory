@@ -81,6 +81,38 @@ RSpec.describe ClaudeMemory::Distill::NullDistiller do
         result = distiller.distill("I disagree with that approach")
         expect(result.signals).to include(hash_including(kind: "conflict", value: true))
       end
+
+      it "detects global scope signals from 'I always'" do
+        result = distiller.distill("I always use PostgreSQL for databases")
+        expect(result.signals).to include(hash_including(kind: "global_scope", value: true))
+      end
+
+      it "detects global scope signals from 'in all projects'" do
+        result = distiller.distill("In all my projects I use Rails")
+        expect(result.signals).to include(hash_including(kind: "global_scope", value: true))
+      end
+
+      it "detects global scope signals from 'everywhere'" do
+        result = distiller.distill("I use vim bindings everywhere")
+        expect(result.signals).to include(hash_including(kind: "global_scope", value: true))
+      end
+
+      it "detects global scope signals from 'my preference'" do
+        result = distiller.distill("My preference is to use tabs")
+        expect(result.signals).to include(hash_including(kind: "global_scope", value: true))
+      end
+    end
+
+    context "scope hint in facts" do
+      it "sets scope_hint to global when global signal present" do
+        result = distiller.distill("I always use PostgreSQL for everything")
+        expect(result.facts.first[:scope_hint]).to eq("global")
+      end
+
+      it "sets scope_hint to project by default" do
+        result = distiller.distill("We use PostgreSQL here")
+        expect(result.facts.first[:scope_hint]).to eq("project")
+      end
     end
   end
 end

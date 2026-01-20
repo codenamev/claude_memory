@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "sqlite3"
+require "sequel"
 require "json"
 
 module ClaudeMemory
@@ -12,22 +12,48 @@ module ClaudeMemory
 
       def initialize(db_path)
         @db_path = db_path
-        @db = SQLite3::Database.new(db_path)
-        @db.results_as_hash = false
+        @db = Sequel.sqlite(db_path)
         ensure_schema!
       end
 
       def close
-        @db.close
-      end
-
-      def execute(sql, params = [])
-        @db.execute(sql, params)
+        @db.disconnect
       end
 
       def schema_version
-        result = @db.get_first_value("SELECT value FROM meta WHERE key = ?", ["schema_version"])
-        result&.to_i
+        @db[:meta].where(key: "schema_version").get(:value)&.to_i
+      end
+
+      def content_items
+        @db[:content_items]
+      end
+
+      def delta_cursors
+        @db[:delta_cursors]
+      end
+
+      def entities
+        @db[:entities]
+      end
+
+      def entity_aliases
+        @db[:entity_aliases]
+      end
+
+      def facts
+        @db[:facts]
+      end
+
+      def provenance
+        @db[:provenance]
+      end
+
+      def fact_links
+        @db[:fact_links]
+      end
+
+      def conflicts
+        @db[:conflicts]
       end
 
       private
@@ -42,304 +68,272 @@ module ClaudeMemory
       def run_migrations!
         current = get_meta("schema_version")&.to_i || 0
 
-        if current < 2
-          migrate_to_v2!
-        end
+        migrate_to_v2! if current < 2
       end
 
       def migrate_to_v2!
-        columns = @db.execute("PRAGMA table_info(content_items)").map { |r| r[1] }
-        unless columns.include?("project_path")
-          @db.execute("ALTER TABLE content_items ADD COLUMN project_path TEXT")
+        columns = @db.schema(:content_items).map(&:first)
+        unless columns.include?(:project_path)
+          @db.alter_table(:content_items) do
+            add_column :project_path, String
+          end
         end
 
-        columns = @db.execute("PRAGMA table_info(facts)").map { |r| r[1] }
-        unless columns.include?("scope")
-          @db.execute("ALTER TABLE facts ADD COLUMN scope TEXT DEFAULT 'project'")
-          @db.execute("ALTER TABLE facts ADD COLUMN project_path TEXT")
-          @db.execute("CREATE INDEX IF NOT EXISTS idx_facts_scope ON facts(scope)")
-          @db.execute("CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project_path)")
+        columns = @db.schema(:facts).map(&:first)
+        unless columns.include?(:scope)
+          @db.alter_table(:facts) do
+            add_column :scope, String, default: "project"
+            add_column :project_path, String
+            add_index :scope, name: :idx_facts_scope
+            add_index :project_path, name: :idx_facts_project
+          end
         end
       end
 
       def create_tables!
-        @db.execute_batch(<<~SQL)
-          CREATE TABLE IF NOT EXISTS meta (
-            key TEXT PRIMARY KEY,
-            value TEXT
-          );
+        @db.create_table?(:meta) do
+          String :key, primary_key: true
+          String :value
+        end
 
-          CREATE TABLE IF NOT EXISTS content_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source TEXT NOT NULL,
-            session_id TEXT,
-            transcript_path TEXT,
-            project_path TEXT,
-            occurred_at TEXT,
-            ingested_at TEXT NOT NULL,
-            text_hash TEXT NOT NULL,
-            byte_len INTEGER NOT NULL,
-            raw_text TEXT,
-            metadata_json TEXT
-          );
+        @db.create_table?(:content_items) do
+          primary_key :id
+          String :source, null: false
+          String :session_id
+          String :transcript_path
+          String :project_path
+          String :occurred_at
+          String :ingested_at, null: false
+          String :text_hash, null: false
+          Integer :byte_len, null: false
+          String :raw_text, text: true
+          String :metadata_json, text: true
+        end
 
-          CREATE TABLE IF NOT EXISTS delta_cursors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            transcript_path TEXT NOT NULL,
-            last_byte_offset INTEGER NOT NULL DEFAULT 0,
-            updated_at TEXT NOT NULL,
-            UNIQUE(session_id, transcript_path)
-          );
+        @db.create_table?(:delta_cursors) do
+          primary_key :id
+          String :session_id, null: false
+          String :transcript_path, null: false
+          Integer :last_byte_offset, null: false, default: 0
+          String :updated_at, null: false
+          unique [:session_id, :transcript_path]
+        end
 
-          CREATE TABLE IF NOT EXISTS entities (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            canonical_name TEXT NOT NULL,
-            slug TEXT NOT NULL UNIQUE,
-            created_at TEXT NOT NULL
-          );
+        @db.create_table?(:entities) do
+          primary_key :id
+          String :type, null: false
+          String :canonical_name, null: false
+          String :slug, null: false, unique: true
+          String :created_at, null: false
+        end
 
-          CREATE TABLE IF NOT EXISTS entity_aliases (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            entity_id INTEGER NOT NULL REFERENCES entities(id),
-            source TEXT,
-            alias TEXT NOT NULL,
-            confidence REAL DEFAULT 1.0
-          );
+        @db.create_table?(:entity_aliases) do
+          primary_key :id
+          foreign_key :entity_id, :entities, null: false
+          String :source
+          String :alias, null: false
+          Float :confidence, default: 1.0
+        end
 
-          CREATE TABLE IF NOT EXISTS facts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject_entity_id INTEGER REFERENCES entities(id),
-            predicate TEXT NOT NULL,
-            object_entity_id INTEGER REFERENCES entities(id),
-            object_literal TEXT,
-            datatype TEXT,
-            polarity TEXT DEFAULT 'positive',
-            valid_from TEXT,
-            valid_to TEXT,
-            status TEXT DEFAULT 'active',
-            confidence REAL DEFAULT 1.0,
-            created_from TEXT,
-            created_at TEXT NOT NULL,
-            scope TEXT DEFAULT 'project',
-            project_path TEXT
-          );
+        @db.create_table?(:facts) do
+          primary_key :id
+          foreign_key :subject_entity_id, :entities
+          String :predicate, null: false
+          foreign_key :object_entity_id, :entities
+          String :object_literal
+          String :datatype
+          String :polarity, default: "positive"
+          String :valid_from
+          String :valid_to
+          String :status, default: "active"
+          Float :confidence, default: 1.0
+          String :created_from
+          String :created_at, null: false
+          String :scope, default: "project"
+          String :project_path
+        end
 
-          CREATE TABLE IF NOT EXISTS provenance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fact_id INTEGER NOT NULL REFERENCES facts(id),
-            content_item_id INTEGER REFERENCES content_items(id),
-            quote TEXT,
-            attribution_entity_id INTEGER REFERENCES entities(id),
-            strength TEXT DEFAULT 'stated'
-          );
+        @db.create_table?(:provenance) do
+          primary_key :id
+          foreign_key :fact_id, :facts, null: false
+          foreign_key :content_item_id, :content_items
+          String :quote, text: true
+          foreign_key :attribution_entity_id, :entities
+          String :strength, default: "stated"
+        end
 
-          CREATE TABLE IF NOT EXISTS fact_links (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_fact_id INTEGER NOT NULL REFERENCES facts(id),
-            to_fact_id INTEGER NOT NULL REFERENCES facts(id),
-            link_type TEXT NOT NULL
-          );
+        @db.create_table?(:fact_links) do
+          primary_key :id
+          foreign_key :from_fact_id, :facts, null: false
+          foreign_key :to_fact_id, :facts, null: false
+          String :link_type, null: false
+        end
 
-          CREATE TABLE IF NOT EXISTS conflicts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fact_a_id INTEGER NOT NULL REFERENCES facts(id),
-            fact_b_id INTEGER NOT NULL REFERENCES facts(id),
-            status TEXT DEFAULT 'open',
-            detected_at TEXT NOT NULL,
-            notes TEXT
-          );
+        @db.create_table?(:conflicts) do
+          primary_key :id
+          foreign_key :fact_a_id, :facts, null: false
+          foreign_key :fact_b_id, :facts, null: false
+          String :status, default: "open"
+          String :detected_at, null: false
+          String :notes, text: true
+        end
 
-          CREATE INDEX IF NOT EXISTS idx_facts_predicate ON facts(predicate);
-          CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_entity_id);
-          CREATE INDEX IF NOT EXISTS idx_facts_status ON facts(status);
-          CREATE INDEX IF NOT EXISTS idx_facts_scope ON facts(scope);
-          CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project_path);
-          CREATE INDEX IF NOT EXISTS idx_provenance_fact ON provenance(fact_id);
-          CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(entity_id);
-          CREATE INDEX IF NOT EXISTS idx_content_items_session ON content_items(session_id);
-          CREATE INDEX IF NOT EXISTS idx_content_items_project ON content_items(project_path);
-        SQL
+        create_index_if_not_exists(:facts, :predicate, :idx_facts_predicate)
+        create_index_if_not_exists(:facts, :subject_entity_id, :idx_facts_subject)
+        create_index_if_not_exists(:facts, :status, :idx_facts_status)
+        create_index_if_not_exists(:facts, :scope, :idx_facts_scope)
+        create_index_if_not_exists(:facts, :project_path, :idx_facts_project)
+        create_index_if_not_exists(:provenance, :fact_id, :idx_provenance_fact)
+        create_index_if_not_exists(:entity_aliases, :entity_id, :idx_entity_aliases_entity)
+        create_index_if_not_exists(:content_items, :session_id, :idx_content_items_session)
+        create_index_if_not_exists(:content_items, :project_path, :idx_content_items_project)
+      end
+
+      def create_index_if_not_exists(table, column, name)
+        @db.run("CREATE INDEX IF NOT EXISTS #{name} ON #{table}(#{column})")
       end
 
       def set_meta(key, value)
-        @db.execute(
-          "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-          [key, value]
-        )
+        @db[:meta].insert_conflict(target: :key, update: {value: value}).insert(key: key, value: value)
       end
 
       def get_meta(key)
-        @db.get_first_value("SELECT value FROM meta WHERE key = ?", [key])
+        @db[:meta].where(key: key).get(:value)
       end
 
       public
 
       def upsert_content_item(source:, text_hash:, byte_len:, session_id: nil, transcript_path: nil,
         project_path: nil, occurred_at: nil, raw_text: nil, metadata: nil)
-        existing = @db.get_first_value(
-          "SELECT id FROM content_items WHERE text_hash = ? AND session_id = ?",
-          [text_hash, session_id]
-        )
+        existing = content_items.where(text_hash: text_hash, session_id: session_id).get(:id)
         return existing if existing
 
         now = Time.now.utc.iso8601
-        @db.execute(
-          <<~SQL,
-            INSERT INTO content_items 
-              (source, session_id, transcript_path, project_path, occurred_at, ingested_at, text_hash, byte_len, raw_text, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          SQL
-          [source, session_id, transcript_path, project_path, occurred_at || now, now, text_hash, byte_len, raw_text, metadata&.to_json]
+        content_items.insert(
+          source: source,
+          session_id: session_id,
+          transcript_path: transcript_path,
+          project_path: project_path,
+          occurred_at: occurred_at || now,
+          ingested_at: now,
+          text_hash: text_hash,
+          byte_len: byte_len,
+          raw_text: raw_text,
+          metadata_json: metadata&.to_json
         )
-        @db.last_insert_row_id
       end
 
       def get_delta_cursor(session_id, transcript_path)
-        @db.get_first_value(
-          "SELECT last_byte_offset FROM delta_cursors WHERE session_id = ? AND transcript_path = ?",
-          [session_id, transcript_path]
-        )
+        delta_cursors.where(session_id: session_id, transcript_path: transcript_path).get(:last_byte_offset)
       end
 
       def update_delta_cursor(session_id, transcript_path, offset)
         now = Time.now.utc.iso8601
-        @db.execute(
-          <<~SQL,
-            INSERT INTO delta_cursors (session_id, transcript_path, last_byte_offset, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(session_id, transcript_path) DO UPDATE SET last_byte_offset = ?, updated_at = ?
-          SQL
-          [session_id, transcript_path, offset, now, offset, now]
-        )
+        delta_cursors
+          .insert_conflict(
+            target: [:session_id, :transcript_path],
+            update: {last_byte_offset: offset, updated_at: now}
+          )
+          .insert(
+            session_id: session_id,
+            transcript_path: transcript_path,
+            last_byte_offset: offset,
+            updated_at: now
+          )
       end
 
       def find_or_create_entity(type:, name:)
         slug = slugify(type, name)
-        existing = @db.get_first_value("SELECT id FROM entities WHERE slug = ?", [slug])
+        existing = entities.where(slug: slug).get(:id)
         return existing if existing
 
         now = Time.now.utc.iso8601
-        @db.execute(
-          "INSERT INTO entities (type, canonical_name, slug, created_at) VALUES (?, ?, ?, ?)",
-          [type, name, slug, now]
-        )
-        @db.last_insert_row_id
+        entities.insert(type: type, canonical_name: name, slug: slug, created_at: now)
       end
 
       def insert_fact(subject_entity_id:, predicate:, object_entity_id: nil, object_literal: nil,
         datatype: nil, polarity: "positive", valid_from: nil, status: "active",
         confidence: 1.0, created_from: nil, scope: "project", project_path: nil)
         now = Time.now.utc.iso8601
-        @db.execute(
-          <<~SQL,
-            INSERT INTO facts 
-              (subject_entity_id, predicate, object_entity_id, object_literal, datatype, polarity, valid_from, status, confidence, created_from, created_at, scope, project_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          SQL
-          [subject_entity_id, predicate, object_entity_id, object_literal, datatype, polarity, valid_from || now, status, confidence, created_from, now, scope, project_path]
+        facts.insert(
+          subject_entity_id: subject_entity_id,
+          predicate: predicate,
+          object_entity_id: object_entity_id,
+          object_literal: object_literal,
+          datatype: datatype,
+          polarity: polarity,
+          valid_from: valid_from || now,
+          status: status,
+          confidence: confidence,
+          created_from: created_from,
+          created_at: now,
+          scope: scope,
+          project_path: project_path
         )
-        @db.last_insert_row_id
       end
 
-      def update_fact(fact_id, status: nil, valid_to: nil)
-        updates = []
-        params = []
+      def update_fact(fact_id, status: nil, valid_to: nil, scope: nil, project_path: nil)
+        updates = {}
+        updates[:status] = status if status
+        updates[:valid_to] = valid_to if valid_to
 
-        if status
-          updates << "status = ?"
-          params << status
+        if scope
+          updates[:scope] = scope
+          updates[:project_path] = (scope == "global") ? nil : project_path
         end
 
-        if valid_to
-          updates << "valid_to = ?"
-          params << valid_to
-        end
+        return false if updates.empty?
 
-        return if updates.empty?
-
-        params << fact_id
-        @db.execute("UPDATE facts SET #{updates.join(", ")} WHERE id = ?", params)
+        facts.where(id: fact_id).update(updates)
+        true
       end
 
       def facts_for_slot(subject_entity_id, predicate, status: "active")
-        rows = @db.execute(
-          <<~SQL,
-            SELECT id, subject_entity_id, predicate, object_entity_id, object_literal, datatype, 
-                   polarity, valid_from, valid_to, status, confidence, created_from, created_at
-            FROM facts 
-            WHERE subject_entity_id = ? AND predicate = ? AND status = ?
-          SQL
-          [subject_entity_id, predicate, status]
-        )
-        rows.map { |row| row_to_fact_hash(row) }
+        facts
+          .where(subject_entity_id: subject_entity_id, predicate: predicate, status: status)
+          .select(:id, :subject_entity_id, :predicate, :object_entity_id, :object_literal,
+            :datatype, :polarity, :valid_from, :valid_to, :status, :confidence,
+            :created_from, :created_at)
+          .all
       end
 
       def insert_provenance(fact_id:, content_item_id: nil, quote: nil, attribution_entity_id: nil, strength: "stated")
-        @db.execute(
-          "INSERT INTO provenance (fact_id, content_item_id, quote, attribution_entity_id, strength) VALUES (?, ?, ?, ?, ?)",
-          [fact_id, content_item_id, quote, attribution_entity_id, strength]
+        provenance.insert(
+          fact_id: fact_id,
+          content_item_id: content_item_id,
+          quote: quote,
+          attribution_entity_id: attribution_entity_id,
+          strength: strength
         )
-        @db.last_insert_row_id
       end
 
       def provenance_for_fact(fact_id)
-        rows = @db.execute(
-          "SELECT id, fact_id, content_item_id, quote, attribution_entity_id, strength FROM provenance WHERE fact_id = ?",
-          [fact_id]
-        )
-        rows.map do |row|
-          {id: row[0], fact_id: row[1], content_item_id: row[2], quote: row[3], attribution_entity_id: row[4], strength: row[5]}
-        end
+        provenance.where(fact_id: fact_id).all
       end
 
       def insert_conflict(fact_a_id:, fact_b_id:, status: "open", notes: nil)
         now = Time.now.utc.iso8601
-        @db.execute(
-          "INSERT INTO conflicts (fact_a_id, fact_b_id, status, detected_at, notes) VALUES (?, ?, ?, ?, ?)",
-          [fact_a_id, fact_b_id, status, now, notes]
+        conflicts.insert(
+          fact_a_id: fact_a_id,
+          fact_b_id: fact_b_id,
+          status: status,
+          detected_at: now,
+          notes: notes
         )
-        @db.last_insert_row_id
       end
 
       def open_conflicts
-        rows = @db.execute("SELECT id, fact_a_id, fact_b_id, status, detected_at, notes FROM conflicts WHERE status = 'open'")
-        rows.map do |row|
-          {id: row[0], fact_a_id: row[1], fact_b_id: row[2], status: row[3], detected_at: row[4], notes: row[5]}
-        end
+        conflicts.where(status: "open").all
       end
 
       def insert_fact_link(from_fact_id:, to_fact_id:, link_type:)
-        @db.execute(
-          "INSERT INTO fact_links (from_fact_id, to_fact_id, link_type) VALUES (?, ?, ?)",
-          [from_fact_id, to_fact_id, link_type]
-        )
-        @db.last_insert_row_id
+        fact_links.insert(from_fact_id: from_fact_id, to_fact_id: to_fact_id, link_type: link_type)
       end
 
       private
 
       def slugify(type, name)
         "#{type}:#{name.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/^_|_$/, "")}"
-      end
-
-      def row_to_fact_hash(row)
-        {
-          id: row[0],
-          subject_entity_id: row[1],
-          predicate: row[2],
-          object_entity_id: row[3],
-          object_literal: row[4],
-          datatype: row[5],
-          polarity: row[6],
-          valid_from: row[7],
-          valid_to: row[8],
-          status: row[9],
-          confidence: row[10],
-          created_from: row[11],
-          created_at: row[12]
-        }
       end
     end
   end

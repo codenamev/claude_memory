@@ -17,20 +17,24 @@ RSpec.describe ClaudeMemory::Sweep::Sweeper do
   def create_fact(status:, days_ago:)
     entity_id = store.find_or_create_entity(type: "repo", name: "test")
     created_at = (Time.now - days_ago * 86400).utc.iso8601
-    store.db.execute(
-      "INSERT INTO facts (subject_entity_id, predicate, object_literal, status, created_at) VALUES (?, ?, ?, ?, ?)",
-      [entity_id, "test_pred", "test_obj", status, created_at]
+    store.facts.insert(
+      subject_entity_id: entity_id,
+      predicate: "test_pred",
+      object_literal: "test_obj",
+      status: status,
+      created_at: created_at
     )
-    store.db.last_insert_row_id
   end
 
   def create_content(days_ago:)
     ingested_at = (Time.now - days_ago * 86400).utc.iso8601
-    store.db.execute(
-      "INSERT INTO content_items (source, ingested_at, text_hash, byte_len, raw_text) VALUES (?, ?, ?, ?, ?)",
-      ["test", ingested_at, SecureRandom.hex(16), 100, "test content"]
+    store.content_items.insert(
+      source: "test",
+      ingested_at: ingested_at,
+      text_hash: SecureRandom.hex(16),
+      byte_len: 100,
+      raw_text: "test content"
     )
-    store.db.last_insert_row_id
   end
 
   describe "#run!" do
@@ -80,9 +84,9 @@ RSpec.describe ClaudeMemory::Sweep::Sweeper do
 
     context "orphaned provenance" do
       it "deletes provenance for deleted facts" do
-        fact_id = create_fact(status: "active", days_ago: 1)
-        store.insert_provenance(fact_id: fact_id, quote: "test")
-        store.execute("DELETE FROM facts WHERE id = ?", [fact_id])
+        store.db.run("PRAGMA foreign_keys = OFF")
+        store.provenance.insert(fact_id: 99999, quote: "orphaned", strength: "stated")
+        store.db.run("PRAGMA foreign_keys = ON")
 
         stats = sweeper.run!
         expect(stats[:orphaned_provenance_deleted]).to eq(1)
