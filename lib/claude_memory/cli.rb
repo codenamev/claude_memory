@@ -4,7 +4,7 @@ require "optparse"
 
 module ClaudeMemory
   class CLI
-    COMMANDS = %w[help version].freeze
+    COMMANDS = %w[help version db:init].freeze
 
     def initialize(args = ARGV, stdout: $stdout, stderr: $stderr)
       @args = args
@@ -22,6 +22,9 @@ module ClaudeMemory
       when "version", "-v", "--version"
         print_version
         0
+      when "db:init"
+        db_init
+        0
       else
         @stderr.puts "Unknown command: #{command}"
         @stderr.puts "Run 'claude-memory help' for usage."
@@ -38,6 +41,7 @@ module ClaudeMemory
         Usage: claude-memory <command> [options]
 
         Commands:
+          db:init    Initialize the SQLite database
           help       Show this help message
           version    Show version number
 
@@ -47,6 +51,14 @@ module ClaudeMemory
 
     def print_version
       @stdout.puts "claude-memory #{ClaudeMemory::VERSION}"
+    end
+
+    def db_init
+      db_path = @args[1] || ClaudeMemory::DEFAULT_DB_PATH
+      store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+      @stdout.puts "Database initialized at #{db_path}"
+      @stdout.puts "Schema version: #{store.schema_version}"
+      store.close
     end
   end
 end
