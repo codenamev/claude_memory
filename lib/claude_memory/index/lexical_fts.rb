@@ -28,14 +28,10 @@ module ClaudeMemory
       end
 
       def escape_fts_query(query)
-        words = query.split(/\s+/).map do |word|
-          if word =~ /^[-+]/ || word.include?('"')
-            word
-          else
-            %("#{word.gsub('"', '""')}")
-          end
-        end
-        words.join(" ")
+        query.split(/\s+/).map do |word|
+          escaped = word.gsub('"', '""')
+          %("#{escaped}")
+        end.join(" ")
       end
 
       private
