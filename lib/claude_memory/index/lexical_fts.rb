@@ -19,11 +19,23 @@ module ClaudeMemory
       def search(query, limit: 20)
         return [] if query.nil? || query.strip.empty?
 
+        escaped_query = escape_fts_query(query)
         @db[:content_fts]
-          .where(Sequel.lit("text MATCH ?", query))
+          .where(Sequel.lit("text MATCH ?", escaped_query))
           .order(:rank)
           .limit(limit)
           .select_map(:content_item_id)
+      end
+
+      def escape_fts_query(query)
+        words = query.split(/\s+/).map do |word|
+          if word =~ /^[-+]/ || word.include?('"')
+            word
+          else
+            %("#{word.gsub('"', '""')}")
+          end
+        end
+        words.join(" ")
       end
 
       private
