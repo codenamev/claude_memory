@@ -34,14 +34,16 @@ module ClaudeMemory
       def handle_message(line)
         return if line.empty?
 
+        request = nil
         begin
           request = JSON.parse(line)
           response = process_request(request)
-          send_response(response)
+          send_response(response) if response
         rescue JSON::ParserError => e
-          send_error(-32700, "Parse error: #{e.message}", nil)
+          send_error(-32700, "Parse error: #{e.message}", 0)
         rescue => e
-          send_error(-32603, "Internal error: #{e.message}", request&.fetch("id", nil))
+          request_id = request&.fetch("id", nil) || 0
+          send_error(-32603, "Internal error: #{e.message}", request_id)
         end
       end
 

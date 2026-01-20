@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "digest"
 
 module ClaudeMemory
   module MCP
@@ -321,6 +322,13 @@ module ClaudeMemory
         facts = (args["facts"] || []).map { |f| symbolize_keys(f) }
         decisions = (args["decisions"] || []).map { |d| symbolize_keys(d) }
 
+        project_path = ENV["CLAUDE_PROJECT_DIR"] || Dir.pwd
+        occurred_at = Time.now.utc.iso8601
+
+        searchable_text = build_searchable_text(entities, facts, decisions)
+        content_item_id = create_synthetic_content_item(store, searchable_text, project_path, occurred_at)
+        index_content_item(store, content_item_id, searchable_text)
+
         extraction = Distill::Extraction.new(
           entities: entities,
           facts: facts,
@@ -328,11 +336,11 @@ module ClaudeMemory
           signals: []
         )
 
-        project_path = ENV["CLAUDE_PROJECT_DIR"] || Dir.pwd
         resolver = Resolve::Resolver.new(store)
         result = resolver.apply(
           extraction,
-          occurred_at: Time.now.utc.iso8601,
+          content_item_id: content_item_id,
+          occurred_at: occurred_at,
           project_path: project_path,
           scope: scope
         )
@@ -345,6 +353,33 @@ module ClaudeMemory
           facts_superseded: result[:facts_superseded],
           conflicts_created: result[:conflicts_created]
         }
+      end
+
+      def build_searchable_text(entities, facts, decisions)
+        parts = []
+        entities.each { |e| parts << "#{e[:type]}: #{e[:name]}" }
+        facts.each { |f| parts << "#{f[:subject]} #{f[:predicate]} #{f[:object]} #{f[:quote]}" }
+        decisions.each { |d| parts << "#{d[:title]} #{d[:summary]}" }
+        parts.join(" ").strip
+      end
+
+      def create_synthetic_content_item(store, text, project_path, occurred_at)
+        text_hash = Digest::SHA256.hexdigest(text)
+        store.upsert_content_item(
+          source: "mcp_extraction",
+          session_id: "mcp-#{Time.now.to_i}",
+          transcript_path: nil,
+          project_path: project_path,
+          text_hash: text_hash,
+          byte_len: text.bytesize,
+          raw_text: text,
+          occurred_at: occurred_at
+        )
+      end
+
+      def index_content_item(store, content_item_id, text)
+        fts = Index::LexicalFTS.new(store)
+        fts.index_content_item(content_item_id, text)
       end
 
       def symbolize_keys(hash)
