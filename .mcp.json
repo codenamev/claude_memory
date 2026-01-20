@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "claude-memory": {
+    "memory": {
       "type": "stdio",
       "command": "claude-memory",
       "args": [
