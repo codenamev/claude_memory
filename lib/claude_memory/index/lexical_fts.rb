@@ -19,6 +19,12 @@ module ClaudeMemory
       def search(query, limit: 20)
         return [] if query.nil? || query.strip.empty?
 
+        if query.strip == "*"
+          return @db[:content_fts]
+            .limit(limit)
+            .select_map(:content_item_id)
+        end
+
         escaped_query = escape_fts_query(query)
         @db[:content_fts]
           .where(Sequel.lit("text MATCH ?", escaped_query))
@@ -29,9 +35,10 @@ module ClaudeMemory
 
       def escape_fts_query(query)
         query.split(/\s+/).map do |word|
+          next word if word == "*"
           escaped = word.gsub('"', '""')
           %("#{escaped}")
-        end.join(" ")
+        end.compact.join(" ")
       end
 
       private
