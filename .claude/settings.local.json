@@ -9,7 +9,12 @@
       "mcp__plugin_claude-memory_claude-memory__memory_store_extraction",
       "mcp__plugin_claude-memory_claude-memory__memory_recall",
       "mcp__plugin_claude-memory_claude-memory__memory_status",
-      "mcp__plugin_claude-memory_memory__memory_recall"
+      "mcp__plugin_claude-memory_memory__memory_recall",
+      "mcp__memory__memory_recall",
+      "mcp__memory__memory_changes",
+      "mcp__memory__memory_status",
+      "mcp__memory__memory_store_extraction",
+      "mcp__memory__memory_explain"
     ]
   },
   "enableAllProjectMcpServers": true
