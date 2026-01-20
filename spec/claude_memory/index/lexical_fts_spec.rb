@@ -71,5 +71,33 @@ RSpec.describe ClaudeMemory::Index::LexicalFTS do
       results = fts.search("authentication JWT")
       expect(results.size).to eq(1)
     end
+
+    it "handles special characters like hyphens" do
+      id = store.upsert_content_item(
+        source: "claude_code",
+        session_id: "sess-2",
+        text_hash: "special1",
+        byte_len: 50,
+        raw_text: "Use 2-space indentation for Ruby code."
+      )
+      fts.index_content_item(id, "Use 2-space indentation for Ruby code.")
+
+      results = fts.search("2-space")
+      expect(results).not_to be_empty
+    end
+
+    it "handles exclamation marks and punctuation" do
+      id = store.upsert_content_item(
+        source: "claude_code",
+        session_id: "sess-2",
+        text_hash: "special2",
+        byte_len: 50,
+        raw_text: "This is awesome! Really great stuff."
+      )
+      fts.index_content_item(id, "This is awesome! Really great stuff.")
+
+      results = fts.search("awesome!")
+      expect(results).not_to be_empty
+    end
   end
 end
