@@ -1,0 +1,62 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "claude-memory hook sweep --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "claude-memory hook sweep --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

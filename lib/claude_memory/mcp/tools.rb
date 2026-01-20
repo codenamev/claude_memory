@@ -93,6 +93,60 @@ module ClaudeMemory
               },
               required: ["fact_id"]
             }
+          },
+          {
+            name: "memory.store_extraction",
+            description: "Store extracted facts, entities, and decisions from a conversation. Call this to persist knowledge you've learned during the session.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                entities: {
+                  type: "array",
+                  description: "Entities mentioned (databases, frameworks, services, etc.)",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: {type: "string", description: "Entity type: database, framework, language, platform, repo, module, person, service"},
+                      name: {type: "string", description: "Canonical name"},
+                      confidence: {type: "number", description: "0.0-1.0 extraction confidence"}
+                    },
+                    required: ["type", "name"]
+                  }
+                },
+                facts: {
+                  type: "array",
+                  description: "Facts learned during the session",
+                  items: {
+                    type: "object",
+                    properties: {
+                      subject: {type: "string", description: "Entity name or 'repo' for project-level facts"},
+                      predicate: {type: "string", description: "Relationship type: uses_database, uses_framework, convention, decision, auth_method, deployment_platform"},
+                      object: {type: "string", description: "The value or target entity"},
+                      confidence: {type: "number", description: "0.0-1.0 how confident"},
+                      quote: {type: "string", description: "Source text excerpt (max 200 chars)"},
+                      strength: {type: "string", enum: ["stated", "inferred"], description: "Was this explicitly stated or inferred?"},
+                      scope_hint: {type: "string", enum: ["project", "global"], description: "Should this apply to just this project or globally?"}
+                    },
+                    required: ["subject", "predicate", "object"]
+                  }
+                },
+                decisions: {
+                  type: "array",
+                  description: "Decisions made during the session",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: {type: "string", description: "Short summary (max 100 chars)"},
+                      summary: {type: "string", description: "Full description"},
+                      status_hint: {type: "string", enum: ["accepted", "proposed", "rejected"]}
+                    },
+                    required: ["title", "summary"]
+                  }
+                },
+                scope: {type: "string", enum: ["global", "project"], description: "Default scope for facts", default: "project"}
+              },
+              required: ["facts"]
+            }
           }
         ]
       end
@@ -113,6 +167,8 @@ module ClaudeMemory
           status
         when "memory.promote"
           promote(arguments)
+        when "memory.store_extraction"
+          store_extraction(arguments)
         else
           {error: "Unknown tool: #{name}"}
         end
@@ -254,6 +310,45 @@ module ClaudeMemory
         else
           {error: "Fact #{fact_id} not found in project database"}
         end
+      end
+
+      def store_extraction(args)
+        scope = args["scope"] || "project"
+        store = get_store_for_scope(scope)
+        return {error: "Database not available"} unless store
+
+        entities = (args["entities"] || []).map { |e| symbolize_keys(e) }
+        facts = (args["facts"] || []).map { |f| symbolize_keys(f) }
+        decisions = (args["decisions"] || []).map { |d| symbolize_keys(d) }
+
+        extraction = Distill::Extraction.new(
+          entities: entities,
+          facts: facts,
+          decisions: decisions,
+          signals: []
+        )
+
+        project_path = ENV["CLAUDE_PROJECT_DIR"] || Dir.pwd
+        resolver = Resolve::Resolver.new(store)
+        result = resolver.apply(
+          extraction,
+          occurred_at: Time.now.utc.iso8601,
+          project_path: project_path,
+          scope: scope
+        )
+
+        {
+          success: true,
+          scope: scope,
+          entities_created: result[:entities_created],
+          facts_created: result[:facts_created],
+          facts_superseded: result[:facts_superseded],
+          conflicts_created: result[:conflicts_created]
+        }
+      end
+
+      def symbolize_keys(hash)
+        hash.transform_keys(&:to_sym)
       end
 
       def get_store_for_scope(scope)

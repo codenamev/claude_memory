@@ -1,0 +1,10 @@
+{
+  "name": "claude-memory",
+  "version": "0.1.0",
+  "description": "Long-term self-managed memory for Claude Code with fact extraction, truth maintenance, and provenance tracking",
+  "author": {
+    "name": "Valentino Stoll"
+  },
+  "license": "MIT",
+  "keywords": ["memory", "facts", "knowledge", "persistence"]
+}

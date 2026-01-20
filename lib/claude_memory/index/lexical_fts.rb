@@ -17,6 +17,8 @@ module ClaudeMemory
       end
 
       def search(query, limit: 20)
+        return [] if query.nil? || query.strip.empty?
+
         @db[:content_fts]
           .where(Sequel.lit("text MATCH ?", query))
           .order(:rank)
