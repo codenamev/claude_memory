@@ -6,10 +6,11 @@ module ClaudeMemory
   class CLI
     COMMANDS = %w[help version db:init].freeze
 
-    def initialize(args = ARGV, stdout: $stdout, stderr: $stderr)
+    def initialize(args = ARGV, stdout: $stdout, stderr: $stderr, stdin: $stdin)
       @args = args
       @stdout = stdout
       @stderr = stderr
+      @stdin = stdin
     end
 
     def run
@@ -45,6 +46,8 @@ module ClaudeMemory
         serve_mcp
       when "publish"
         publish_cmd
+      when "hook"
+        hook_cmd
       when "doctor"
         doctor_cmd
       else
@@ -69,6 +72,7 @@ module ClaudeMemory
           doctor     Check system health
           explain    Explain a fact with receipts
           help       Show this help message
+          hook       Run hook entrypoints (ingest|sweep|publish)
           init       Initialize ClaudeMemory in a project
           ingest     Ingest transcript delta
           publish    Publish snapshot to Claude Code memory
@@ -378,6 +382,89 @@ module ClaudeMemory
       0
     end
 
+    def hook_cmd
+      subcommand = @args[1]
+
+      unless subcommand
+        @stderr.puts "Usage: claude-memory hook <ingest|sweep|publish> [options]"
+        @stderr.puts "\nReads hook payload JSON from stdin."
+        return 1
+      end
+
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
+      OptionParser.new do |o|
+        o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+      end.parse!(@args[2..])
+
+      payload = parse_hook_payload
+      return 1 unless payload
+
+      store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+      handler = ClaudeMemory::Hook::Handler.new(store)
+
+      case subcommand
+      when "ingest"
+        hook_ingest(handler, payload)
+      when "sweep"
+        hook_sweep(handler, payload)
+      when "publish"
+        hook_publish(handler, payload)
+      else
+        @stderr.puts "Unknown hook command: #{subcommand}"
+        @stderr.puts "Available: ingest, sweep, publish"
+        store.close
+        return 1
+      end
+
+      store.close
+      0
+    rescue ClaudeMemory::Hook::Handler::PayloadError => e
+      @stderr.puts "Payload error: #{e.message}"
+      1
+    rescue ClaudeMemory::Ingest::TranscriptReader::FileNotFoundError => e
+      @stderr.puts "Error: #{e.message}"
+      1
+    end
+
+    def parse_hook_payload
+      input = @stdin.read
+      JSON.parse(input)
+    rescue JSON::ParserError => e
+      @stderr.puts "Invalid JSON payload: #{e.message}"
+      nil
+    end
+
+    def hook_ingest(handler, payload)
+      result = handler.ingest(payload)
+
+      case result[:status]
+      when :ingested
+        @stdout.puts "Ingested #{result[:bytes_read]} bytes (content_id: #{result[:content_id]})"
+      when :no_change
+        @stdout.puts "No new content to ingest"
+      end
+    end
+
+    def hook_sweep(handler, payload)
+      result = handler.sweep(payload)
+      stats = result[:stats]
+
+      @stdout.puts "Sweep complete:"
+      @stdout.puts "  Elapsed: #{stats[:elapsed_seconds].round(2)}s"
+      @stdout.puts "  Budget honored: #{stats[:budget_honored]}"
+    end
+
+    def hook_publish(handler, payload)
+      result = handler.publish(payload)
+
+      case result[:status]
+      when :updated
+        @stdout.puts "Published snapshot to #{result[:path]}"
+      when :unchanged
+        @stdout.puts "No changes - #{result[:path]} is up to date"
+      end
+    end
+
     def init_project
       @stdout.puts "Initializing ClaudeMemory...\n\n"
 
@@ -407,6 +494,9 @@ module ClaudeMemory
       hooks_path = ".claude/settings.json"
       db_path = File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)
 
+      ingest_cmd = "claude-memory hook ingest --db #{db_path}"
+      sweep_cmd = "claude-memory hook sweep --db #{db_path}"
+
       hooks_config = {
         "hooks" => {
           "Stop" => [
@@ -415,7 +505,8 @@ module ClaudeMemory
               "hooks" => [
                 {
                   "type" => "command",
-                  "command" => "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH --db #{db_path} 2>/dev/null || true"
+                  "command" => ingest_cmd,
+                  "timeout" => 10
                 }
               ]
             }
@@ -426,7 +517,8 @@ module ClaudeMemory
               "hooks" => [
                 {
                   "type" => "command",
-                  "command" => "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH --db #{db_path} 2>/dev/null || true"
+                  "command" => ingest_cmd,
+                  "timeout" => 10
                 }
               ]
             }
@@ -437,7 +529,13 @@ module ClaudeMemory
               "hooks" => [
                 {
                   "type" => "command",
-                  "command" => "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH --db #{db_path} 2>/dev/null && claude-memory sweep --budget 15 --db #{db_path} 2>/dev/null || true"
+                  "command" => ingest_cmd,
+                  "timeout" => 30
+                },
+                {
+                  "type" => "command",
+                  "command" => sweep_cmd,
+                  "timeout" => 30
                 }
               ]
             }
@@ -448,7 +546,13 @@ module ClaudeMemory
               "hooks" => [
                 {
                   "type" => "command",
-                  "command" => "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH --db #{db_path} 2>/dev/null && claude-memory sweep --budget 15 --db #{db_path} 2>/dev/null || true"
+                  "command" => ingest_cmd,
+                  "timeout" => 30
+                },
+                {
+                  "type" => "command",
+                  "command" => sweep_cmd,
+                  "timeout" => 30
                 }
               ]
             }

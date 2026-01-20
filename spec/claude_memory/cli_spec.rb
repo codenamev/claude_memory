@@ -156,4 +156,109 @@ RSpec.describe ClaudeMemory::CLI do
       expect(stdout.string).to include("No results found")
     end
   end
+
+  describe "hook command" do
+    let(:db_path) { File.join(Dir.tmpdir, "cli_hook_test_#{Process.pid}.sqlite3") }
+    let(:transcript_path) { File.join(Dir.tmpdir, "hook_transcript_#{Process.pid}.jsonl") }
+    let(:stdin) { StringIO.new }
+
+    def run_cli_with_stdin(*args, input:)
+      described_class.new(args, stdout: stdout, stderr: stderr, stdin: StringIO.new(input)).run
+    end
+
+    before { File.write(transcript_path, "hook test content\n") }
+
+    after do
+      FileUtils.rm_f(db_path)
+      FileUtils.rm_f(transcript_path)
+    end
+
+    describe "hook ingest" do
+      it "ingests from stdin JSON payload" do
+        payload = {
+          "session_id" => "hook-session-1",
+          "transcript_path" => transcript_path
+        }.to_json
+
+        code = run_cli_with_stdin("hook", "ingest", "--db", db_path, input: payload)
+
+        expect(code).to eq(0)
+        expect(stdout.string).to include("Ingested")
+      end
+
+      it "reports error for invalid payload" do
+        code = run_cli_with_stdin("hook", "ingest", "--db", db_path, input: "{}")
+
+        expect(code).to eq(1)
+        expect(stderr.string).to include("session_id")
+      end
+
+      it "handles invalid JSON" do
+        code = run_cli_with_stdin("hook", "ingest", "--db", db_path, input: "not json")
+
+        expect(code).to eq(1)
+        expect(stderr.string).to include("Invalid JSON")
+      end
+    end
+
+    describe "hook sweep" do
+      before do
+        ClaudeMemory::Store::SQLiteStore.new(db_path).close
+      end
+
+      it "runs sweep from stdin JSON payload" do
+        payload = {"budget" => 1}.to_json
+
+        code = run_cli_with_stdin("hook", "sweep", "--db", db_path, input: payload)
+
+        expect(code).to eq(0)
+        expect(stdout.string).to include("Sweep complete")
+      end
+
+      it "accepts empty payload" do
+        code = run_cli_with_stdin("hook", "sweep", "--db", db_path, input: "{}")
+
+        expect(code).to eq(0)
+        expect(stdout.string).to include("Sweep complete")
+      end
+    end
+
+    describe "hook publish" do
+      let(:project_dir) { Dir.mktmpdir("cli_hook_publish_#{Process.pid}") }
+
+      before do
+        @original_dir = Dir.pwd
+        Dir.chdir(project_dir)
+        ClaudeMemory::Store::SQLiteStore.new(db_path).close
+      end
+
+      after do
+        Dir.chdir(@original_dir)
+        FileUtils.rm_rf(project_dir)
+      end
+
+      it "publishes snapshot from stdin JSON payload" do
+        payload = {"mode" => "shared"}.to_json
+
+        code = run_cli_with_stdin("hook", "publish", "--db", db_path, input: payload)
+
+        expect(code).to eq(0)
+        expect(stdout.string).to match(/Published|unchanged/)
+      end
+    end
+
+    it "shows help for unknown hook subcommand" do
+      code = run_cli_with_stdin("hook", "unknown", input: "{}")
+
+      expect(code).to eq(1)
+      expect(stderr.string).to include("Unknown hook command")
+    end
+
+    it "shows help when no subcommand given" do
+      code = run_cli_with_stdin("hook", input: "")
+
+      expect(code).to eq(1)
+      expect(stderr.string).to include("Usage:")
+    end
+  end
 end
