@@ -182,20 +182,21 @@ module ClaudeMemory
     def recall_cmd
       query = @args[1]
       unless query
-        @stderr.puts "Usage: claude-memory recall <query> [--db PATH] [--limit N]"
+        @stderr.puts "Usage: claude-memory recall <query> [--db PATH] [--limit N] [--scope project|global|all]"
         return 1
       end
 
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, limit: 10}
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, limit: 10, scope: "all"}
       OptionParser.new do |o|
         o.on("--db PATH", "Database path") { |v| opts[:db] = v }
         o.on("--limit N", Integer, "Max results") { |v| opts[:limit] = v }
+        o.on("--scope SCOPE", "Scope: project, global, or all") { |v| opts[:scope] = v }
       end.parse!(@args[2..])
 
       store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
       recall = ClaudeMemory::Recall.new(store)
 
-      results = recall.query(query, limit: opts[:limit])
+      results = recall.query(query, limit: opts[:limit], scope: opts[:scope])
       if results.empty?
         @stdout.puts "No facts found."
       else
@@ -252,13 +253,15 @@ module ClaudeMemory
     end
 
     def conflicts_cmd
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH}
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, scope: "all"}
       OptionParser.new do |o|
         o.on("--db PATH", "Database path") { |v| opts[:db] = v }
+        o.on("--scope SCOPE", "Scope: project, global, or all") { |v| opts[:scope] = v }
       end.parse!(@args[1..])
 
       store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
-      conflicts = store.open_conflicts
+      recall = ClaudeMemory::Recall.new(store)
+      conflicts = recall.conflicts(scope: opts[:scope])
 
       if conflicts.empty?
         @stdout.puts "No open conflicts."
@@ -277,11 +280,12 @@ module ClaudeMemory
     end
 
     def changes_cmd
-      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, since: nil, limit: 20}
+      opts = {db: ClaudeMemory::DEFAULT_DB_PATH, since: nil, limit: 20, scope: "all"}
       OptionParser.new do |o|
         o.on("--db PATH", "Database path") { |v| opts[:db] = v }
         o.on("--since ISO", "Since timestamp") { |v| opts[:since] = v }
         o.on("--limit N", Integer, "Max results") { |v| opts[:limit] = v }
+        o.on("--scope SCOPE", "Scope: project, global, or all") { |v| opts[:scope] = v }
       end.parse!(@args[1..])
 
       opts[:since] ||= (Time.now - 86400 * 7).utc.iso8601
@@ -289,13 +293,14 @@ module ClaudeMemory
       store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
       recall = ClaudeMemory::Recall.new(store)
 
-      changes = recall.changes(since: opts[:since], limit: opts[:limit])
+      changes = recall.changes(since: opts[:since], limit: opts[:limit], scope: opts[:scope])
       if changes.empty?
         @stdout.puts "No changes since #{opts[:since]}."
       else
         @stdout.puts "Changes since #{opts[:since]} (#{changes.size}):\n\n"
         changes.each do |change|
-          @stdout.puts "  [#{change[:id]}] #{change[:predicate]}: #{change[:object_literal]} (#{change[:status]})"
+          scope_info = change[:scope] == "global" ? " [global]" : ""
+          @stdout.puts "  [#{change[:id]}] #{change[:predicate]}: #{change[:object_literal]} (#{change[:status]})#{scope_info}"
           @stdout.puts "    Created: #{change[:created_at]}"
         end
       end

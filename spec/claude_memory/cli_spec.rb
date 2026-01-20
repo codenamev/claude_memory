@@ -68,7 +68,7 @@ RSpec.describe ClaudeMemory::CLI do
       expect(run_cli("db:init", db_path)).to eq(0)
       expect(File.exist?(db_path)).to be true
       expect(stdout.string).to include("Database initialized")
-      expect(stdout.string).to include("Schema version: 1")
+      expect(stdout.string).to include("Schema version: 2")
     end
 
     it "is idempotent" do

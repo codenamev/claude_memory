@@ -2,13 +2,18 @@
 
 module ClaudeMemory
   class Recall
-    def initialize(store, fts: nil)
+    SCOPE_PROJECT = "project"
+    SCOPE_GLOBAL = "global"
+    SCOPE_ALL = "all"
+
+    def initialize(store, fts: nil, project_path: nil, env: ENV)
       @store = store
       @fts = fts || Index::LexicalFTS.new(store)
+      @project_path = project_path || env["CLAUDE_PROJECT_DIR"] || Dir.pwd
     end
 
-    def query(query_text, limit: 10)
-      content_ids = @fts.search(query_text, limit: limit * 2)
+    def query(query_text, limit: 10, scope: SCOPE_ALL)
+      content_ids = @fts.search(query_text, limit: limit * 3)
       return [] if content_ids.empty?
 
       facts_with_provenance = []
@@ -18,11 +23,12 @@ module ClaudeMemory
         provenance_records = find_provenance_by_content(content_id)
         provenance_records.each do |prov|
           next if seen_fact_ids.include?(prov[:fact_id])
-          seen_fact_ids.add(prov[:fact_id])
 
           fact = find_fact(prov[:fact_id])
           next unless fact
+          next unless fact_matches_scope?(fact, scope)
 
+          seen_fact_ids.add(prov[:fact_id])
           facts_with_provenance << {
             fact: fact,
             receipts: find_receipts(prov[:fact_id])
@@ -32,7 +38,7 @@ module ClaudeMemory
         break if facts_with_provenance.size >= limit
       end
 
-      facts_with_provenance
+      sort_by_scope_priority(facts_with_provenance)
     end
 
     def explain(fact_id)
@@ -48,21 +54,72 @@ module ClaudeMemory
       }
     end
 
-    def changes(since:, limit: 50)
+    def changes(since:, limit: 50, scope: SCOPE_ALL)
+      scope_clause, scope_params = build_scope_clause(scope)
+
       rows = @store.execute(
         <<~SQL,
-          SELECT id, subject_entity_id, predicate, object_literal, status, created_at
+          SELECT id, subject_entity_id, predicate, object_literal, status, created_at, scope, project_path
           FROM facts 
-          WHERE created_at >= ? 
+          WHERE created_at >= ? #{scope_clause}
           ORDER BY created_at DESC 
           LIMIT ?
         SQL
-        [since, limit]
+        [since] + scope_params + [limit]
       )
-      rows.map { |r| {id: r[0], subject_entity_id: r[1], predicate: r[2], object_literal: r[3], status: r[4], created_at: r[5]} }
+      rows.map { |r| {id: r[0], subject_entity_id: r[1], predicate: r[2], object_literal: r[3], status: r[4], created_at: r[5], scope: r[6], project_path: r[7]} }
+    end
+
+    def conflicts(scope: SCOPE_ALL)
+      all_conflicts = @store.open_conflicts
+      return all_conflicts if scope == SCOPE_ALL
+
+      all_conflicts.select do |conflict|
+        fact_a = find_fact(conflict[:fact_a_id])
+        fact_b = find_fact(conflict[:fact_b_id])
+
+        fact_matches_scope?(fact_a, scope) || fact_matches_scope?(fact_b, scope)
+      end
     end
 
     private
+
+    def fact_matches_scope?(fact, scope)
+      return true if scope == SCOPE_ALL
+
+      fact_scope = fact[:scope] || "project"
+      fact_project = fact[:project_path]
+
+      case scope
+      when SCOPE_PROJECT
+        fact_scope == "project" && fact_project == @project_path
+      when SCOPE_GLOBAL
+        fact_scope == "global"
+      else
+        true
+      end
+    end
+
+    def build_scope_clause(scope)
+      case scope
+      when SCOPE_PROJECT
+        ["AND scope = 'project' AND project_path = ?", [@project_path]]
+      when SCOPE_GLOBAL
+        ["AND scope = 'global'", []]
+      else
+        ["", []]
+      end
+    end
+
+    def sort_by_scope_priority(facts_with_provenance)
+      facts_with_provenance.sort_by do |item|
+        fact = item[:fact]
+        is_current_project = fact[:project_path] == @project_path
+        is_global = fact[:scope] == "global"
+
+        [is_current_project ? 0 : 1, is_global ? 0 : 1]
+      end
+    end
 
     def find_provenance_by_content(content_id)
       @store.execute(
@@ -75,7 +132,7 @@ module ClaudeMemory
       row = @store.execute(
         <<~SQL,
           SELECT f.id, f.predicate, f.object_literal, f.status, f.confidence, f.valid_from, f.valid_to, f.created_at,
-                 e.canonical_name as subject_name
+                 e.canonical_name as subject_name, f.scope, f.project_path
           FROM facts f
           LEFT JOIN entities e ON f.subject_entity_id = e.id
           WHERE f.id = ?
@@ -93,7 +150,9 @@ module ClaudeMemory
         valid_from: row[5],
         valid_to: row[6],
         created_at: row[7],
-        subject_name: row[8]
+        subject_name: row[8],
+        scope: row[9],
+        project_path: row[10]
       }
     end
 

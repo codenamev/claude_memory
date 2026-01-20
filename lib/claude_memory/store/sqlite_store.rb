@@ -6,7 +6,7 @@ require "json"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 1
+      SCHEMA_VERSION = 2
 
       attr_reader :db
 
@@ -34,8 +34,32 @@ module ClaudeMemory
 
       def ensure_schema!
         create_tables!
+        run_migrations!
         set_meta("schema_version", SCHEMA_VERSION.to_s)
         set_meta("created_at", Time.now.utc.iso8601) unless get_meta("created_at")
+      end
+
+      def run_migrations!
+        current = get_meta("schema_version")&.to_i || 0
+
+        if current < 2
+          migrate_to_v2!
+        end
+      end
+
+      def migrate_to_v2!
+        columns = @db.execute("PRAGMA table_info(content_items)").map { |r| r[1] }
+        unless columns.include?("project_path")
+          @db.execute("ALTER TABLE content_items ADD COLUMN project_path TEXT")
+        end
+
+        columns = @db.execute("PRAGMA table_info(facts)").map { |r| r[1] }
+        unless columns.include?("scope")
+          @db.execute("ALTER TABLE facts ADD COLUMN scope TEXT DEFAULT 'project'")
+          @db.execute("ALTER TABLE facts ADD COLUMN project_path TEXT")
+          @db.execute("CREATE INDEX IF NOT EXISTS idx_facts_scope ON facts(scope)")
+          @db.execute("CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project_path)")
+        end
       end
 
       def create_tables!
@@ -50,6 +74,7 @@ module ClaudeMemory
             source TEXT NOT NULL,
             session_id TEXT,
             transcript_path TEXT,
+            project_path TEXT,
             occurred_at TEXT,
             ingested_at TEXT NOT NULL,
             text_hash TEXT NOT NULL,
@@ -96,7 +121,9 @@ module ClaudeMemory
             status TEXT DEFAULT 'active',
             confidence REAL DEFAULT 1.0,
             created_from TEXT,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            scope TEXT DEFAULT 'project',
+            project_path TEXT
           );
 
           CREATE TABLE IF NOT EXISTS provenance (
@@ -127,9 +154,12 @@ module ClaudeMemory
           CREATE INDEX IF NOT EXISTS idx_facts_predicate ON facts(predicate);
           CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_entity_id);
           CREATE INDEX IF NOT EXISTS idx_facts_status ON facts(status);
+          CREATE INDEX IF NOT EXISTS idx_facts_scope ON facts(scope);
+          CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project_path);
           CREATE INDEX IF NOT EXISTS idx_provenance_fact ON provenance(fact_id);
           CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(entity_id);
           CREATE INDEX IF NOT EXISTS idx_content_items_session ON content_items(session_id);
+          CREATE INDEX IF NOT EXISTS idx_content_items_project ON content_items(project_path);
         SQL
       end
 
@@ -147,7 +177,7 @@ module ClaudeMemory
       public
 
       def upsert_content_item(source:, text_hash:, byte_len:, session_id: nil, transcript_path: nil,
-        occurred_at: nil, raw_text: nil, metadata: nil)
+        project_path: nil, occurred_at: nil, raw_text: nil, metadata: nil)
         existing = @db.get_first_value(
           "SELECT id FROM content_items WHERE text_hash = ? AND session_id = ?",
           [text_hash, session_id]
@@ -158,10 +188,10 @@ module ClaudeMemory
         @db.execute(
           <<~SQL,
             INSERT INTO content_items 
-              (source, session_id, transcript_path, occurred_at, ingested_at, text_hash, byte_len, raw_text, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (source, session_id, transcript_path, project_path, occurred_at, ingested_at, text_hash, byte_len, raw_text, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           SQL
-          [source, session_id, transcript_path, occurred_at || now, now, text_hash, byte_len, raw_text, metadata&.to_json]
+          [source, session_id, transcript_path, project_path, occurred_at || now, now, text_hash, byte_len, raw_text, metadata&.to_json]
         )
         @db.last_insert_row_id
       end
@@ -200,15 +230,15 @@ module ClaudeMemory
 
       def insert_fact(subject_entity_id:, predicate:, object_entity_id: nil, object_literal: nil,
         datatype: nil, polarity: "positive", valid_from: nil, status: "active",
-        confidence: 1.0, created_from: nil)
+        confidence: 1.0, created_from: nil, scope: "project", project_path: nil)
         now = Time.now.utc.iso8601
         @db.execute(
           <<~SQL,
             INSERT INTO facts 
-              (subject_entity_id, predicate, object_entity_id, object_literal, datatype, polarity, valid_from, status, confidence, created_from, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (subject_entity_id, predicate, object_entity_id, object_literal, datatype, polarity, valid_from, status, confidence, created_from, created_at, scope, project_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           SQL
-          [subject_entity_id, predicate, object_entity_id, object_literal, datatype, polarity, valid_from || now, status, confidence, created_from, now]
+          [subject_entity_id, predicate, object_entity_id, object_literal, datatype, polarity, valid_from || now, status, confidence, created_from, now, scope, project_path]
         )
         @db.last_insert_row_id
       end

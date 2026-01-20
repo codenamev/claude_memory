@@ -76,5 +76,50 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
       result2 = ingester.ingest(source: "claude_code", session_id: "sess-1", transcript_path: transcript_path)
       expect(result2[:content_id]).to eq(id1)
     end
+
+    context "project scoping" do
+      it "stores project_path from explicit parameter" do
+        File.write(transcript_path, "content\n")
+        result = ingester.ingest(
+          source: "claude_code",
+          session_id: "sess-1",
+          transcript_path: transcript_path,
+          project_path: "/path/to/my-project"
+        )
+
+        expect(result[:project_path]).to eq("/path/to/my-project")
+
+        row = store.execute("SELECT project_path FROM content_items WHERE id = ?", [result[:content_id]]).first
+        expect(row.first).to eq("/path/to/my-project")
+      end
+
+      it "detects project_path from CLAUDE_PROJECT_DIR env var" do
+        env = {"CLAUDE_PROJECT_DIR" => "/env/project/path"}
+        ingester_with_env = described_class.new(store, env: env)
+
+        File.write(transcript_path, "content\n")
+        result = ingester_with_env.ingest(
+          source: "claude_code",
+          session_id: "sess-1",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:project_path]).to eq("/env/project/path")
+      end
+
+      it "falls back to Dir.pwd when no env var" do
+        env = {}
+        ingester_with_env = described_class.new(store, env: env)
+
+        File.write(transcript_path, "content\n")
+        result = ingester_with_env.ingest(
+          source: "claude_code",
+          session_id: "sess-1",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:project_path]).to eq(Dir.pwd)
+      end
+    end
   end
 end

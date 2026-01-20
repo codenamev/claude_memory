@@ -130,4 +130,103 @@ RSpec.describe ClaudeMemory::Recall do
       expect(changes).to be_empty
     end
   end
+
+  describe "project scoping" do
+    let(:project_a) { "/path/to/project-a" }
+    let(:project_b) { "/path/to/project-b" }
+    let(:recall_a) { described_class.new(store, fts: fts, project_path: project_a) }
+    let(:recall_b) { described_class.new(store, fts: fts, project_path: project_b) }
+
+    def create_scoped_fact(text, predicate, object, scope:, project_path:)
+      content_id = store.upsert_content_item(
+        source: "test",
+        session_id: "sess-1",
+        project_path: project_path,
+        text_hash: Digest::SHA256.hexdigest(text + project_path.to_s),
+        byte_len: text.bytesize,
+        raw_text: text
+      )
+      fts.index_content_item(content_id, text)
+
+      entity_id = store.find_or_create_entity(type: "repo", name: project_path || "global")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: predicate,
+        object_literal: object,
+        scope: scope,
+        project_path: project_path
+      )
+      store.insert_provenance(
+        fact_id: fact_id,
+        content_item_id: content_id,
+        quote: text,
+        strength: "stated"
+      )
+
+      {content_id: content_id, fact_id: fact_id}
+    end
+
+    describe "#query with scope" do
+      before do
+        create_scoped_fact("Project A uses MySQL", "uses_database", "mysql", scope: "project", project_path: project_a)
+        create_scoped_fact("Project B uses PostgreSQL", "uses_database", "postgresql", scope: "project", project_path: project_b)
+        create_scoped_fact("Global convention: always use snake_case", "convention", "snake_case", scope: "global", project_path: nil)
+      end
+
+      it "returns only current project facts with scope: project" do
+        results = recall_a.query("MySQL", scope: "project")
+
+        predicates = results.map { |r| r[:fact][:object_literal] }
+        expect(predicates).to include("mysql")
+        expect(predicates).not_to include("postgresql")
+      end
+
+      it "returns only global facts with scope: global" do
+        results = recall_a.query("convention", scope: "global")
+
+        expect(results.size).to eq(1)
+        expect(results.first[:fact][:scope]).to eq("global")
+      end
+
+      it "returns all facts with scope: all (default)" do
+        results = recall_a.query("uses snake", scope: "all")
+
+        expect(results.size).to be >= 1
+      end
+
+      it "prioritizes current project facts in results" do
+        create_scoped_fact("Project A database config", "config", "a_config", scope: "project", project_path: project_a)
+        create_scoped_fact("Project B database config", "config", "b_config", scope: "project", project_path: project_b)
+
+        results = recall_a.query("database config", scope: "all")
+
+        first_result = results.first
+        expect(first_result[:fact][:project_path]).to eq(project_a)
+      end
+    end
+
+    describe "#changes with scope" do
+      before do
+        create_scoped_fact("A fact", "decision", "a_decision", scope: "project", project_path: project_a)
+        create_scoped_fact("B fact", "decision", "b_decision", scope: "project", project_path: project_b)
+        create_scoped_fact("Global fact", "decision", "global_decision", scope: "global", project_path: nil)
+      end
+
+      it "filters changes by project scope" do
+        yesterday = (Time.now - 86400).utc.iso8601
+        changes = recall_a.changes(since: yesterday, scope: "project")
+
+        project_paths = changes.map { |c| c[:project_path] }
+        expect(project_paths).to all(eq(project_a))
+      end
+
+      it "filters changes by global scope" do
+        yesterday = (Time.now - 86400).utc.iso8601
+        changes = recall_a.changes(since: yesterday, scope: "global")
+
+        scopes = changes.map { |c| c[:scope] }
+        expect(scopes).to all(eq("global"))
+      end
+    end
+  end
 end
