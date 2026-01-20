@@ -379,48 +379,138 @@ module ClaudeMemory
     end
 
     def init_project
-      templates_dir = File.expand_path("templates", __dir__)
+      @stdout.puts "Initializing ClaudeMemory...\n\n"
 
       store = ClaudeMemory::Store::SQLiteStore.new(ClaudeMemory::DEFAULT_DB_PATH)
-      @stdout.puts "Created database: #{ClaudeMemory::DEFAULT_DB_PATH}"
+      @stdout.puts "✓ Created database: #{ClaudeMemory::DEFAULT_DB_PATH}"
       store.close
 
       FileUtils.mkdir_p(".claude/rules")
-      @stdout.puts "Created .claude/rules directory"
+      @stdout.puts "✓ Created .claude/rules directory"
 
-      hooks_example = File.read(File.join(templates_dir, "hooks.example.json"))
-      @stdout.puts "\n=== Hooks Configuration ===\n"
-      @stdout.puts "Add this to your Claude Code hooks config:\n\n"
-      @stdout.puts hooks_example
-      @stdout.puts
+      configure_project_hooks
+      configure_project_mcp
+      install_output_style
 
-      mcp_config = <<~JSON
-        {
-          "mcpServers": {
-            "claude-memory": {
-              "command": "claude-memory",
-              "args": ["serve-mcp", "--db", "#{File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)}"]
-            }
-          }
-        }
-      JSON
-
-      @stdout.puts "\n=== MCP Server Configuration ===\n"
-      @stdout.puts "Add this to your Claude Code MCP config:\n\n"
-      @stdout.puts mcp_config
-
-      output_style = File.read(File.join(templates_dir, "output-styles", "memory-aware.md"))
-      @stdout.puts "\n=== Output Style ===\n"
-      @stdout.puts "Consider using this output style:\n\n"
-      @stdout.puts output_style
-
-      @stdout.puts "\n=== Next Steps ===\n"
-      @stdout.puts "1. Configure Claude Code hooks (see above)"
-      @stdout.puts "2. Configure MCP server (see above)"
-      @stdout.puts "3. Run 'claude-memory publish' after ingesting some transcripts"
-      @stdout.puts "4. Run 'claude-memory doctor' to verify setup"
+      @stdout.puts "\n=== Setup Complete ===\n"
+      @stdout.puts "ClaudeMemory is now configured for this project."
+      @stdout.puts "\nNext steps:"
+      @stdout.puts "  1. Restart Claude Code to load the new configuration"
+      @stdout.puts "  2. Use Claude Code normally - transcripts will be ingested automatically"
+      @stdout.puts "  3. Run 'claude-memory publish' periodically to update the snapshot"
+      @stdout.puts "  4. Run 'claude-memory doctor' to verify setup"
 
       0
+    end
+
+    def configure_project_hooks
+      hooks_path = ".claude/settings.json"
+      db_path = File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)
+
+      hooks_config = {
+        "hooks" => {
+          "Stop" => [
+            {
+              "matcher" => "",
+              "hooks" => [
+                {
+                  "type" => "command",
+                  "command" => "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH --db #{db_path} 2>/dev/null || true"
+                }
+              ]
+            }
+          ],
+          "SessionStart" => [
+            {
+              "matcher" => "",
+              "hooks" => [
+                {
+                  "type" => "command",
+                  "command" => "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH --db #{db_path} 2>/dev/null || true"
+                }
+              ]
+            }
+          ],
+          "PreCompact" => [
+            {
+              "matcher" => "",
+              "hooks" => [
+                {
+                  "type" => "command",
+                  "command" => "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH --db #{db_path} 2>/dev/null && claude-memory sweep --budget 15 --db #{db_path} 2>/dev/null || true"
+                }
+              ]
+            }
+          ],
+          "SessionEnd" => [
+            {
+              "matcher" => "",
+              "hooks" => [
+                {
+                  "type" => "command",
+                  "command" => "claude-memory ingest --source claude_code --session-id $CLAUDE_SESSION_ID --transcript-path $CLAUDE_TRANSCRIPT_PATH --db #{db_path} 2>/dev/null && claude-memory sweep --budget 15 --db #{db_path} 2>/dev/null || true"
+                }
+              ]
+            }
+          ]
+        }
+      }
+
+      existing = {}
+      if File.exist?(hooks_path)
+        existing = begin
+          JSON.parse(File.read(hooks_path))
+        rescue
+          {}
+        end
+      end
+
+      existing["hooks"] ||= {}
+      existing["hooks"].merge!(hooks_config["hooks"])
+
+      FileUtils.mkdir_p(".claude")
+      File.write(hooks_path, JSON.pretty_generate(existing))
+      @stdout.puts "✓ Configured hooks in #{hooks_path}"
+    end
+
+    def configure_project_mcp
+      mcp_path = ".mcp.json"
+      db_path = File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)
+
+      mcp_config = {
+        "mcpServers" => {
+          "claude-memory" => {
+            "type" => "stdio",
+            "command" => "claude-memory",
+            "args" => ["serve-mcp", "--db", db_path]
+          }
+        }
+      }
+
+      existing = {}
+      if File.exist?(mcp_path)
+        existing = begin
+          JSON.parse(File.read(mcp_path))
+        rescue
+          {}
+        end
+      end
+
+      existing["mcpServers"] ||= {}
+      existing["mcpServers"]["claude-memory"] = mcp_config["mcpServers"]["claude-memory"]
+
+      File.write(mcp_path, JSON.pretty_generate(existing))
+      @stdout.puts "✓ Configured MCP server in #{mcp_path}"
+    end
+
+    def install_output_style
+      templates_dir = File.expand_path("templates", __dir__)
+      style_source = File.join(templates_dir, "output-styles", "memory-aware.md")
+      style_dest = ".claude/output-styles/memory-aware.md"
+
+      FileUtils.mkdir_p(File.dirname(style_dest))
+      FileUtils.cp(style_source, style_dest)
+      @stdout.puts "✓ Installed output style at #{style_dest}"
     end
 
     def doctor_cmd
