@@ -261,4 +261,56 @@ RSpec.describe ClaudeMemory::CLI do
       expect(stderr.string).to include("Usage:")
     end
   end
+
+  describe "init command" do
+    describe "with --global flag" do
+      let(:fake_home) { Dir.mktmpdir("cli_init_global_#{Process.pid}") }
+
+      before do
+        @original_home = ENV["HOME"]
+        ENV["HOME"] = fake_home
+      end
+
+      after do
+        ENV["HOME"] = @original_home
+        FileUtils.rm_rf(fake_home)
+      end
+
+      it "creates global database in ~/.claude/" do
+        code = run_cli("init", "--global")
+
+        expect(code).to eq(0)
+        expect(stdout.string).to include("global")
+        expect(File.exist?(File.join(fake_home, ".claude", "claude_memory.sqlite3"))).to be true
+      end
+
+      it "configures hooks in ~/.claude/settings.json" do
+        run_cli("init", "--global")
+
+        settings_path = File.join(fake_home, ".claude", "settings.json")
+        expect(File.exist?(settings_path)).to be true
+
+        config = JSON.parse(File.read(settings_path))
+        expect(config["hooks"]).to include("Stop", "SessionStart")
+      end
+
+      it "configures MCP in ~/.claude.json" do
+        run_cli("init", "--global")
+
+        mcp_path = File.join(fake_home, ".claude.json")
+        expect(File.exist?(mcp_path)).to be true
+
+        config = JSON.parse(File.read(mcp_path))
+        expect(config["mcpServers"]["claude-memory"]).to be_a(Hash)
+      end
+
+      it "creates or updates ~/.claude/CLAUDE.md" do
+        run_cli("init", "--global")
+
+        claude_md = File.join(fake_home, ".claude", "CLAUDE.md")
+        expect(File.exist?(claude_md)).to be true
+        expect(File.read(claude_md)).to include("ClaudeMemory")
+      end
+    end
+  end
 end

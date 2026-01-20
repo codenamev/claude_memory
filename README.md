@@ -26,14 +26,12 @@ gem 'claude_memory'
 ## Quick Start
 
 ```bash
-# Initialize in your project
+# Initialize in your project (project-local)
 cd your-project
 claude-memory init
 
-# Follow the instructions to configure:
-# 1. Claude Code hooks
-# 2. MCP server
-# 3. Output style (optional)
+# Or install globally for all projects
+claude-memory init --global
 
 # Verify setup
 claude-memory doctor

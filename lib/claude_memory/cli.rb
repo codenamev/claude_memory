@@ -468,7 +468,20 @@ module ClaudeMemory
     end
 
     def init_project
-      @stdout.puts "Initializing ClaudeMemory...\n\n"
+      opts = {global: false}
+      OptionParser.new do |o|
+        o.on("--global", "Install to global ~/.claude/ settings") { opts[:global] = true }
+      end.parse!(@args[1..])
+
+      if opts[:global]
+        init_global
+      else
+        init_local
+      end
+    end
+
+    def init_local
+      @stdout.puts "Initializing ClaudeMemory (project-local)...\n\n"
 
       store = ClaudeMemory::Store::SQLiteStore.new(ClaudeMemory::DEFAULT_DB_PATH)
       @stdout.puts "✓ Created database: #{ClaudeMemory::DEFAULT_DB_PATH}"
@@ -492,6 +505,96 @@ module ClaudeMemory
       0
     end
 
+    def init_global
+      @stdout.puts "Initializing ClaudeMemory (global)...\n\n"
+
+      global_claude_dir = File.join(Dir.home, ".claude")
+      global_db_path = File.join(global_claude_dir, "claude_memory.sqlite3")
+
+      FileUtils.mkdir_p(global_claude_dir)
+
+      store = ClaudeMemory::Store::SQLiteStore.new(global_db_path)
+      @stdout.puts "✓ Created database: #{global_db_path}"
+      store.close
+
+      configure_global_hooks(global_db_path)
+      configure_global_mcp(global_db_path)
+      configure_global_memory(global_claude_dir)
+
+      @stdout.puts "\n=== Global Setup Complete ===\n"
+      @stdout.puts "ClaudeMemory is now configured globally for all projects."
+      @stdout.puts "\nNext steps:"
+      @stdout.puts "  1. Restart Claude Code to load the new configuration"
+      @stdout.puts "  2. Use Claude Code in any project - transcripts will be ingested automatically"
+      @stdout.puts "  3. Run 'claude-memory doctor' to verify setup"
+
+      0
+    end
+
+    def configure_global_hooks(db_path)
+      settings_path = File.join(Dir.home, ".claude", "settings.json")
+
+      ingest_cmd = "claude-memory hook ingest --db #{db_path}"
+      sweep_cmd = "claude-memory hook sweep --db #{db_path}"
+
+      hooks_config = build_hooks_config(ingest_cmd, sweep_cmd)
+
+      existing = load_json_file(settings_path)
+      existing["hooks"] ||= {}
+      existing["hooks"].merge!(hooks_config["hooks"])
+
+      File.write(settings_path, JSON.pretty_generate(existing))
+      @stdout.puts "✓ Configured hooks in #{settings_path}"
+    end
+
+    def configure_global_mcp(db_path)
+      mcp_path = File.join(Dir.home, ".claude.json")
+
+      mcp_config = {
+        "mcpServers" => {
+          "claude-memory" => {
+            "type" => "stdio",
+            "command" => "claude-memory",
+            "args" => ["serve-mcp", "--db", db_path]
+          }
+        }
+      }
+
+      existing = load_json_file(mcp_path)
+      existing["mcpServers"] ||= {}
+      existing["mcpServers"]["claude-memory"] = mcp_config["mcpServers"]["claude-memory"]
+
+      File.write(mcp_path, JSON.pretty_generate(existing))
+      @stdout.puts "✓ Configured MCP server in #{mcp_path}"
+    end
+
+    def configure_global_memory(global_claude_dir)
+      claude_md_path = File.join(global_claude_dir, "CLAUDE.md")
+
+      memory_instruction = <<~MD
+        # ClaudeMemory
+
+        ClaudeMemory is installed globally. Use these MCP tools:
+        - `memory.recall` - Search for relevant facts
+        - `memory.explain` - Get detailed fact provenance
+        - `memory.conflicts` - Show open contradictions
+        - `memory.status` - Check system health
+      MD
+
+      if File.exist?(claude_md_path)
+        content = File.read(claude_md_path)
+        unless content.include?("ClaudeMemory")
+          File.write(claude_md_path, content + "\n" + memory_instruction)
+          @stdout.puts "✓ Added ClaudeMemory instructions to #{claude_md_path}"
+        else
+          @stdout.puts "✓ #{claude_md_path} already has ClaudeMemory instructions"
+        end
+      else
+        File.write(claude_md_path, memory_instruction)
+        @stdout.puts "✓ Created #{claude_md_path}"
+      end
+    end
+
     def configure_project_hooks
       hooks_path = ".claude/settings.json"
       db_path = File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)
@@ -499,78 +602,9 @@ module ClaudeMemory
       ingest_cmd = "claude-memory hook ingest --db #{db_path}"
       sweep_cmd = "claude-memory hook sweep --db #{db_path}"
 
-      hooks_config = {
-        "hooks" => {
-          "Stop" => [
-            {
-              "matcher" => "",
-              "hooks" => [
-                {
-                  "type" => "command",
-                  "command" => ingest_cmd,
-                  "timeout" => 10
-                }
-              ]
-            }
-          ],
-          "SessionStart" => [
-            {
-              "matcher" => "",
-              "hooks" => [
-                {
-                  "type" => "command",
-                  "command" => ingest_cmd,
-                  "timeout" => 10
-                }
-              ]
-            }
-          ],
-          "PreCompact" => [
-            {
-              "matcher" => "",
-              "hooks" => [
-                {
-                  "type" => "command",
-                  "command" => ingest_cmd,
-                  "timeout" => 30
-                },
-                {
-                  "type" => "command",
-                  "command" => sweep_cmd,
-                  "timeout" => 30
-                }
-              ]
-            }
-          ],
-          "SessionEnd" => [
-            {
-              "matcher" => "",
-              "hooks" => [
-                {
-                  "type" => "command",
-                  "command" => ingest_cmd,
-                  "timeout" => 30
-                },
-                {
-                  "type" => "command",
-                  "command" => sweep_cmd,
-                  "timeout" => 30
-                }
-              ]
-            }
-          ]
-        }
-      }
+      hooks_config = build_hooks_config(ingest_cmd, sweep_cmd)
 
-      existing = {}
-      if File.exist?(hooks_path)
-        existing = begin
-          JSON.parse(File.read(hooks_path))
-        rescue
-          {}
-        end
-      end
-
+      existing = load_json_file(hooks_path)
       existing["hooks"] ||= {}
       existing["hooks"].merge!(hooks_config["hooks"])
 
@@ -583,27 +617,13 @@ module ClaudeMemory
       mcp_path = ".mcp.json"
       db_path = File.expand_path(ClaudeMemory::DEFAULT_DB_PATH)
 
-      mcp_config = {
-        "mcpServers" => {
-          "claude-memory" => {
-            "type" => "stdio",
-            "command" => "claude-memory",
-            "args" => ["serve-mcp", "--db", db_path]
-          }
-        }
-      }
-
-      existing = {}
-      if File.exist?(mcp_path)
-        existing = begin
-          JSON.parse(File.read(mcp_path))
-        rescue
-          {}
-        end
-      end
-
+      existing = load_json_file(mcp_path)
       existing["mcpServers"] ||= {}
-      existing["mcpServers"]["claude-memory"] = mcp_config["mcpServers"]["claude-memory"]
+      existing["mcpServers"]["claude-memory"] = {
+        "type" => "stdio",
+        "command" => "claude-memory",
+        "args" => ["serve-mcp", "--db", db_path]
+      }
 
       File.write(mcp_path, JSON.pretty_generate(existing))
       @stdout.puts "✓ Configured MCP server in #{mcp_path}"
@@ -737,6 +757,55 @@ module ClaudeMemory
         @stdout.puts "    claude-memory sweep --budget 5"
         @stdout.puts "    claude-memory publish"
       end
+    end
+
+    def load_json_file(path)
+      return {} unless File.exist?(path)
+
+      JSON.parse(File.read(path))
+    rescue JSON::ParserError
+      {}
+    end
+
+    def build_hooks_config(ingest_cmd, sweep_cmd)
+      {
+        "hooks" => {
+          "Stop" => [
+            {
+              "matcher" => "",
+              "hooks" => [
+                {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+              ]
+            }
+          ],
+          "SessionStart" => [
+            {
+              "matcher" => "",
+              "hooks" => [
+                {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+              ]
+            }
+          ],
+          "PreCompact" => [
+            {
+              "matcher" => "",
+              "hooks" => [
+                {"type" => "command", "command" => ingest_cmd, "timeout" => 30},
+                {"type" => "command", "command" => sweep_cmd, "timeout" => 30}
+              ]
+            }
+          ],
+          "SessionEnd" => [
+            {
+              "matcher" => "",
+              "hooks" => [
+                {"type" => "command", "command" => ingest_cmd, "timeout" => 30},
+                {"type" => "command", "command" => sweep_cmd, "timeout" => 30}
+              ]
+            }
+          ]
+        }
+      }
     end
   end
 end
