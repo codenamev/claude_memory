@@ -75,42 +75,83 @@ Transcripts → Ingest → Index (FTS5)
 
 ### Module Structure
 
-- **`Store`**: SQLite database access via Sequel (`sqlite_store.rb`, `store_manager.rb`)
-  - Schema includes: content_items, entities, facts, provenance, fact_links, conflicts
-  - Schema migrations in `ensure_schema!` and `migrate_to_v2!`
+#### Application Layer
 
-- **`Ingest`**: Transcript reading and delta-based ingestion (`ingester.rb`, `transcript_reader.rb`)
+- **`CLI`**: Thin command router (`cli.rb`) - 41 lines
+  - Routes commands to dedicated command classes via Registry
+  - No business logic (pure dispatcher)
+
+- **`Commands`**: Individual command classes (`commands/`)
+  - Each command is a separate class (HelpCommand, DoctorCommand, etc.)
+  - All commands inherit from BaseCommand
+  - Dependency injection for I/O (stdout, stderr, stdin)
+  - 16 commands total, each focused on single responsibility
+
+- **`Configuration`**: Centralized ENV access (`configuration.rb`)
+  - Single source of truth for paths and environment variables
+  - Testable with custom ENV hash
+
+#### Core Domain Layer
+
+- **`Domain`**: Rich domain models with business logic (`domain/`)
+  - `Fact`: Facts with validation, status checking (active?, superseded?)
+  - `Entity`: Entities with type checking (database?, framework?)
+  - `Provenance`: Evidence with strength checking (stated?, inferred?)
+  - `Conflict`: Conflicts with status tracking (open?, resolved?)
+  - All domain objects are immutable (frozen) and self-validating
+
+- **`Core`**: Value objects and null objects (`core/`)
+  - Value objects: SessionId, TranscriptPath, FactId (type-safe primitives)
+  - Null objects: NullFact, NullExplanation (eliminates nil checks)
+  - Result: Success/Failure pattern for consistent error handling
+
+#### Infrastructure Layer
+
+- **`Store`**: SQLite database access via Sequel (`store/`)
+  - `SQLiteStore`: Database operations
+  - `StoreManager`: Dual-database connection manager
+  - Schema includes: content_items, entities, facts, provenance, fact_links, conflicts
+  - Transaction safety for multi-step operations
+
+- **`Infrastructure`**: I/O abstractions (`infrastructure/`)
+  - `FileSystem`: Real filesystem wrapper
+  - `InMemoryFileSystem`: Fast in-memory testing without disk I/O
+
+#### Business Logic Layer
+
+- **`Ingest`**: Transcript reading and delta-based ingestion (`ingest/`)
   - Tracks cursor position per session to avoid re-processing
 
-- **`Index`**: Full-text search using SQLite FTS5 (`lexical_fts.rb`)
-  - No embeddings required for MVP
+- **`Index`**: Full-text search using SQLite FTS5 (`index/`)
+  - Optimized with batch queries to eliminate N+1 issues
 
-- **`Distill`**: Fact extraction interface (`distiller.rb`, `null_distiller.rb`)
+- **`Distill`**: Fact extraction interface (`distill/`)
   - Pluggable distiller design (current: NullDistiller stub)
   - Extracts entities, facts, scope hints from content
 
-- **`Resolve`**: Truth maintenance and conflict resolution (`resolver.rb`, `predicate_policy.rb`)
+- **`Resolve`**: Truth maintenance and conflict resolution (`resolve/`)
   - Determines equivalence, supersession, or conflicts
   - PredicatePolicy controls single-value vs multi-value predicates
+  - Transaction safety for atomic operations
 
 - **`Recall`**: Query interface for facts (`recall.rb`)
   - Searches both global + project databases
+  - Batch queries to avoid N+1 performance issues
   - Returns facts with provenance receipts
 
-- **`Sweep`**: Maintenance and pruning (`sweeper.rb`)
+- **`Sweep`**: Maintenance and pruning (`sweep/`)
 
-- **`Publish`**: Snapshot generation to Claude Code memory files (`publish.rb`)
+- **`Publish`**: Snapshot generation (`publish.rb`)
+  - Uses FileSystem abstraction for testability
   - Modes: shared (repo), local (uncommitted), home (user directory)
 
-- **`MCP`**: Model Context Protocol server and tools (`mcp/server.rb`, `mcp/tools.rb`)
-  - Exposes memory tools to Claude Code: recall, explain, promote, status, conflicts, changes, sweep_now
+- **`MCP`**: Model Context Protocol server and tools (`mcp/`)
+  - Exposes memory tools to Claude Code
+  - Tools: recall, explain, promote, status, conflicts, changes, sweep_now
 
-- **`Hook`**: Hook entrypoint handlers (`hook/handler.rb`)
+- **`Hook`**: Hook entrypoint handlers (`hook/`)
   - Reads stdin JSON from Claude Code hooks
   - Routes to ingest/sweep/publish commands
-
-- **`CLI`**: Command-line interface (`cli.rb`)
-  - All user-facing commands and option parsing
 
 ### Database Schema
 
@@ -149,11 +190,28 @@ When writing tests:
 
 ### Adding a New CLI Command
 
-1. Add command name to `CLI#run` case statement
-2. Implement private method (e.g., `my_command_cmd`)
-3. Add parser method (e.g., `parse_my_command_options`)
-4. Update `print_help` output
-5. Add corresponding tests in `spec/claude_memory/cli_spec.rb`
+1. Create new command class in `lib/claude_memory/commands/` (e.g., `my_command.rb`)
+2. Inherit from `BaseCommand` and implement `call(args)` method
+3. Add command to `Commands::Registry::COMMANDS` hash
+4. Add corresponding tests in `spec/claude_memory/commands/my_command_spec.rb`
+5. Use dependency injection for I/O (stdout, stderr, stdin) for testability
+
+Example:
+```ruby
+class MyCommand < BaseCommand
+  def call(args)
+    opts = parse_options(args, {flag: false}) do |o|
+      OptionParser.new do |parser|
+        parser.on("--flag", "Enable flag") { o[:flag] = true }
+      end
+    end
+    return 1 if opts.nil?
+
+    stdout.puts "Command executed!"
+    0  # Exit code
+  end
+end
+```
 
 ### Adding a New MCP Tool
 
@@ -177,11 +235,16 @@ Single-value predicates (like "uses_database") supersede old values. Multi-value
 ## Important Files
 
 - `lib/claude_memory.rb`: Main module, requires, database path helpers
-- `lib/claude_memory/cli.rb`: All CLI command implementations (800+ lines)
+- `lib/claude_memory/cli.rb`: Thin command router (41 lines)
+- `lib/claude_memory/commands/`: Individual command classes (16 commands)
+- `lib/claude_memory/configuration.rb`: Centralized configuration and ENV access
+- `lib/claude_memory/domain/`: Domain models (Fact, Entity, Provenance, Conflict)
+- `lib/claude_memory/core/`: Value objects and null objects
+- `lib/claude_memory/infrastructure/`: I/O abstractions (FileSystem)
 - `lib/claude_memory/store/store_manager.rb`: Dual-database connection manager
-- `lib/claude_memory/resolve/resolver.rb`: Truth maintenance logic
-- `lib/claude_memory/recall.rb`: Fact query and merging logic
-- `docs/updated_plan.md`: Comprehensive architectural plan and milestones
+- `lib/claude_memory/resolve/resolver.rb`: Truth maintenance with transaction safety
+- `lib/claude_memory/recall.rb`: Optimized fact query with batch loading
+- `docs/quality_review.md`: Quality improvements and refactoring notes
 - `claude_memory.gemspec`: Gem metadata and dependencies
 
 ## MCP Integration
