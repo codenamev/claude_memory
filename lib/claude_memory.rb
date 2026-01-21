@@ -6,6 +6,7 @@ end
 
 require_relative "claude_memory/core/result"
 require_relative "claude_memory/core/session_id"
+require_relative "claude_memory/core/transcript_path"
 require_relative "claude_memory/commands/base_command"
 require_relative "claude_memory/commands/help_command"
 require_relative "claude_memory/commands/version_command"
