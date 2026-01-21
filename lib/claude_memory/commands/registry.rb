@@ -15,9 +15,10 @@ module ClaudeMemory
         "search" => "SearchCommand",
         "explain" => "ExplainCommand",
         "conflicts" => "ConflictsCommand",
-        "changes" => "ChangesCommand"
+        "changes" => "ChangesCommand",
+        "recall" => "RecallCommand",
+        "sweep" => "SweepCommand"
         # More commands will be added as they're extracted:
-        # "recall" => "RecallCommand",
         # "ingest" => "IngestCommand",
         # "publish" => "PublishCommand",
         # "sweep" => "SweepCommand",
