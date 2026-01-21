@@ -12,15 +12,20 @@ module ClaudeMemory
     end
 
     def run
-      command = @args.first || "help"
+      command_name = @args.first || "help"
 
-      case command
-      when "help", "-h", "--help"
-        print_help
-        0
-      when "version", "-v", "--version"
-        print_version
-        0
+      # Normalize flag aliases
+      command_name = normalize_command(command_name)
+
+      # Try registry first (for extracted commands)
+      command_class = Commands::Registry.find(command_name)
+      if command_class
+        command = command_class.new(stdout: @stdout, stderr: @stderr, stdin: @stdin)
+        return command.call(@args[1..-1] || [])
+      end
+
+      # Fall back to legacy case statement for non-extracted commands
+      case command_name
       when "db:init"
         db_init
         0
@@ -46,18 +51,28 @@ module ClaudeMemory
         publish_cmd
       when "hook"
         hook_cmd
-      when "doctor"
-        doctor_cmd
       when "promote"
         promote_cmd
       else
-        @stderr.puts "Unknown command: #{command}"
+        @stderr.puts "Unknown command: #{command_name}"
         @stderr.puts "Run 'claude-memory help' for usage."
         1
       end
     end
 
     private
+
+    # Normalize command aliases to standard names
+    def normalize_command(cmd)
+      case cmd
+      when "-h", "--help"
+        "help"
+      when "-v", "--version"
+        "version"
+      else
+        cmd
+      end
+    end
 
     def print_help
       @stdout.puts <<~HELP
