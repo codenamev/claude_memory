@@ -17,10 +17,11 @@ module ClaudeMemory
         "conflicts" => "ConflictsCommand",
         "changes" => "ChangesCommand",
         "recall" => "RecallCommand",
-        "sweep" => "SweepCommand"
+        "sweep" => "SweepCommand",
+        "ingest" => "IngestCommand",
+        "publish" => "PublishCommand",
+        "db:init" => "DbInitCommand"
         # More commands will be added as they're extracted:
-        # "ingest" => "IngestCommand",
-        # "publish" => "PublishCommand",
         # "sweep" => "SweepCommand",
         # "conflicts" => "ConflictsCommand",
         # "changes" => "ChangesCommand",
