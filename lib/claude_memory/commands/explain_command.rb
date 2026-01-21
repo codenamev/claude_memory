@@ -22,7 +22,7 @@ module ClaudeMemory
         recall = ClaudeMemory::Recall.new(manager)
 
         explanation = recall.explain(fact_id, scope: opts[:scope])
-        if explanation.nil?
+        if explanation.is_a?(ClaudeMemory::Core::NullExplanation)
           stderr.puts "Fact #{fact_id} not found in #{opts[:scope]} database."
           manager.close
           return 1

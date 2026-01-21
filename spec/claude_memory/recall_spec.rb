@@ -79,8 +79,10 @@ RSpec.describe ClaudeMemory::Recall do
   end
 
   describe "#explain" do
-    it "returns nil for non-existent fact" do
-      expect(recall.explain(999)).to be_nil
+    it "returns NullExplanation for non-existent fact" do
+      explanation = recall.explain(999)
+      expect(explanation).to be_a(ClaudeMemory::Core::NullExplanation)
+      expect(explanation.present?).to be false
     end
 
     it "returns fact with receipts" do

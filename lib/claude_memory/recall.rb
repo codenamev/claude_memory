@@ -189,7 +189,7 @@ module ClaudeMemory
 
     def explain_from_store(store, fact_id)
       fact = find_fact_from_store(store, fact_id)
-      return nil unless fact
+      return Core::NullExplanation.new unless fact
 
       {
         fact: fact,

@@ -198,7 +198,7 @@ module ClaudeMemory
       def explain(args)
         scope = args["scope"] || "project"
         explanation = @recall.explain(args["fact_id"], scope: scope)
-        return {error: "Fact not found in #{scope} database"} unless explanation
+        return {error: "Fact not found in #{scope} database"} if explanation.is_a?(Core::NullExplanation)
 
         {
           fact: {
