@@ -57,48 +57,51 @@ module ClaudeMemory
 
         existing_facts = @store.facts_for_slot(subject_id, predicate)
 
-        if PredicatePolicy.single?(predicate) && existing_facts.any?
-          matching = existing_facts.find { |f| values_match?(f, object_val, object_entity_id) }
-          if matching
-            add_provenance(matching[:id], content_item_id, fact_data)
-            outcome[:provenance] = 1
-            return outcome
-          elsif supersession_signal?(fact_data)
-            supersede_facts(existing_facts, occurred_at)
-            outcome[:superseded] = existing_facts.size
-          else
-            create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at)
-            outcome[:conflicts] = 1
-            return outcome
+        # Wrap all database operations in a transaction for atomicity
+        @store.db.transaction do
+          if PredicatePolicy.single?(predicate) && existing_facts.any?
+            matching = existing_facts.find { |f| values_match?(f, object_val, object_entity_id) }
+            if matching
+              add_provenance(matching[:id], content_item_id, fact_data)
+              outcome[:provenance] = 1
+              return outcome
+            elsif supersession_signal?(fact_data)
+              supersede_facts(existing_facts, occurred_at)
+              outcome[:superseded] = existing_facts.size
+            else
+              create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at)
+              outcome[:conflicts] = 1
+              return outcome
+            end
           end
-        end
 
-        fact_scope = fact_data[:scope_hint] || @current_scope
-        fact_project = (fact_scope == "global") ? nil : @current_project_path
+          fact_scope = fact_data[:scope_hint] || @current_scope
+          fact_project = (fact_scope == "global") ? nil : @current_project_path
 
-        fact_id = @store.insert_fact(
-          subject_entity_id: subject_id,
-          predicate: predicate,
-          object_entity_id: object_entity_id,
-          object_literal: object_val,
-          polarity: fact_data[:polarity] || "positive",
-          confidence: fact_data[:confidence] || 1.0,
-          valid_from: occurred_at,
-          scope: fact_scope,
-          project_path: fact_project
-        )
-        outcome[:created] = 1
+          fact_id = @store.insert_fact(
+            subject_entity_id: subject_id,
+            predicate: predicate,
+            object_entity_id: object_entity_id,
+            object_literal: object_val,
+            polarity: fact_data[:polarity] || "positive",
+            confidence: fact_data[:confidence] || 1.0,
+            valid_from: occurred_at,
+            scope: fact_scope,
+            project_path: fact_project
+          )
+          outcome[:created] = 1
 
-        if existing_facts.any? && outcome[:superseded] > 0
-          existing_facts.each do |old_fact|
-            @store.insert_fact_link(from_fact_id: fact_id, to_fact_id: old_fact[:id], link_type: "supersedes")
+          if existing_facts.any? && outcome[:superseded] > 0
+            existing_facts.each do |old_fact|
+              @store.insert_fact_link(from_fact_id: fact_id, to_fact_id: old_fact[:id], link_type: "supersedes")
+            end
           end
+
+          add_provenance(fact_id, content_item_id, fact_data)
+          outcome[:provenance] = 1
+
+          outcome
         end
-
-        add_provenance(fact_id, content_item_id, fact_data)
-        outcome[:provenance] = 1
-
-        outcome
       end
 
       def supersession_signal?(fact_data)
@@ -118,6 +121,7 @@ module ClaudeMemory
       end
 
       def create_conflict(existing_fact_id, new_fact_data, subject_id, content_item_id, occurred_at)
+        # Already within transaction from resolve_fact
         new_fact_id = @store.insert_fact(
           subject_entity_id: subject_id,
           predicate: new_fact_data[:predicate],
