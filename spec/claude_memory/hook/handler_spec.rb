@@ -59,6 +59,16 @@ RSpec.describe ClaudeMemory::Hook::Handler do
       )
     end
 
+    it "returns skipped status when transcript file doesn't exist" do
+      payload["transcript_path"] = "/nonexistent/transcript.jsonl"
+
+      result = handler.ingest(payload)
+
+      expect(result[:status]).to eq(:skipped)
+      expect(result[:reason]).to eq("transcript_not_found")
+      expect(result[:message]).to include("/nonexistent/transcript.jsonl")
+    end
+
     context "with environment variable fallback" do
       let(:env) do
         {

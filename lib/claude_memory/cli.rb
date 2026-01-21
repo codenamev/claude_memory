@@ -4,8 +4,6 @@ require "optparse"
 
 module ClaudeMemory
   class CLI
-    COMMANDS = %w[help version db:init].freeze
-
     def initialize(args = ARGV, stdout: $stdout, stderr: $stderr, stdin: $stdin)
       @args = args
       @stdout = stdout
@@ -479,9 +477,6 @@ module ClaudeMemory
     rescue ClaudeMemory::Hook::Handler::PayloadError => e
       @stderr.puts "Payload error: #{e.message}"
       1
-    rescue ClaudeMemory::Ingest::TranscriptReader::FileNotFoundError => e
-      @stderr.puts "Error: #{e.message}"
-      1
     end
 
     def parse_hook_payload
@@ -500,6 +495,8 @@ module ClaudeMemory
         @stdout.puts "Ingested #{result[:bytes_read]} bytes (content_id: #{result[:content_id]})"
       when :no_change
         @stdout.puts "No new content to ingest"
+      when :skipped
+        @stdout.puts "Skipped ingestion: #{result[:reason]}"
       end
     end
 
