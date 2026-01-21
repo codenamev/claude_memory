@@ -226,6 +226,18 @@ RSpec.describe ClaudeMemory::CLI do
         expect(code).to eq(1)
         expect(stderr.string).to include("Invalid JSON")
       end
+
+      it "gracefully handles missing transcript file" do
+        payload = {
+          "session_id" => "hook-session-2",
+          "transcript_path" => "/nonexistent/transcript.jsonl"
+        }.to_json
+
+        code = run_cli_with_stdin("hook", "ingest", "--db", db_path, input: payload)
+
+        expect(code).to eq(0)
+        expect(stdout.string).to include("Skipped ingestion: transcript_not_found")
+      end
     end
 
     describe "hook sweep" do

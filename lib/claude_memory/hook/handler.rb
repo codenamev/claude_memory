@@ -3,7 +3,7 @@
 module ClaudeMemory
   module Hook
     class Handler
-      class PayloadError < Error; end
+      class PayloadError < ClaudeMemory::Error; end
 
       DEFAULT_SWEEP_BUDGET = 5
 
@@ -27,6 +27,10 @@ module ClaudeMemory
           transcript_path: transcript_path,
           project_path: project_path
         )
+      rescue Ingest::TranscriptReader::FileNotFoundError => e
+        # Transcript file doesn't exist (e.g., headless Claude session)
+        # This is expected, not an error - return success with no-op status
+        {status: :skipped, reason: "transcript_not_found", message: e.message}
       end
 
       def sweep(payload)
