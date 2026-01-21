@@ -749,19 +749,19 @@ module ClaudeMemory
           store = ClaudeMemory::Store::SQLiteStore.new(db_path)
           @stdout.puts "  Schema version: #{store.schema_version}"
 
-          fact_count = store.db.execute("SELECT COUNT(*) FROM facts").first.first
+          fact_count = store.facts.count
           @stdout.puts "  Facts: #{fact_count}"
 
-          content_count = store.db.execute("SELECT COUNT(*) FROM content_items").first.first
+          content_count = store.content_items.count
           @stdout.puts "  Content items: #{content_count}"
 
-          conflict_count = store.db.execute("SELECT COUNT(*) FROM conflicts WHERE status = 'open'").first.first
+          conflict_count = store.conflicts.where(status: "open").count
           if conflict_count > 0
             warnings << "#{label}: #{conflict_count} open conflict(s) need resolution"
           end
           @stdout.puts "  Open conflicts: #{conflict_count}"
 
-          last_ingest = store.db.execute("SELECT MAX(ingested_at) FROM content_items").first.first
+          last_ingest = store.content_items.max(:ingested_at)
           if last_ingest
             @stdout.puts "  Last ingest: #{last_ingest}"
           elsif label == "project"
