@@ -8,8 +8,9 @@ module ClaudeMemory
     RULES_DIR = ".claude/rules"
     GENERATED_FILE = "claude_memory.generated.md"
 
-    def initialize(store)
+    def initialize(store, file_system: Infrastructure::FileSystem.new)
       @store = store
+      @fs = file_system
     end
 
     def generate_snapshot(since: nil)
@@ -42,10 +43,8 @@ module ClaudeMemory
       content = generate_snapshot(since: since)
       path = output_path(mode)
 
-      FileUtils.mkdir_p(File.dirname(path))
-
       if should_write?(path, content)
-        File.write(path, content)
+        @fs.write(path, content)
         ensure_import_exists(mode, path)
         {status: :updated, path: path}
       else
@@ -163,9 +162,9 @@ module ClaudeMemory
     end
 
     def should_write?(path, content)
-      return true unless File.exist?(path)
+      return true unless @fs.exist?(path)
 
-      existing_hash = Digest::SHA256.file(path).hexdigest
+      existing_hash = @fs.file_hash(path)
       new_hash = Digest::SHA256.hexdigest(content)
       existing_hash != new_hash
     end
@@ -183,14 +182,13 @@ module ClaudeMemory
         "@#{path}"
       end
 
-      if File.exist?(claude_md)
-        content = File.read(claude_md)
+      if @fs.exist?(claude_md)
+        content = @fs.read(claude_md)
         return if content.include?(import_line)
 
-        File.write(claude_md, content + "\n#{import_line}\n")
+        @fs.write(claude_md, content + "\n#{import_line}\n")
       else
-        FileUtils.mkdir_p(".claude")
-        File.write(claude_md, "# Project Memory\n\n#{import_line}\n")
+        @fs.write(claude_md, "# Project Memory\n\n#{import_line}\n")
       end
     end
 
