@@ -20,15 +20,10 @@ module ClaudeMemory
         "sweep" => "SweepCommand",
         "ingest" => "IngestCommand",
         "publish" => "PublishCommand",
-        "db:init" => "DbInitCommand"
-        # More commands will be added as they're extracted:
-        # "sweep" => "SweepCommand",
-        # "conflicts" => "ConflictsCommand",
-        # "changes" => "ChangesCommand",
-        # "db:init" => "DbInitCommand",
-        # "init" => "InitCommand",
-        # "serve-mcp" => "ServeMcpCommand",
-        # "hook" => "HookCommand"
+        "db:init" => "DbInitCommand",
+        "init" => "InitCommand",
+        "serve-mcp" => "ServeMcpCommand",
+        "hook" => "HookCommand"
       }.freeze
 
       # Find a command class by name
