@@ -10,7 +10,8 @@ module ClaudeMemory
       COMMANDS = {
         "help" => "HelpCommand",
         "version" => "VersionCommand",
-        "doctor" => "DoctorCommand"
+        "doctor" => "DoctorCommand",
+        "promote" => "PromoteCommand"
         # More commands will be added as they're extracted:
         # "recall" => "RecallCommand",
         # "explain" => "ExplainCommand",
