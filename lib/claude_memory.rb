@@ -5,6 +5,7 @@ module ClaudeMemory
 end
 
 require_relative "claude_memory/core/result"
+require_relative "claude_memory/commands/base_command"
 require_relative "claude_memory/cli"
 require_relative "claude_memory/distill/distiller"
 require_relative "claude_memory/distill/extraction"
