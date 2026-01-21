@@ -174,6 +174,31 @@ This approach means:
 
 ## Architecture
 
+ClaudeMemory follows Domain-Driven Design with clear separation of concerns:
+
+```
+┌─────────────────────────────────┐
+│   Application Layer             │
+│   CLI (41 lines) → 16 Commands  │
+└────────────┬────────────────────┘
+             ↓
+┌────────────▼────────────────────┐
+│   Core Domain Layer             │
+│   Domain Models + Value Objects │
+└────────────┬────────────────────┘
+             ↓
+┌────────────▼────────────────────┐
+│   Business Logic Layer          │
+│   Recall → Resolve → Distill    │
+└────────────┬────────────────────┘
+             ↓
+┌────────────▼────────────────────┐
+│   Infrastructure Layer          │
+│   Store → FileSystem → Index    │
+└─────────────────────────────────┘
+```
+
+### Data Flow
 ```
 Transcripts → Ingest → FTS Index
                     ↓
@@ -187,6 +212,32 @@ Transcripts → Ingest → FTS Index
                     ↓
               Publish → .claude/rules/claude_memory.generated.md
 ```
+
+### Key Architectural Features
+
+**✅ Clean Code**
+- 95% CLI reduction (881 → 41 lines)
+- Command Pattern: 16 focused command classes
+- Domain-Driven Design: Rich models with business logic
+- SOLID principles throughout
+
+**✅ Type Safety**
+- Value Objects: `SessionId`, `TranscriptPath`, `FactId`
+- Null Objects: `NullFact`, `NullExplanation`
+- Domain Models: `Fact`, `Entity`, `Provenance`, `Conflict`
+
+**✅ Performance**
+- N+1 query elimination (2N+1 → 3 queries)
+- Batch loading for facts and receipts
+- Transaction safety for data integrity
+
+**✅ Testability**
+- 426 test examples (149 added during refactoring)
+- Dependency injection throughout
+- `InMemoryFileSystem` for fast tests
+- No tempdir cleanup needed
+
+For detailed architecture documentation, see [docs/architecture.md](docs/architecture.md).
 
 ## Configuration
 
