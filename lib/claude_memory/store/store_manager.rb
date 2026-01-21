@@ -85,40 +85,43 @@ module ClaudeMemory
         subject = @project_store.entities.where(id: fact[:subject_entity_id]).first
         return nil unless subject
 
-        global_subject_id = @global_store.find_or_create_entity(
-          type: subject[:type],
-          name: subject[:canonical_name]
-        )
+        # Wrap all database operations in a transaction for atomicity
+        @global_store.db.transaction do
+          global_subject_id = @global_store.find_or_create_entity(
+            type: subject[:type],
+            name: subject[:canonical_name]
+          )
 
-        global_object_id = nil
-        if fact[:object_entity_id]
-          object = @project_store.entities.where(id: fact[:object_entity_id]).first
-          if object
-            global_object_id = @global_store.find_or_create_entity(
-              type: object[:type],
-              name: object[:canonical_name]
-            )
+          global_object_id = nil
+          if fact[:object_entity_id]
+            object = @project_store.entities.where(id: fact[:object_entity_id]).first
+            if object
+              global_object_id = @global_store.find_or_create_entity(
+                type: object[:type],
+                name: object[:canonical_name]
+              )
+            end
           end
+
+          global_fact_id = @global_store.insert_fact(
+            subject_entity_id: global_subject_id,
+            predicate: fact[:predicate],
+            object_entity_id: global_object_id,
+            object_literal: fact[:object_literal],
+            datatype: fact[:datatype],
+            polarity: fact[:polarity],
+            valid_from: fact[:valid_from],
+            status: fact[:status],
+            confidence: fact[:confidence],
+            created_from: "promoted:#{@project_path}:#{fact_id}",
+            scope: "global",
+            project_path: nil
+          )
+
+          copy_provenance(fact_id, global_fact_id)
+
+          global_fact_id
         end
-
-        global_fact_id = @global_store.insert_fact(
-          subject_entity_id: global_subject_id,
-          predicate: fact[:predicate],
-          object_entity_id: global_object_id,
-          object_literal: fact[:object_literal],
-          datatype: fact[:datatype],
-          polarity: fact[:polarity],
-          valid_from: fact[:valid_from],
-          status: fact[:status],
-          confidence: fact[:confidence],
-          created_from: "promoted:#{@project_path}:#{fact_id}",
-          scope: "global",
-          project_path: nil
-        )
-
-        copy_provenance(fact_id, global_fact_id)
-
-        global_fact_id
       end
 
       private
