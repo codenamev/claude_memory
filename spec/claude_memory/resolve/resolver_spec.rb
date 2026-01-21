@@ -147,5 +147,82 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
         expect(provenance.first[:quote]).to eq("the quote")
       end
     end
+
+    context "transaction safety" do
+      it "rolls back fact creation if provenance insertion fails" do
+        extraction = ClaudeMemory::Distill::Extraction.new(
+          facts: [{subject: "repo", predicate: "convention", object: "test", quote: "quote"}]
+        )
+
+        # Mock provenance insertion to fail
+        allow(store).to receive(:insert_provenance).and_raise(StandardError, "Provenance failed")
+
+        expect {
+          resolver.apply(extraction)
+        }.to raise_error(StandardError, "Provenance failed")
+
+        # Verify rollback - no facts should be created
+        repo_id = store.find_or_create_entity(type: "repo", name: "repo")
+        facts = store.facts_for_slot(repo_id, "convention")
+        expect(facts).to be_empty
+      end
+
+      it "rolls back supersession if fact link creation fails" do
+        # Create initial fact
+        extraction1 = ClaudeMemory::Distill::Extraction.new(
+          facts: [{subject: "repo", predicate: "uses_database", object: "mysql", strength: "stated"}]
+        )
+        resolver.apply(extraction1)
+
+        # Attempt supersession with failing fact link
+        extraction2 = ClaudeMemory::Distill::Extraction.new(
+          facts: [{subject: "repo", predicate: "uses_database", object: "postgresql", strength: "stated", supersedes: true}]
+        )
+
+        allow(store).to receive(:insert_fact_link).and_raise(StandardError, "Link failed")
+
+        expect {
+          resolver.apply(extraction2)
+        }.to raise_error(StandardError, "Link failed")
+
+        # Verify rollback - old fact should still be active, no new fact created
+        repo_id = store.find_or_create_entity(type: "repo", name: "repo")
+        active_facts = store.facts_for_slot(repo_id, "uses_database")
+        expect(active_facts.size).to eq(1)
+        expect(active_facts.first[:object_literal]).to eq("mysql")
+        expect(active_facts.first[:status]).to eq("active")
+
+        superseded_facts = store.facts_for_slot(repo_id, "uses_database", status: "superseded")
+        expect(superseded_facts).to be_empty
+      end
+
+      it "rolls back conflict creation if conflict insertion fails" do
+        # Create initial fact
+        extraction1 = ClaudeMemory::Distill::Extraction.new(
+          facts: [{subject: "repo", predicate: "uses_database", object: "mysql", strength: "stated"}]
+        )
+        resolver.apply(extraction1)
+
+        # Attempt conflict with failing conflict insertion
+        extraction2 = ClaudeMemory::Distill::Extraction.new(
+          facts: [{subject: "repo", predicate: "uses_database", object: "postgresql", strength: "inferred", quote: "quote"}]
+        )
+
+        # Mock insert_conflict to fail
+        allow(store).to receive(:insert_conflict).and_raise(StandardError, "Conflict insertion failed")
+
+        expect {
+          resolver.apply(extraction2)
+        }.to raise_error(StandardError, "Conflict insertion failed")
+
+        # Verify rollback - no conflicting fact should be created
+        conflicts = store.open_conflicts
+        expect(conflicts).to be_empty
+
+        repo_id = store.find_or_create_entity(type: "repo", name: "repo")
+        facts = store.facts_for_slot(repo_id, "uses_database", status: "disputed")
+        expect(facts).to be_empty
+      end
+    end
   end
 end
