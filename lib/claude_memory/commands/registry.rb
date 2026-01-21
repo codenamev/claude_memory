@@ -11,12 +11,13 @@ module ClaudeMemory
         "help" => "HelpCommand",
         "version" => "VersionCommand",
         "doctor" => "DoctorCommand",
-        "promote" => "PromoteCommand"
+        "promote" => "PromoteCommand",
+        "search" => "SearchCommand",
+        "explain" => "ExplainCommand",
+        "conflicts" => "ConflictsCommand",
+        "changes" => "ChangesCommand"
         # More commands will be added as they're extracted:
         # "recall" => "RecallCommand",
-        # "explain" => "ExplainCommand",
-        # "search" => "SearchCommand",
-        # "promote" => "PromoteCommand",
         # "ingest" => "IngestCommand",
         # "publish" => "PublishCommand",
         # "sweep" => "SweepCommand",
