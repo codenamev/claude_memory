@@ -82,33 +82,83 @@ module ClaudeMemory
       content_ids = fts.search(query_text, limit: limit * 3)
       return [] if content_ids.empty?
 
-      facts_with_provenance = []
+      # Collect all fact_ids first
       seen_fact_ids = Set.new
+      ordered_fact_ids = []
 
       content_ids.each do |content_id|
         provenance_records = store.provenance
-          .select(:id, :fact_id, :content_item_id, :quote, :strength)
+          .select(:fact_id)
           .where(content_item_id: content_id)
           .all
 
         provenance_records.each do |prov|
-          next if seen_fact_ids.include?(prov[:fact_id])
+          fact_id = prov[:fact_id]
+          next if seen_fact_ids.include?(fact_id)
 
-          fact = find_fact_from_store(store, prov[:fact_id])
-          next unless fact
-
-          seen_fact_ids.add(prov[:fact_id])
-          facts_with_provenance << {
-            fact: fact,
-            receipts: find_receipts_from_store(store, prov[:fact_id]),
-            source: source
-          }
-          break if facts_with_provenance.size >= limit
+          seen_fact_ids.add(fact_id)
+          ordered_fact_ids << fact_id
+          break if ordered_fact_ids.size >= limit
         end
-        break if facts_with_provenance.size >= limit
+        break if ordered_fact_ids.size >= limit
       end
 
-      facts_with_provenance
+      return [] if ordered_fact_ids.empty?
+
+      # Batch query all facts at once
+      facts_by_id = batch_find_facts(store, ordered_fact_ids)
+
+      # Batch query all receipts at once
+      receipts_by_fact_id = batch_find_receipts(store, ordered_fact_ids)
+
+      # Build results maintaining order
+      ordered_fact_ids.map do |fact_id|
+        fact = facts_by_id[fact_id]
+        next unless fact
+
+        {
+          fact: fact,
+          receipts: receipts_by_fact_id[fact_id] || [],
+          source: source
+        }
+      end.compact
+    end
+
+    def batch_find_facts(store, fact_ids)
+      store.facts
+        .left_join(:entities, id: :subject_entity_id)
+        .select(
+          Sequel[:facts][:id],
+          Sequel[:facts][:predicate],
+          Sequel[:facts][:object_literal],
+          Sequel[:facts][:status],
+          Sequel[:facts][:confidence],
+          Sequel[:facts][:valid_from],
+          Sequel[:facts][:valid_to],
+          Sequel[:facts][:created_at],
+          Sequel[:entities][:canonical_name].as(:subject_name),
+          Sequel[:facts][:scope],
+          Sequel[:facts][:project_path]
+        )
+        .where(Sequel[:facts][:id] => fact_ids)
+        .all
+        .each_with_object({}) { |fact, hash| hash[fact[:id]] = fact }
+    end
+
+    def batch_find_receipts(store, fact_ids)
+      store.provenance
+        .left_join(:content_items, id: :content_item_id)
+        .select(
+          Sequel[:provenance][:id],
+          Sequel[:provenance][:fact_id],
+          Sequel[:provenance][:quote],
+          Sequel[:provenance][:strength],
+          Sequel[:content_items][:session_id],
+          Sequel[:content_items][:occurred_at]
+        )
+        .where(Sequel[:provenance][:fact_id] => fact_ids)
+        .all
+        .group_by { |receipt| receipt[:fact_id] }
     end
 
     def dedupe_and_sort(results, limit)
