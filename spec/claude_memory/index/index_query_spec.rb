@@ -211,7 +211,7 @@ RSpec.describe ClaudeMemory::Index::IndexQuery do
     end
 
     it "includes subject name from entity" do
-      data = create_test_data
+      create_test_data
 
       options = ClaudeMemory::Index::QueryOptions.new(
         query_text: "database",
@@ -329,7 +329,6 @@ RSpec.describe ClaudeMemory::Index::IndexQuery do
       query = described_class.new(store, options)
 
       # Count queries by enabling SQL logging
-      query_count = 0
       original_loggers = store.db.loggers
       logger = Object.new
       def logger.info(msg)

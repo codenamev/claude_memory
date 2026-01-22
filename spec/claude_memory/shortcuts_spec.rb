@@ -9,7 +9,7 @@ RSpec.describe ClaudeMemory::Shortcuts do
   let(:manager) { ClaudeMemory::Store::StoreManager.new(project_db_path: db_path) }
 
   after do
-    manager.close if manager
+    manager&.close
     store.close if store && !manager
     FileUtils.rm_f(db_path)
   end
