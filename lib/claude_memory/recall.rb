@@ -27,6 +27,14 @@ module ClaudeMemory
       end
     end
 
+    def query_index(query_text, limit: 20, scope: SCOPE_ALL)
+      if @legacy_mode
+        query_index_legacy(query_text, limit: limit, scope: scope)
+      else
+        query_index_dual(query_text, limit: limit, scope: scope)
+      end
+    end
+
     def explain(fact_id, scope: nil)
       if @legacy_mode
         explain_from_store(@legacy_store, fact_id)
@@ -75,6 +83,59 @@ module ClaudeMemory
       end
 
       dedupe_and_sort(results, limit)
+    end
+
+    def query_index_dual(query_text, limit:, scope:)
+      results = []
+
+      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
+        @manager.ensure_project! if @manager.project_exists?
+        if @manager.project_store
+          project_results = query_index_single_store(@manager.project_store, query_text, limit: limit, source: :project)
+          results.concat(project_results)
+        end
+      end
+
+      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
+        @manager.ensure_global! if @manager.global_exists?
+        if @manager.global_store
+          global_results = query_index_single_store(@manager.global_store, query_text, limit: limit, source: :global)
+          results.concat(global_results)
+        end
+      end
+
+      dedupe_and_sort_index(results, limit)
+    end
+
+    def query_index_single_store(store, query_text, limit:, source:)
+      options = Index::QueryOptions.new(
+        query_text: query_text,
+        limit: limit,
+        scope: :all,
+        source: source
+      )
+
+      query = Index::IndexQuery.new(store, options)
+      query.execute
+    end
+
+    def dedupe_and_sort_index(results, limit)
+      seen_signatures = Set.new
+      unique_results = []
+
+      results.each do |result|
+        sig = "#{result[:subject]}:#{result[:predicate]}:#{result[:object_preview]}"
+        next if seen_signatures.include?(sig)
+
+        seen_signatures.add(sig)
+        unique_results << result
+      end
+
+      # Sort by source priority (project first)
+      unique_results.sort_by do |item|
+        source_priority = (item[:source] == :project) ? 0 : 1
+        [source_priority]
+      end.first(limit)
     end
 
     def query_single_store(store, query_text, limit:, source:)
@@ -330,6 +391,25 @@ module ClaudeMemory
       end
 
       sort_by_scope_priority(facts_with_provenance)
+    end
+
+    def query_index_legacy(query_text, limit:, scope:)
+      options = Index::QueryOptions.new(
+        query_text: query_text,
+        limit: limit,
+        scope: :all,
+        source: :legacy
+      )
+
+      query = Index::IndexQuery.new(@legacy_store, options)
+      results = query.execute
+
+      # Filter by scope in legacy mode
+      results.select do |result|
+        # Need to get full fact to check scope
+        fact = find_fact(result[:id])
+        fact && fact_matches_scope?(fact, scope)
+      end
     end
 
     def changes_legacy(since:, limit:, scope:)
