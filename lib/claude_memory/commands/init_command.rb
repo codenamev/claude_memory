@@ -181,10 +181,28 @@ module ClaudeMemory
       def build_hooks_config(ingest_cmd, sweep_cmd)
         {
           "hooks" => {
-            "Stop" => [{"command" => ingest_cmd, "waitForExit" => true}],
-            "SessionStart" => [{"command" => ingest_cmd, "waitForExit" => true}],
-            "PreCompact" => [{"command" => ingest_cmd, "waitForExit" => true}],
-            "SessionEnd" => [{"command" => "claude-memory publish", "waitForExit" => false}]
+            "Stop" => [{
+              "hooks" => [
+                {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+              ]
+            }],
+            "SessionStart" => [{
+              "hooks" => [
+                {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+              ]
+            }],
+            "PreCompact" => [{
+              "hooks" => [
+                {"type" => "command", "command" => ingest_cmd, "timeout" => 30},
+                {"type" => "command", "command" => sweep_cmd, "timeout" => 30}
+              ]
+            }],
+            "SessionEnd" => [{
+              "hooks" => [
+                {"type" => "command", "command" => ingest_cmd, "timeout" => 30},
+                {"type" => "command", "command" => sweep_cmd, "timeout" => 30}
+              ]
+            }]
           }
         }
       end
