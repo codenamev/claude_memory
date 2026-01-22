@@ -78,6 +78,72 @@ RSpec.describe ClaudeMemory::Recall do
     end
   end
 
+  describe "#query_index" do
+    it "returns empty for no matches" do
+      results = recall.query_index("nonexistent")
+      expect(results).to be_empty
+    end
+
+    it "returns lightweight index format without full provenance" do
+      create_content_with_fact("We use PostgreSQL database", "uses_database", "PostgreSQL with connection pooling")
+
+      results = recall.query_index("PostgreSQL", limit: 10)
+
+      expect(results).not_to be_empty
+      result = results.first
+
+      # Has essential fields
+      expect(result[:id]).to be_a(Integer)
+      expect(result[:predicate]).to eq("uses_database")
+      expect(result[:subject]).not_to be_nil
+
+      # Has preview (truncated to 50 chars)
+      expect(result[:object_preview]).not_to be_nil
+      expect(result[:object_preview].length).to be <= 50
+
+      # Has token estimate
+      expect(result[:token_estimate]).to be > 0
+
+      # Does NOT have full provenance (lightweight)
+      expect(result).not_to have_key(:receipts)
+      expect(result).not_to have_key(:valid_from)
+    end
+
+    it "truncates long object literals to 50 chars" do
+      long_text = "A" * 100
+      create_content_with_fact("Long description text", "description", long_text)
+
+      results = recall.query_index("description", limit: 10)
+
+      expect(results.first[:object_preview].length).to eq(50)
+    end
+
+    it "respects limit parameter" do
+      5.times do |i|
+        create_content_with_fact("Fact #{i}", "fact_#{i}", "value #{i}")
+      end
+
+      results = recall.query_index("Fact", limit: 3)
+      expect(results.size).to be <= 3
+    end
+
+    it "includes token estimates" do
+      create_content_with_fact("Rails framework", "uses_framework", "Rails 7")
+
+      results = recall.query_index("Rails", limit: 10)
+
+      expect(results.first[:token_estimate]).to be_between(1, 10)
+    end
+
+    it "includes source field" do
+      create_content_with_fact("PostgreSQL database", "uses_database", "PostgreSQL")
+
+      results = recall.query_index("PostgreSQL", limit: 10)
+
+      expect(results.first[:source]).not_to be_nil
+    end
+  end
+
   describe "#explain" do
     it "returns NullExplanation for non-existent fact" do
       explanation = recall.explain(999)
