@@ -1,251 +1,109 @@
 # ClaudeMemory
 
-Turn-key Ruby gem providing Claude Code with instant, high-quality, long-term, self-managed memory using **Claude Code Hooks + MCP + Output Style**, with minimal dependencies (SQLite by default).
+**Long-term memory for Claude Code** - automatic, intelligent, zero-configuration
 
-## Features
+[![Gem Version](https://badge.fury.io/rb/claude_memory.svg)](https://badge.fury.io/rb/claude_memory)
 
-- **Automated ingestion**: Claude Code hooks trigger delta-based transcript ingestion
-- **Claude-powered fact extraction**: Uses Claude's own intelligence to extract facts (no API key needed)
-- **Truth maintenance**: Deterministic conflict/supersession resolution
-- **Full-text search**: SQLite FTS5 for fast recall without embeddings
-- **MCP integration**: Memory tools accessible directly in Claude Code
-- **Snapshot publishing**: Curated memory files for Claude Code's built-in system
-- **Claude Code Plugin**: Install as a plugin for seamless integration
+## What It Does
 
-## Installation
+ClaudeMemory gives Claude Code a persistent memory across all your conversations.
+It automatically:
+- ✅ Extracts durable facts from conversations (tech stack, preferences, decisions)
+- ✅ Remembers project-specific and global knowledge
+- ✅ Provides instant recall without manual prompting
+- ✅ Maintains truth (handles conflicts, supersession)
 
+**No API keys. No configuration. Just works.**
+
+## Quick Start
+
+### Install
 ```bash
 gem install claude_memory
 ```
 
-Or add to your Gemfile:
-
-```ruby
-gem 'claude_memory'
-```
-
-## Quick Start
-
+### Initialize
 ```bash
-# Initialize in your project (project-local)
-cd your-project
+# In your project
+cd my-project
 claude-memory init
 
-# Or install globally for all projects
+# Or globally for all projects
 claude-memory init --global
 
 # Verify setup
 claude-memory doctor
 ```
 
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `init` | Initialize ClaudeMemory in a project |
-| `db:init` | Initialize the SQLite database |
-| `ingest` | Ingest transcript delta |
-| `hook ingest` | Hook entrypoint for ingest (reads stdin JSON) |
-| `hook sweep` | Hook entrypoint for sweep (reads stdin JSON) |
-| `hook publish` | Hook entrypoint for publish (reads stdin JSON) |
-| `search` | Search indexed content |
-| `recall` | Recall facts matching a query |
-| `explain` | Explain a fact with provenance receipts |
-| `conflicts` | Show open conflicts |
-| `changes` | Show recent fact changes |
-| `publish` | Publish snapshot to Claude Code memory |
-| `sweep` | Run maintenance/pruning |
-| `serve-mcp` | Start MCP server for Claude Code |
-| `doctor` | Check system health |
-
-## Usage Examples
-
-### Ingest Content
-
-```bash
-claude-memory ingest \
-  --source claude_code \
-  --session-id sess-123 \
-  --transcript-path ~/.claude/projects/myproject/transcripts/latest.jsonl
-```
-
-### Recall Facts
-
-```bash
-claude-memory recall "database"
-# Returns facts + provenance receipts
-
-claude-memory recall "database" --scope project
-# Only facts scoped to current project
-
-claude-memory recall "preferences" --scope global
-# Only global facts (apply to all projects)
-
-claude-memory explain 42
-# Detailed explanation with supersession/conflict links
-```
-
-### Publish Snapshot
-
-```bash
-# Publish to .claude/rules/ (shared, default)
-claude-memory publish
-
-# Publish to local file (not committed)
-claude-memory publish --mode local
-
-# Publish to user home directory
-claude-memory publish --mode home
-```
-
-### MCP Tools
-
-When configured, these tools are available in Claude Code:
-
-- `memory.recall` - Search for relevant facts (supports scope filtering)
-- `memory.explain` - Get detailed fact provenance
-- `memory.promote` - Promote a project fact to global memory
-- `memory.store_extraction` - Store extracted facts from a conversation
-- `memory.changes` - Recent fact updates
-- `memory.conflicts` - Open contradictions
-- `memory.sweep_now` - Run maintenance
-- `memory.status` - System health check
-
-## Scope: Global vs Project
-
-Facts are scoped to control where they apply:
-
-| Scope | Description | Example |
-|-------|-------------|---------|
-| `project` | Applies only to the current project | "This app uses PostgreSQL" |
-| `global` | Applies across all projects | "I prefer 4-space indentation" |
-
-**Automatic detection**: The distiller recognizes signals like "always", "in all projects", or "my preference" and sets `scope_hint: "global"`.
-
-**Manual promotion**: Use `memory.set_scope` in Claude Code or the user can say "make that preference global" and Claude will call the tool.
-
-## Claude Code Plugin
-
-ClaudeMemory is available as a Claude Code plugin for seamless integration.
-
-### Install as Plugin
-
-```bash
-# Add the marketplace
-/plugin marketplace add /path/to/claude_memory
-
-# Install the plugin
-/plugin install claude-memory
-```
-
-### Plugin Components
-
-| Component | Description |
-|-----------|-------------|
-| **MCP Server** | Exposes memory tools to Claude |
-| **Hooks** | Automatic ingestion, extraction, and publishing |
-| **Skill** | `/memory` command for manual interaction |
-
-### How Claude-Powered Extraction Works
-
-ClaudeMemory uses **prompt hooks** to leverage Claude's own intelligence for fact extraction—no separate API key required:
-
-1. **On session stop**: A prompt hook asks Claude to review what it learned
-2. **Claude extracts facts**: Using its understanding of the conversation, Claude identifies durable facts
-3. **Stores via MCP**: Claude calls `memory.store_extraction` to persist the facts
-4. **Truth maintenance**: The resolver handles conflicts and supersession automatically
-
-This approach means:
-- ✅ No API key configuration needed
-- ✅ Uses Claude's full contextual understanding
-- ✅ Extracts only genuinely useful, durable facts
-- ✅ Respects scope (project vs global)
-
-### Fact Types Extracted
-
-| Predicate | Description | Example |
-|-----------|-------------|---------|
-| `uses_database` | Database technology | "PostgreSQL" |
-| `uses_framework` | Framework choice | "Rails", "React" |
-| `deployment_platform` | Where deployed | "Vercel", "AWS" |
-| `convention` | Coding standards | "4-space indentation" |
-| `decision` | Architectural choice | "Use microservices" |
-| `auth_method` | Authentication approach | "JWT tokens" |
-
-## Architecture
-
-ClaudeMemory follows Domain-Driven Design with clear separation of concerns:
+### Use with Claude Code
+Just talk naturally! Memory happens automatically.
 
 ```
-┌─────────────────────────────────┐
-│   Application Layer             │
-│   CLI (41 lines) → 16 Commands  │
-└────────────┬────────────────────┘
-             ↓
-┌────────────▼────────────────────┐
-│   Core Domain Layer             │
-│   Domain Models + Value Objects │
-└────────────┬────────────────────┘
-             ↓
-┌────────────▼────────────────────┐
-│   Business Logic Layer          │
-│   Recall → Resolve → Distill    │
-└────────────┬────────────────────┘
-             ↓
-┌────────────▼────────────────────┐
-│   Infrastructure Layer          │
-│   Store → FileSystem → Index    │
-└─────────────────────────────────┘
+You: "I'm building a Rails app with PostgreSQL, deploying to Heroku"
+Claude: [helps with setup]
+
+# Behind the scenes:
+# - Session transcript ingested
+# - Facts extracted automatically
+# - No user action needed
 ```
 
-### Data Flow
+**Later:**
 ```
-Transcripts → Ingest → FTS Index
-                    ↓
-        Claude Prompt Hook → Extract entities/facts/signals
-                    ↓
-         memory.store_extraction (MCP)
-                    ↓
-              Resolve → Truth maintenance (conflicts/supersession)
-                    ↓
-              Store → SQLite (facts, provenance, entities, scope)
-                    ↓
-              Publish → .claude/rules/claude_memory.generated.md
+You: "Help me add a background job"
+Claude: "Based on my memory, you're using Rails with PostgreSQL..."
 ```
 
-### Key Architectural Features
+👉 **[See Getting Started Guide →](docs/GETTING_STARTED.md)**
+👉 **[View Example Conversations →](docs/EXAMPLES.md)**
 
-**✅ Clean Code**
-- 95% CLI reduction (881 → 41 lines)
-- Command Pattern: 16 focused command classes
-- Domain-Driven Design: Rich models with business logic
-- SOLID principles throughout
+## How It Works
 
-**✅ Type Safety**
-- Value Objects: `SessionId`, `TranscriptPath`, `FactId`
-- Null Objects: `NullFact`, `NullExplanation`
-- Domain Models: `Fact`, `Entity`, `Provenance`, `Conflict`
+1. **You chat with Claude** - Tell it about your project
+2. **Facts are extracted** - Claude identifies durable knowledge
+3. **Memory persists** - Stored locally in SQLite
+4. **Automatic recall** - Claude remembers in future conversations
 
-**✅ Performance**
-- N+1 query elimination (2N+1 → 3 queries)
-- Batch loading for facts and receipts
-- Transaction safety for data integrity
+👉 **[Architecture Deep Dive →](docs/architecture.md)**
 
-**✅ Testability**
-- 426 test examples (149 added during refactoring)
-- Dependency injection throughout
-- `InMemoryFileSystem` for fast tests
-- No tempdir cleanup needed
+## Key Features
 
-For detailed architecture documentation, see [docs/architecture.md](docs/architecture.md).
+- **Dual Scope**: Project-specific + global user preferences
+- **Privacy First**: `<private>` tags exclude sensitive data
+- **Progressive Disclosure**: Lightweight queries before full details
+- **Semantic Shortcuts**: Quick access to decisions, conventions, architecture
+- **Truth Maintenance**: Automatic conflict resolution
+- **Claude-Powered**: Uses Claude's intelligence to extract facts (no API key needed)
+- **Token Efficient**: 10x reduction in memory queries with progressive disclosure
 
-## Configuration
+## Privacy Control
 
-The database location defaults to `.claude_memory.sqlite3` in the project root.
+Exclude sensitive data from memory using privacy tags:
 
-Override with `--db PATH` on any command.
+```
+You: "My API key is <private>sk-abc123</private>"
+Claude: [uses it during session]
 
-## Development
+# Stored: "API endpoint configured with key"
+# NOT stored: "sk-abc123"
+```
+
+Supported tags: `<private>`, `<no-memory>`, `<secret>`
+
+## Documentation
+
+- 📖 [Getting Started](docs/GETTING_STARTED.md) - Step-by-step onboarding *(coming soon)*
+- 💡 [Examples](docs/EXAMPLES.md) - Use cases and workflows
+- 🔧 [Plugin Setup](docs/PLUGIN.md) - Claude Code integration
+- 🏗️ [Architecture](docs/architecture.md) - Technical deep dive
+- 📝 [Changelog](CHANGELOG.md) - Release notes
+
+## For Developers
+
+- **Language:** Ruby 3.2+
+- **Storage:** SQLite3 (no external services)
+- **Testing:** 583 examples, 100% core coverage
+- **Code Style:** Standard Ruby
 
 ```bash
 git clone https://github.com/codenamev/claude_memory
@@ -254,10 +112,18 @@ bin/setup
 bundle exec rspec
 ```
 
+👉 **[Development Guide →](CLAUDE.md)**
+
+## Support
+
+- 🐛 [Report a bug](https://github.com/codenamev/claude_memory/issues)
+- 💬 [Discussions](https://github.com/codenamev/claude_memory/discussions)
+- 📧 Email: valentino@hanamirb.org
+
 ## License
 
-MIT License - see [LICENSE.txt](LICENSE.txt)
+MIT - see [LICENSE.txt](LICENSE.txt)
 
-## Contributing
+---
 
-Bug reports and pull requests welcome at https://github.com/codenamev/claude_memory
+**Made with ❤️ by [Valentino Stoll](https://github.com/codenamev)**
