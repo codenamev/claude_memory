@@ -1,0 +1,10 @@
+# frozen_string_literal: true
+
+pre-commit:
+  parallel: false
+  commands:
+    lint-fix:
+      run: bundle exec rake standard:fix
+      stage_fixed: true
+    tests:
+      run: bundle exec rspec

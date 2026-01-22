@@ -39,13 +39,13 @@ module ClaudeMemory
       header + sections.compact.reject(&:empty?).join("\n")
     end
 
-    def publish!(mode: :shared, granularity: :repo, since: nil)
+    def publish!(mode: :shared, granularity: :repo, since: nil, rules_dir: nil)
       content = generate_snapshot(since: since)
-      path = output_path(mode)
+      path = output_path(mode, rules_dir: rules_dir)
 
       if should_write?(path, content)
         @fs.write(path, content)
-        ensure_import_exists(mode, path)
+        ensure_import_exists(mode, path, rules_dir: rules_dir)
         {status: :updated, path: path}
       else
         {status: :unchanged, path: path}
@@ -54,17 +54,19 @@ module ClaudeMemory
 
     private
 
-    def output_path(mode)
+    def output_path(mode, rules_dir: nil)
       case mode
       when :shared
-        File.join(RULES_DIR, GENERATED_FILE)
+        dir = rules_dir || RULES_DIR
+        File.join(dir, GENERATED_FILE)
       when :local
         ".claude_memory.local.md"
       when :home
         project_name = File.basename(Dir.pwd)
         File.join(Dir.home, ".claude", "claude_memory", "#{project_name}.md")
       else
-        File.join(RULES_DIR, GENERATED_FILE)
+        dir = rules_dir || RULES_DIR
+        File.join(dir, GENERATED_FILE)
       end
     end
 
@@ -169,13 +171,22 @@ module ClaudeMemory
       existing_hash != new_hash
     end
 
-    def ensure_import_exists(mode, path)
+    def ensure_import_exists(mode, path, rules_dir: nil)
       return if mode == :local
 
-      claude_md = ".claude/CLAUDE.md"
+      # Determine CLAUDE.md location based on rules_dir
+      claude_md = if rules_dir
+        # If rules_dir is provided (e.g., /tmp/xyz/.claude/rules),
+        # CLAUDE.md should be in parent dir (e.g., /tmp/xyz/.claude/CLAUDE.md)
+        File.join(File.dirname(rules_dir), "CLAUDE.md")
+      else
+        ".claude/CLAUDE.md"
+      end
+
       import_line = case mode
       when :shared
-        "@#{RULES_DIR}/#{GENERATED_FILE}"
+        dir = rules_dir || RULES_DIR
+        "@#{dir}/#{GENERATED_FILE}"
       when :home
         "@~/#{path.sub(Dir.home + "/", "")}"
       else
