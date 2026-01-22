@@ -5,7 +5,7 @@ module ClaudeMemory
     # Domain model representing a conflict between two facts
     class Conflict
       attr_reader :id, :fact_a_id, :fact_b_id, :status, :notes,
-                  :detected_at, :resolved_at
+        :detected_at, :resolved_at
 
       def initialize(attributes)
         @id = attributes[:id]

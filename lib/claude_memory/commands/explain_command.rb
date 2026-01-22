@@ -11,7 +11,7 @@ module ClaudeMemory
           return 1
         end
 
-        opts = parse_options(args[1..-1] || [], {scope: "project"}) do |o|
+        opts = parse_options(args[1..] || [], {scope: "project"}) do |o|
           OptionParser.new do |parser|
             parser.on("--scope SCOPE", "Scope: project or global") { |v| o[:scope] = v }
           end

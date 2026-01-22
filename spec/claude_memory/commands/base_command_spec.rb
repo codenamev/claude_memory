@@ -4,6 +4,7 @@ require "stringio"
 
 RSpec.describe ClaudeMemory::Commands::BaseCommand do
   # Concrete test command for testing base functionality
+  # rubocop:disable Lint/ConstantDefinitionInBlock
   class TestCommand < ClaudeMemory::Commands::BaseCommand
     def call(args)
       if args.include?("--fail")
@@ -25,6 +26,7 @@ RSpec.describe ClaudeMemory::Commands::BaseCommand do
       end
     end
   end
+  # rubocop:enable Lint/ConstantDefinitionInBlock
 
   let(:stdout) { StringIO.new }
   let(:stderr) { StringIO.new }

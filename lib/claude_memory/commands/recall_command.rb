@@ -11,7 +11,7 @@ module ClaudeMemory
           return 1
         end
 
-        opts = parse_options(args[1..-1] || [], {limit: 10, scope: "all"}) do |o|
+        opts = parse_options(args[1..] || [], {limit: 10, scope: "all"}) do |o|
           OptionParser.new do |parser|
             parser.on("--limit N", Integer, "Max results") { |v| o[:limit] = v }
             parser.on("--scope SCOPE", "Scope: project, global, or all") { |v| o[:scope] = v }

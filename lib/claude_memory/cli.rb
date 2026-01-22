@@ -22,7 +22,7 @@ module ClaudeMemory
       end
 
       command = command_class.new(stdout: @stdout, stderr: @stderr, stdin: @stdin)
-      command.call(@args[1..-1] || [])
+      command.call(@args[1..] || [])
     end
 
     private

@@ -21,7 +21,7 @@ module ClaudeMemory
           return Hook::ExitCodes::ERROR
         end
 
-        opts = parse_options(args[1..-1] || [], {db: ClaudeMemory.project_db_path}) do |o|
+        opts = parse_options(args[1..] || [], {db: ClaudeMemory.project_db_path}) do |o|
           OptionParser.new do |parser|
             parser.on("--db PATH", "Database path") { |v| o[:db] = v }
           end
