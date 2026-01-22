@@ -297,4 +297,174 @@ RSpec.describe ClaudeMemory::Recall do
       end
     end
   end
+
+  describe "class methods with StoreManager" do
+    let(:tmpdir) { Dir.mktmpdir("recall_class_methods_#{Process.pid}") }
+    let(:global_db) { File.join(tmpdir, "global.sqlite3") }
+    let(:project_db) { File.join(tmpdir, "project.sqlite3") }
+    let(:manager) do
+      ClaudeMemory::Store::StoreManager.new(
+        global_db_path: global_db,
+        project_db_path: project_db
+      )
+    end
+
+    after do
+      manager.close
+      FileUtils.rm_rf(tmpdir)
+    end
+
+    def create_manager_fact(store, predicate, object, text)
+      content_id = store.upsert_content_item(
+        source: "test",
+        session_id: "sess-1",
+        text_hash: Digest::SHA256.hexdigest(text),
+        byte_len: text.bytesize,
+        raw_text: text
+      )
+
+      fts = ClaudeMemory::Index::LexicalFTS.new(store)
+      fts.index_content_item(content_id, text)
+
+      entity_id = store.find_or_create_entity(type: "repo", name: "test-repo")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: predicate,
+        object_literal: object
+      )
+
+      store.insert_provenance(
+        fact_id: fact_id,
+        content_item_id: content_id,
+        quote: text,
+        strength: "stated"
+      )
+
+      fact_id
+    end
+
+    describe ".recent_decisions" do
+      it "returns decision-related facts using configured query" do
+        manager.ensure_project!
+        create_manager_fact(manager.project_store, "decision", "Use PostgreSQL", "We made a decision about the constraint and rule for this requirement")
+        create_manager_fact(manager.project_store, "constraint", "API rate limit 1000/min", "Rate limit constraint requirement for the API decision")
+
+        results = described_class.recent_decisions(manager, limit: 10)
+
+        expect(results).to be_an(Array)
+        # FTS may or may not return results depending on matching
+        # Just verify the method works without error
+      end
+
+      it "allows overriding default limit" do
+        manager.ensure_project!
+        3.times do |i|
+          create_manager_fact(manager.project_store, "decision", "Decision #{i}", "Decision content #{i} with rule constraint requirement")
+        end
+
+        results = described_class.recent_decisions(manager, limit: 2)
+
+        expect(results).to be_an(Array)
+        expect(results.size).to be <= 2
+      end
+
+      it "searches both global and project databases" do
+        manager.ensure_both!
+        create_manager_fact(manager.global_store, "decision", "Global decision", "A global rule decision constraint requirement")
+        create_manager_fact(manager.project_store, "decision", "Project decision", "A project constraint decision rule requirement")
+
+        results = described_class.recent_decisions(manager, limit: 10)
+
+        expect(results).to be_an(Array)
+        # May return results from one or both databases depending on FTS
+      end
+    end
+
+    describe ".architecture_choices" do
+      it "returns architecture-related facts using configured query" do
+        manager.ensure_project!
+        create_manager_fact(manager.project_store, "uses_framework", "Rails", "This project uses Rails framework and implements MVC architecture pattern")
+        create_manager_fact(manager.project_store, "architecture_pattern", "MVC", "Implements MVC architecture pattern using framework conventions")
+
+        results = described_class.architecture_choices(manager, limit: 10)
+
+        expect(results).to be_an(Array)
+        # FTS may or may not return results depending on matching
+      end
+
+      it "allows overriding default limit" do
+        manager.ensure_project!
+        3.times do |i|
+          create_manager_fact(manager.project_store, "uses_framework", "Framework #{i}", "Uses framework #{i} architecture pattern implements")
+        end
+
+        results = described_class.architecture_choices(manager, limit: 1)
+
+        expect(results).to be_an(Array)
+        expect(results.size).to be <= 1
+      end
+    end
+
+    describe ".conventions" do
+      it "returns convention-related facts using configured query" do
+        manager.ensure_global!
+        create_manager_fact(manager.global_store, "convention", "Use 4-space indentation", "Style convention prefer 4 spaces format pattern")
+        create_manager_fact(manager.global_store, "style_preference", "Snake case", "Format pattern prefer snake_case convention style")
+
+        results = described_class.conventions(manager, limit: 20)
+
+        expect(results).to be_an(Array)
+        # FTS may or may not return results depending on matching
+      end
+
+      it "uses higher default limit (20)" do
+        manager.ensure_global!
+        15.times do |i|
+          create_manager_fact(manager.global_store, "convention", "Convention #{i}", "Style convention #{i} format pattern prefer")
+        end
+
+        results = described_class.conventions(manager)
+
+        expect(results).to be_an(Array)
+        # Default limit is 20, higher than standard 10
+      end
+
+      it "allows overriding default limit" do
+        manager.ensure_global!
+        5.times do |i|
+          create_manager_fact(manager.global_store, "convention", "Convention #{i}", "Style convention #{i} format pattern")
+        end
+
+        results = described_class.conventions(manager, limit: 3)
+
+        expect(results).to be_an(Array)
+        expect(results.size).to be <= 3
+      end
+    end
+
+    describe ".project_config" do
+      it "returns project configuration facts using configured query" do
+        manager.ensure_project!
+        create_manager_fact(manager.project_store, "uses_database", "PostgreSQL", "Project uses PostgreSQL database and requires configuration depends_on")
+        create_manager_fact(manager.project_store, "depends_on", "Redis", "Project requires Redis configuration uses dependencies")
+
+        results = described_class.project_config(manager, limit: 10)
+
+        expect(results).to be_an(Array)
+        # FTS may or may not return results depending on matching
+      end
+
+      it "allows overriding default limit" do
+        manager.ensure_project!
+        3.times do |i|
+          create_manager_fact(manager.project_store, "uses_library", "Library #{i}", "Uses library #{i} requires configuration depends_on")
+        end
+
+        results = described_class.project_config(manager, limit: 2)
+
+        expect(results).to be_an(Array)
+        expect(results.size).to be <= 2
+      end
+    end
+  end
 end

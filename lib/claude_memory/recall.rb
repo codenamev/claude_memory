@@ -6,6 +6,24 @@ module ClaudeMemory
     SCOPE_GLOBAL = "global"
     SCOPE_ALL = "all"
 
+    class << self
+      def recent_decisions(manager, limit: 10)
+        Shortcuts.for(:decisions, manager, limit: limit)
+      end
+
+      def architecture_choices(manager, limit: 10)
+        Shortcuts.for(:architecture, manager, limit: limit)
+      end
+
+      def conventions(manager, limit: 20)
+        Shortcuts.for(:conventions, manager, limit: limit)
+      end
+
+      def project_config(manager, limit: 10)
+        Shortcuts.for(:project_config, manager, limit: limit)
+      end
+    end
+
     def initialize(store_or_manager, fts: nil, project_path: nil, env: ENV)
       @project_path = project_path || env["CLAUDE_PROJECT_DIR"] || Dir.pwd
 
