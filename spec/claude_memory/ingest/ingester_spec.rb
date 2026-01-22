@@ -77,6 +77,89 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
       expect(result2[:content_id]).to eq(id1)
     end
 
+    context "privacy tag stripping" do
+      it "strips private tags from ingested content" do
+        File.write(transcript_path, "Public <private>Secret API key</private> Public")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        item = store.content_items.where(id: result[:content_id]).first
+        expect(item[:raw_text]).to eq("Public  Public")
+        expect(item[:raw_text]).not_to include("Secret API key")
+      end
+
+      it "strips multiple privacy tag types" do
+        File.write(transcript_path, "A <private>X</private> B <no-memory>Y</no-memory> C <secret>Z</secret> D")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        item = store.content_items.where(id: result[:content_id]).first
+        expect(item[:raw_text]).to eq("A  B  C  D")
+        expect(item[:raw_text]).not_to include("X")
+        expect(item[:raw_text]).not_to include("Y")
+        expect(item[:raw_text]).not_to include("Z")
+      end
+
+      it "strips claude-memory-context system tags" do
+        File.write(transcript_path, "New <claude-memory-context>Old context</claude-memory-context> Content")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        item = store.content_items.where(id: result[:content_id]).first
+        expect(item[:raw_text]).to eq("New  Content")
+        expect(item[:raw_text]).not_to include("Old context")
+      end
+
+      it "preserves content without privacy tags" do
+        File.write(transcript_path, "No privacy tags in this content")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        item = store.content_items.where(id: result[:content_id]).first
+        expect(item[:raw_text]).to eq("No privacy tags in this content")
+      end
+
+      it "handles multiline private content" do
+        content = <<~TEXT
+          Config:
+          <private>
+          API_KEY=secret123
+          PASSWORD=pass456
+          </private>
+          Public config
+        TEXT
+
+        File.write(transcript_path, content)
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        item = store.content_items.where(id: result[:content_id]).first
+        expect(item[:raw_text]).not_to include("API_KEY")
+        expect(item[:raw_text]).not_to include("secret123")
+        expect(item[:raw_text]).to include("Public config")
+      end
+    end
+
     context "project scoping" do
       it "stores project_path from explicit parameter" do
         File.write(transcript_path, "content\n")

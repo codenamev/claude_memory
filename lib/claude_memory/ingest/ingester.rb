@@ -17,6 +17,9 @@ module ClaudeMemory
 
         return {status: :no_change, bytes_read: 0} if delta.nil?
 
+        # Strip privacy tags before storing
+        delta = ContentSanitizer.strip_tags(delta)
+
         resolved_project = project_path || detect_project_path
 
         text_hash = Digest::SHA256.hexdigest(delta)
