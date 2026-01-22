@@ -44,9 +44,10 @@ module ClaudeMemory
       def publish(payload)
         mode = payload.fetch("mode", "shared").to_sym
         since = payload["since"]
+        rules_dir = payload["rules_dir"]
 
         publisher = Publish.new(@store)
-        publisher.publish!(mode: mode, since: since)
+        publisher.publish!(mode: mode, since: since, rules_dir: rules_dir)
       end
     end
   end
