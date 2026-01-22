@@ -12,13 +12,13 @@ module ClaudeMemory
         unless subcommand
           stderr.puts "Usage: claude-memory hook <ingest|sweep|publish> [options]"
           stderr.puts "\nReads hook payload JSON from stdin."
-          return 1
+          return Hook::ExitCodes::ERROR
         end
 
         unless %w[ingest sweep publish].include?(subcommand)
           stderr.puts "Unknown hook command: #{subcommand}"
           stderr.puts "Available: ingest, sweep, publish"
-          return 1
+          return Hook::ExitCodes::ERROR
         end
 
         opts = parse_options(args[1..-1] || [], {db: ClaudeMemory.project_db_path}) do |o|
@@ -26,15 +26,15 @@ module ClaudeMemory
             parser.on("--db PATH", "Database path") { |v| o[:db] = v }
           end
         end
-        return 1 if opts.nil?
+        return Hook::ExitCodes::ERROR if opts.nil?
 
         payload = parse_hook_payload
-        return 1 unless payload
+        return Hook::ExitCodes::ERROR unless payload
 
         store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
         handler = ClaudeMemory::Hook::Handler.new(store)
 
-        case subcommand
+        exit_code = case subcommand
         when "ingest"
           hook_ingest(handler, payload)
         when "sweep"
@@ -44,10 +44,10 @@ module ClaudeMemory
         end
 
         store.close
-        0
+        exit_code
       rescue ClaudeMemory::Hook::Handler::PayloadError => e
         stderr.puts "Payload error: #{e.message}"
-        1
+        Hook::ExitCodes::ERROR
       end
 
       private
@@ -66,10 +66,15 @@ module ClaudeMemory
         case result[:status]
         when :ingested
           stdout.puts "Ingested #{result[:bytes_read]} bytes (content_id: #{result[:content_id]})"
+          Hook::ExitCodes::SUCCESS
         when :no_change
           stdout.puts "No new content to ingest"
+          Hook::ExitCodes::SUCCESS
         when :skipped
           stdout.puts "Skipped ingestion: #{result[:reason]}"
+          Hook::ExitCodes::WARNING
+        else
+          Hook::ExitCodes::ERROR
         end
       end
 
@@ -80,6 +85,8 @@ module ClaudeMemory
         stdout.puts "Sweep complete:"
         stdout.puts "  Elapsed: #{stats[:elapsed_seconds].round(2)}s"
         stdout.puts "  Budget honored: #{stats[:budget_honored]}"
+
+        Hook::ExitCodes::SUCCESS
       end
 
       def hook_publish(handler, payload)
@@ -91,6 +98,8 @@ module ClaudeMemory
         when :unchanged
           stdout.puts "No changes - #{result[:path]} is up to date"
         end
+
+        Hook::ExitCodes::SUCCESS
       end
     end
   end
