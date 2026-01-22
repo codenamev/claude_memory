@@ -154,5 +154,115 @@ RSpec.describe ClaudeMemory::MCP::Tools do
         expect(result[:error]).to include("not found")
       end
     end
+
+    describe "memory.recall_index" do
+      it "returns lightweight index format" do
+        # Create content and fact
+        content_id = manager.project_store.upsert_content_item(
+          source: "test",
+          session_id: "sess-1",
+          text_hash: "hash",
+          byte_len: 20,
+          raw_text: "PostgreSQL database"
+        )
+
+        fts = ClaudeMemory::Index::LexicalFTS.new(manager.project_store)
+        fts.index_content_item(content_id, "PostgreSQL database")
+
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test-repo")
+        fact_id = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "uses_database",
+          object_literal: "PostgreSQL with connection pooling"
+        )
+
+        manager.project_store.insert_provenance(
+          fact_id: fact_id,
+          content_item_id: content_id,
+          quote: "PostgreSQL",
+          strength: "stated"
+        )
+
+        result = manager_tools.call("memory.recall_index", {
+          "query" => "database",
+          "limit" => 10
+        })
+
+        expect(result[:result_count]).to be > 0
+        expect(result[:total_estimated_tokens]).to be > 0
+
+        fact = result[:facts].first
+        expect(fact[:id]).to eq(fact_id)
+        expect(fact[:predicate]).to eq("uses_database")
+        expect(fact[:object_preview].length).to be <= 50
+        expect(fact[:tokens]).to be > 0
+      end
+
+      it "returns empty when no matches" do
+        result = manager_tools.call("memory.recall_index", {"query" => "nonexistent"})
+
+        expect(result[:result_count]).to eq(0)
+        expect(result[:facts]).to be_empty
+      end
+    end
+
+    describe "memory.recall_details" do
+      it "fetches full details for fact IDs" do
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test-repo")
+        fact_id = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "uses_framework",
+          object_literal: "Rails with Hotwire"
+        )
+
+        content_id = manager.project_store.upsert_content_item(
+          source: "test",
+          session_id: "sess-1",
+          text_hash: "hash",
+          byte_len: 10,
+          raw_text: "Rails app"
+        )
+
+        manager.project_store.insert_provenance(
+          fact_id: fact_id,
+          content_item_id: content_id,
+          quote: "Rails",
+          strength: "stated"
+        )
+
+        result = manager_tools.call("memory.recall_details", {
+          "fact_ids" => [fact_id],
+          "scope" => "project"
+        })
+
+        expect(result[:fact_count]).to eq(1)
+
+        fact = result[:facts].first
+        expect(fact[:fact][:id]).to eq(fact_id)
+        expect(fact[:fact][:object]).to eq("Rails with Hotwire")
+        expect(fact[:receipts]).to be_an(Array)
+        expect(fact[:relationships]).not_to be_nil
+      end
+
+      it "handles multiple fact IDs" do
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test-repo")
+        id1 = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "uses_database",
+          object_literal: "PostgreSQL"
+        )
+        id2 = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "uses_framework",
+          object_literal: "Rails"
+        )
+
+        result = manager_tools.call("memory.recall_details", {
+          "fact_ids" => [id1, id2]
+        })
+
+        expect(result[:fact_count]).to eq(2)
+      end
+    end
   end
 end
