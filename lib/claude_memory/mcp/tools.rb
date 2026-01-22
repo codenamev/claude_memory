@@ -173,6 +173,36 @@ module ClaudeMemory
               },
               required: ["facts"]
             }
+          },
+          {
+            name: "memory.decisions",
+            description: "Quick access to architectural decisions, constraints, and rules",
+            inputSchema: {
+              type: "object",
+              properties: {
+                limit: {type: "integer", default: 10, description: "Maximum results to return"}
+              }
+            }
+          },
+          {
+            name: "memory.conventions",
+            description: "Quick access to coding conventions and style preferences (global scope)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                limit: {type: "integer", default: 20, description: "Maximum results to return"}
+              }
+            }
+          },
+          {
+            name: "memory.architecture",
+            description: "Quick access to framework choices and architectural patterns",
+            inputSchema: {
+              type: "object",
+              properties: {
+                limit: {type: "integer", default: 10, description: "Maximum results to return"}
+              }
+            }
           }
         ]
       end
@@ -199,6 +229,12 @@ module ClaudeMemory
           promote(arguments)
         when "memory.store_extraction"
           store_extraction(arguments)
+        when "memory.decisions"
+          decisions(arguments)
+        when "memory.conventions"
+          conventions(arguments)
+        when "memory.architecture"
+          architecture(arguments)
         else
           {error: "Unknown tool: #{name}"}
         end
@@ -491,6 +527,44 @@ module ClaudeMemory
         else
           @legacy_store
         end
+      end
+
+      def decisions(args)
+        return {error: "Decisions shortcut requires StoreManager"} unless @manager
+
+        results = Recall.recent_decisions(@manager, limit: args["limit"] || 10)
+        format_shortcut_results(results, "decisions")
+      end
+
+      def conventions(args)
+        return {error: "Conventions shortcut requires StoreManager"} unless @manager
+
+        results = Recall.conventions(@manager, limit: args["limit"] || 20)
+        format_shortcut_results(results, "conventions")
+      end
+
+      def architecture(args)
+        return {error: "Architecture shortcut requires StoreManager"} unless @manager
+
+        results = Recall.architecture_choices(@manager, limit: args["limit"] || 10)
+        format_shortcut_results(results, "architecture")
+      end
+
+      def format_shortcut_results(results, category)
+        {
+          category: category,
+          count: results.size,
+          facts: results.map do |r|
+            {
+              id: r[:fact][:id],
+              subject: r[:fact][:subject_name],
+              predicate: r[:fact][:predicate],
+              object: r[:fact][:object_literal],
+              scope: r[:fact][:scope],
+              source: r[:source]
+            }
+          end
+        }
       end
 
       def db_stats(store)

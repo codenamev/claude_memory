@@ -36,6 +36,13 @@ RSpec.describe ClaudeMemory::MCP::Tools do
       defs = tools.definitions
       expect(defs.map { |d| d[:name] }).to include("memory.promote")
     end
+
+    it "includes semantic shortcut tools" do
+      defs = tools.definitions
+      expect(defs.map { |d| d[:name] }).to include(
+        "memory.decisions", "memory.conventions", "memory.architecture"
+      )
+    end
   end
 
   describe "#call" do
@@ -262,6 +269,145 @@ RSpec.describe ClaudeMemory::MCP::Tools do
         })
 
         expect(result[:fact_count]).to eq(2)
+      end
+    end
+
+    def create_manager_fact_with_content(store, predicate, object, text)
+      content_id = store.upsert_content_item(
+        source: "test",
+        session_id: "sess-1",
+        text_hash: Digest::SHA256.hexdigest(text),
+        byte_len: text.bytesize,
+        raw_text: text
+      )
+
+      fts = ClaudeMemory::Index::LexicalFTS.new(store)
+      fts.index_content_item(content_id, text)
+
+      entity_id = store.find_or_create_entity(type: "repo", name: "test-repo")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: predicate,
+        object_literal: object
+      )
+
+      store.insert_provenance(
+        fact_id: fact_id,
+        content_item_id: content_id,
+        quote: text,
+        strength: "stated"
+      )
+
+      fact_id
+    end
+
+    describe "memory.decisions" do
+      it "returns decision-related facts using shortcut" do
+        create_manager_fact_with_content(
+          manager.project_store,
+          "decision",
+          "Use PostgreSQL",
+          "We made a decision about the constraint and rule for this requirement"
+        )
+
+        result = manager_tools.call("memory.decisions", {"limit" => 10})
+
+        expect(result[:category]).to eq("decisions")
+        expect(result[:count]).to be_a(Integer)
+        expect(result[:facts]).to be_an(Array)
+      end
+
+      it "allows overriding limit" do
+        3.times do |i|
+          create_manager_fact_with_content(
+            manager.project_store,
+            "decision",
+            "Decision #{i}",
+            "Decision #{i} about constraint rule requirement"
+          )
+        end
+
+        result = manager_tools.call("memory.decisions", {"limit" => 2})
+
+        expect(result[:count]).to be <= 2
+      end
+
+      it "uses default limit of 10" do
+        result = manager_tools.call("memory.decisions", {})
+
+        expect(result[:facts]).to be_an(Array)
+        # Default limit is 10
+      end
+    end
+
+    describe "memory.conventions" do
+      it "returns convention-related facts using shortcut" do
+        create_manager_fact_with_content(
+          manager.global_store,
+          "convention",
+          "Use 4-space indentation",
+          "Style convention prefer 4 spaces format pattern"
+        )
+
+        result = manager_tools.call("memory.conventions", {"limit" => 20})
+
+        expect(result[:category]).to eq("conventions")
+        expect(result[:count]).to be_a(Integer)
+        expect(result[:facts]).to be_an(Array)
+      end
+
+      it "uses higher default limit of 20" do
+        result = manager_tools.call("memory.conventions", {})
+
+        expect(result[:facts]).to be_an(Array)
+        # Default limit is 20 for conventions
+      end
+
+      it "allows overriding limit" do
+        5.times do |i|
+          create_manager_fact_with_content(
+            manager.global_store,
+            "convention",
+            "Convention #{i}",
+            "Style convention #{i} format pattern prefer"
+          )
+        end
+
+        result = manager_tools.call("memory.conventions", {"limit" => 3})
+
+        expect(result[:count]).to be <= 3
+      end
+    end
+
+    describe "memory.architecture" do
+      it "returns architecture-related facts using shortcut" do
+        create_manager_fact_with_content(
+          manager.project_store,
+          "uses_framework",
+          "Rails",
+          "This project uses Rails framework and implements MVC architecture pattern"
+        )
+
+        result = manager_tools.call("memory.architecture", {"limit" => 10})
+
+        expect(result[:category]).to eq("architecture")
+        expect(result[:count]).to be_a(Integer)
+        expect(result[:facts]).to be_an(Array)
+      end
+
+      it "allows overriding limit" do
+        3.times do |i|
+          create_manager_fact_with_content(
+            manager.project_store,
+            "uses_framework",
+            "Framework #{i}",
+            "Uses framework #{i} architecture pattern implements"
+          )
+        end
+
+        result = manager_tools.call("memory.architecture", {"limit" => 1})
+
+        expect(result[:count]).to be <= 1
       end
     end
   end
