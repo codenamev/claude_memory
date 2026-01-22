@@ -172,7 +172,6 @@ None at this time! Please [report bugs](https://github.com/codenamev/claude_memo
 - 🐛 [Report a bug](https://github.com/codenamev/claude_memory/issues)
 - 💡 [Request a feature](https://github.com/codenamev/claude_memory/issues)
 - 💬 [Join discussions](https://github.com/codenamev/claude_memory/discussions)
-- 📧 Email: valentino@hanamirb.org
 
 ---
 

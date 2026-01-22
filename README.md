@@ -17,21 +17,35 @@ It automatically:
 
 ## Quick Start
 
-### Install
+### 1. Install the Gem
 ```bash
 gem install claude_memory
 ```
 
-### Initialize
+### 2. Install the Plugin
+
+From within Claude Code, add the marketplace and install the plugin:
+
 ```bash
-# In your project
-cd my-project
-claude-memory init
+# Add the marketplace (one-time setup)
+/plugin marketplace add codenamev/claude_memory
 
-# Or globally for all projects
-claude-memory init --global
+# Install the plugin
+/plugin install claude-memory
+```
 
-# Verify setup
+### 3. Analyze Your Project
+
+Run the analyze command to bootstrap memory with your project's tech stack:
+
+```
+/claude-memory:analyze
+```
+
+This reads your project files (Gemfile, package.json, etc.) and stores facts about languages, frameworks, tools, and conventions.
+
+### 4. Verify Setup
+```bash
 claude-memory doctor
 ```
 
