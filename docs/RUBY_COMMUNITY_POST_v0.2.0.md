@@ -32,7 +32,6 @@ Thanks for your consideration!
 
 Valentino Stoll
 https://github.com/codenamev
-valentino@hanamirb.org
 ```
 
 ---
@@ -451,7 +450,6 @@ Would this be a good fit for an upcoming episode? Happy to discuss the technical
 Thanks for your consideration!
 
 Valentino Stoll
-valentino@hanamirb.org
 https://github.com/codenamev
 ```
 
