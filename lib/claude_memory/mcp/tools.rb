@@ -32,6 +32,31 @@ module ClaudeMemory
             }
           },
           {
+            name: "memory.recall_index",
+            description: "Layer 1: Search for facts and get lightweight index (IDs, previews, token counts). Use this first before fetching full details.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                query: {type: "string", description: "Search query for fact discovery"},
+                limit: {type: "integer", description: "Maximum results to return", default: 20},
+                scope: {type: "string", enum: ["all", "global", "project"], description: "Scope: 'all' (both), 'global' (user-wide), 'project' (current only)", default: "all"}
+              },
+              required: ["query"]
+            }
+          },
+          {
+            name: "memory.recall_details",
+            description: "Layer 2: Fetch full details for specific fact IDs from the index. Use after memory.recall_index to get complete information.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                fact_ids: {type: "array", items: {type: "integer"}, description: "Fact IDs from memory.recall_index"},
+                scope: {type: "string", enum: ["project", "global"], description: "Database to query", default: "project"}
+              },
+              required: ["fact_ids"]
+            }
+          },
+          {
             name: "memory.explain",
             description: "Get detailed explanation of a fact with provenance",
             inputSchema: {
@@ -156,6 +181,10 @@ module ClaudeMemory
         case name
         when "memory.recall"
           recall(arguments)
+        when "memory.recall_index"
+          recall_index(arguments)
+        when "memory.recall_details"
+          recall_details(arguments)
         when "memory.explain"
           explain(arguments)
         when "memory.changes"
@@ -192,6 +221,76 @@ module ClaudeMemory
               receipts: r[:receipts].map { |p| {quote: p[:quote], strength: p[:strength]} }
             }
           end
+        }
+      end
+
+      def recall_index(args)
+        scope = args["scope"] || "all"
+        results = @recall.query_index(args["query"], limit: args["limit"] || 20, scope: scope)
+
+        total_tokens = results.sum { |r| r[:token_estimate] }
+
+        {
+          query: args["query"],
+          scope: scope,
+          result_count: results.size,
+          total_estimated_tokens: total_tokens,
+          facts: results.map do |r|
+            {
+              id: r[:id],
+              subject: r[:subject],
+              predicate: r[:predicate],
+              object_preview: r[:object_preview],
+              status: r[:status],
+              scope: r[:scope],
+              confidence: r[:confidence],
+              tokens: r[:token_estimate],
+              source: r[:source]
+            }
+          end
+        }
+      end
+
+      def recall_details(args)
+        fact_ids = args["fact_ids"]
+        scope = args["scope"] || "project"
+
+        # Batch fetch detailed explanations
+        explanations = fact_ids.map do |fact_id|
+          explanation = @recall.explain(fact_id, scope: scope)
+          next nil if explanation.is_a?(Core::NullExplanation)
+
+          {
+            fact: {
+              id: explanation[:fact][:id],
+              subject: explanation[:fact][:subject_name],
+              predicate: explanation[:fact][:predicate],
+              object: explanation[:fact][:object_literal],
+              status: explanation[:fact][:status],
+              confidence: explanation[:fact][:confidence],
+              scope: explanation[:fact][:scope],
+              valid_from: explanation[:fact][:valid_from],
+              valid_to: explanation[:fact][:valid_to]
+            },
+            receipts: explanation[:receipts].map { |r|
+              {
+                quote: r[:quote],
+                strength: r[:strength],
+                session_id: r[:session_id],
+                occurred_at: r[:occurred_at]
+              }
+            },
+            relationships: {
+              supersedes: explanation[:supersedes],
+              superseded_by: explanation[:superseded_by],
+              conflicts: explanation[:conflicts].map { |c| {id: c[:id], status: c[:status]} }
+            }
+          }
+        end.compact
+
+        {
+          fact_count: explanations.size,
+          facts: explanations
         }
       end
 
