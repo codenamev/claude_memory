@@ -216,14 +216,14 @@ RSpec.describe ClaudeMemory::CLI do
       it "reports error for invalid payload" do
         code = run_cli_with_stdin("hook", "ingest", "--db", db_path, input: "{}")
 
-        expect(code).to eq(1)
+        expect(code).to eq(ClaudeMemory::Hook::ExitCodes::ERROR)
         expect(stderr.string).to include("session_id")
       end
 
       it "handles invalid JSON" do
         code = run_cli_with_stdin("hook", "ingest", "--db", db_path, input: "not json")
 
-        expect(code).to eq(1)
+        expect(code).to eq(ClaudeMemory::Hook::ExitCodes::ERROR)
         expect(stderr.string).to include("Invalid JSON")
       end
 
@@ -235,7 +235,7 @@ RSpec.describe ClaudeMemory::CLI do
 
         code = run_cli_with_stdin("hook", "ingest", "--db", db_path, input: payload)
 
-        expect(code).to eq(0)
+        expect(code).to eq(ClaudeMemory::Hook::ExitCodes::WARNING)
         expect(stdout.string).to include("Skipped ingestion: transcript_not_found")
       end
     end
@@ -289,14 +289,14 @@ RSpec.describe ClaudeMemory::CLI do
     it "shows help for unknown hook subcommand" do
       code = run_cli_with_stdin("hook", "unknown", input: "{}")
 
-      expect(code).to eq(1)
+      expect(code).to eq(ClaudeMemory::Hook::ExitCodes::ERROR)
       expect(stderr.string).to include("Unknown hook command")
     end
 
     it "shows help when no subcommand given" do
       code = run_cli_with_stdin("hook", input: "")
 
-      expect(code).to eq(1)
+      expect(code).to eq(ClaudeMemory::Hook::ExitCodes::ERROR)
       expect(stderr.string).to include("Usage:")
     end
   end
