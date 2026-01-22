@@ -118,7 +118,6 @@ bundle exec rspec
 
 - 🐛 [Report a bug](https://github.com/codenamev/claude_memory/issues)
 - 💬 [Discussions](https://github.com/codenamev/claude_memory/discussions)
-- 📧 Email: valentino@hanamirb.org
 
 ## License
 
