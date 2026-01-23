@@ -71,8 +71,15 @@ module ClaudeMemory
           stdout.puts "No new content to ingest"
           Hook::ExitCodes::SUCCESS
         when :skipped
-          stdout.puts "Skipped ingestion: #{result[:reason]}"
-          Hook::ExitCodes::WARNING
+          # Different reasons for skipping have different severity
+          if result[:reason] == "unchanged"
+            stdout.puts "No new content to ingest"
+            Hook::ExitCodes::SUCCESS
+          else
+            # transcript_not_found or other skipped reasons
+            stdout.puts "Skipped ingestion: #{result[:reason]}"
+            Hook::ExitCodes::WARNING
+          end
         else
           Hook::ExitCodes::ERROR
         end

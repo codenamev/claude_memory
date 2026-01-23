@@ -32,7 +32,7 @@ module ClaudeMemory
         case result[:status]
         when :ingested
           stdout.puts "Ingested #{result[:bytes_read]} bytes (content_id: #{result[:content_id]})"
-        when :no_change
+        when :no_change, :skipped
           stdout.puts "No new content to ingest"
         end
 

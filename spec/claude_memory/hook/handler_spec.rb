@@ -38,7 +38,8 @@ RSpec.describe ClaudeMemory::Hook::Handler do
       handler.ingest(payload)
       result = handler.ingest(payload)
 
-      expect(result[:status]).to eq(:no_change)
+      # With incremental sync, unchanged files are skipped
+      expect(result[:status]).to eq(:skipped)
     end
 
     it "raises for missing session_id" do
