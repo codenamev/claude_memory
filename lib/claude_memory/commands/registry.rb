@@ -24,7 +24,8 @@ module ClaudeMemory
         "db:init" => "DbInitCommand",
         "init" => "InitCommand",
         "serve-mcp" => "ServeMcpCommand",
-        "hook" => "HookCommand"
+        "hook" => "HookCommand",
+        "index" => "IndexCommand"
       }.freeze
 
       # Find a command class by name

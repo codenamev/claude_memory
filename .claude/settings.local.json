@@ -17,7 +17,10 @@
       "mcp__memory__memory_explain",
       "Bash(bundle exec rspec:*)",
       "Bash(bundle exec rake:*)",
-      "mcp__plugin_claude-memory_memory__memory_store_extraction"
+      "mcp__plugin_claude-memory_memory__memory_store_extraction",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(grep:*)",
+      "Bash(gem list:*)"
     ]
   },
   "enableAllProjectMcpServers": true
