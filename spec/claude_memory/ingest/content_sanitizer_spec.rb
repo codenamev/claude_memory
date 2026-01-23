@@ -15,12 +15,6 @@ RSpec.describe ClaudeMemory::Ingest::ContentSanitizer do
     end
   end
 
-  describe "::MAX_TAG_COUNT" do
-    it "defines ReDoS protection limit" do
-      expect(described_class::MAX_TAG_COUNT).to eq(100)
-    end
-  end
-
   describe ".strip_tags" do
     it "strips private tags and content" do
       text = "Public <private>Secret</private> Public"
@@ -65,20 +59,11 @@ RSpec.describe ClaudeMemory::Ingest::ContentSanitizer do
       expect(result).to eq("No privacy tags here")
     end
 
-    it "raises error when tag count exceeds limit" do
-      text = "<private>x</private>" * 101
+    it "handles large tag counts efficiently" do
+      text = "<private>x</private>" * 1000
 
-      expect {
-        described_class.strip_tags(text)
-      }.to raise_error(ClaudeMemory::Error, /Too many privacy tags/)
-    end
-
-    it "allows reasonable tag counts" do
-      text = "<private>x</private>" * 50
-
-      expect {
-        described_class.strip_tags(text)
-      }.not_to raise_error
+      result = described_class.strip_tags(text)
+      expect(result).to eq("" * 1000)
     end
 
     it "does not mutate original text" do
