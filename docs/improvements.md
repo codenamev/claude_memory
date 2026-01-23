@@ -18,6 +18,14 @@ The following improvements from the original analysis have been successfully imp
 3. **Slim Orchestrator Pattern** - CLI refactored to thin router with extracted command classes
 4. **Semantic Shortcuts** - `memory.decisions`, `memory.conventions`, and `memory.architecture` MCP tools
 5. **Exit Code Strategy** - Hook::ExitCodes module with SUCCESS/WARNING/ERROR constants
+6. **WAL Mode for Concurrency** - SQLite Write-Ahead Logging enabled for better concurrent access
+7. **Enhanced Statistics** - Comprehensive stats command showing facts, entities, provenance, conflicts
+8. **Session Metadata Tracking** - Captures git_branch, cwd, claude_version, thinking_level from transcripts
+9. **Tool Usage Tracking** - Dedicated tool_calls table tracking tool names, inputs, timestamps
+10. **Semantic Search with TF-IDF** - Local embeddings (384-dimensional), hybrid vector + text search
+11. **Multi-Concept AND Search** - Query facts matching all of 2-5 concepts simultaneously
+12. **Incremental Sync** - mtime-based change detection to skip unchanged transcript files
+13. **Context-Aware Queries** - Filter facts by git branch, directory, or tools used
 
 ---
 
@@ -866,939 +874,71 @@ npm install better-sqlite3  # Needs node-gyp + build tools
 - CSS/theming
 
 **Alternative**: CLI output is sufficient. Add web UI if users request it.
+**Alternative**: CLI output is sufficient. Add web UI if users request it.
 
 ---
 
-## 6. Local Vector Embeddings for Semantic Search
-
-### What Episodic-Memory Does
-
-**Local Embedding Generation**:
-- Uses Transformers.js to run models in Node.js (offline-capable)
-- Model: `Xenova/all-MiniLM-L6-v2` (384-dimensional vectors)
-- Truncates text to 2000 chars (512 token limit for model)
-- Normalizes vectors for cosine similarity
-
-**File**: `src/embeddings.ts`
-
-```typescript
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const truncated = text.substring(0, 2000);
-  const output = await embeddingPipeline!(truncated, {
-    pooling: 'mean',
-    normalize: true
-  });
-  return Array.from(output.data);
-}
-```
-
-**Vector Storage with sqlite-vec**:
-```sql
-CREATE VIRTUAL TABLE vec_exchanges USING vec0(
-  id TEXT PRIMARY KEY,
-  embedding FLOAT[384]
-);
-```
-
-**Hybrid Search**:
-- Vector similarity: `WHERE vec.embedding MATCH ? AND k = ? ORDER BY vec.distance`
-- Text search: `WHERE user_message LIKE ? OR assistant_message LIKE ?`
-- Both modes: Merge and deduplicate results
-
-### What We Should Do
-
-**Priority**: HIGH
-
-**Implementation**:
-
-1. **Add embeddings column and virtual table**:
-   ```ruby
-   # lib/claude_memory/store/sqlite_store.rb
-   db.create_table :facts do
-     # ... existing columns ...
-     String :embedding_vector  # JSON array of floats
-   end
-
-   # Create virtual table for vector search
-   db.execute <<-SQL
-     CREATE VIRTUAL TABLE IF NOT EXISTS vec_facts USING vec0(
-       fact_id INTEGER PRIMARY KEY,
-       embedding FLOAT[384]
-     );
-   SQL
-   ```
-
-2. **Generate embeddings using ONNX Runtime**:
-   ```ruby
-   # lib/claude_memory/embeddings/generator.rb
-   require 'onnxruntime'
-
-   class EmbeddingGenerator
-     MODEL_PATH = File.expand_path("~/.claude/models/all-MiniLM-L6-v2.onnx")
-
-     def initialize
-       @model = OnnxRuntime::Model.new(MODEL_PATH)
-       @tokenizer = load_tokenizer
-     end
-
-     def generate(text)
-       # Truncate to 512 tokens
-       tokens = @tokenizer.encode(text).ids.take(512)
-
-       # Run inference
-       output = @model.predict({
-         input_ids: [tokens],
-         attention_mask: [Array.new(tokens.size, 1)]
-       })
-
-       # Mean pooling and normalize
-       normalize(mean_pool(output['last_hidden_state']))
-     end
-
-     private
-
-     def normalize(vector)
-       magnitude = Math.sqrt(vector.sum { |v| v**2 })
-       vector.map { |v| v / magnitude }
-     end
-   end
-   ```
-
-3. **Hybrid search in Recall**:
-   ```ruby
-   # lib/claude_memory/recall.rb
-   def search(query, mode: :both, limit: 10)
-     results = []
-
-     if mode == :vector || mode == :both
-       # Vector similarity search
-       embedding = EmbeddingGenerator.new.generate(query)
-       vector_results = db[:vec_facts]
-         .select(:fact_id, :distance)
-         .where(Sequel.lit("embedding MATCH ? AND k = ?",
-                           embedding.pack('f*'), limit))
-         .order(:distance)
-         .all
-
-       results.concat(vector_results)
-     end
-
-     if mode == :text || mode == :both
-       # FTS5 search
-       text_results = search_fts5(query, limit)
-       results.concat(text_results)
-     end
-
-     # Deduplicate and rank
-     results.uniq { |r| r[:fact_id] }
-   end
-   ```
-
-4. **MCP tool for semantic search**:
-   ```ruby
-   # lib/claude_memory/mcp/server.rb
-   TOOLS << {
-     name: "memory.search_semantic",
-     description: "Search facts using semantic similarity (finds conceptually related facts)",
-     inputSchema: {
-       type: "object",
-       properties: {
-         query: { type: "string" },
-         mode: { type: "string", enum: ["vector", "text", "both"], default: "both" },
-         limit: { type: "integer", default: 10 }
-       },
-       required: ["query"]
-     }
-   }
-   ```
-
-**Benefits**:
-- Find conceptually similar facts even with different terminology
-- Better recall for complex queries
-- Works offline (no API calls for embeddings)
-- Complements FTS5 for best overall search quality
-
-**Trade-offs**:
-- Increased storage: ~1.5KB per fact (384 floats)
-- Embedding generation time during ingestion
-- Need to download/bundle ONNX model (~100MB)
-- Ruby ONNX runtime less mature than Python/Node.js
-
-**Alternative**: Shell out to Python script for embeddings:
-```ruby
-def generate_embedding(text)
-  result = `python3 #{__dir__}/embed.py #{Shellwords.escape(text)}`
-  JSON.parse(result)
-end
-```
-
----
-
-## 7. Multi-Concept AND Search
-
-### What Episodic-Memory Does
-
-**Array-Based Query**:
-```typescript
-// Search for conversations matching ALL concepts
-const results = await searchMultipleConcepts(
-  ["React Router", "authentication", "JWT"],
-  { limit: 10 }
-);
-```
-
-**Implementation**:
-1. Search each concept independently with 5x limit
-2. Build map of conversation → array of results (one per concept)
-3. Filter to conversations matching ALL concepts
-4. Rank by average similarity across concepts
-
-**File**: `src/search.ts` (lines 227-287)
-
-**MCP Tool**:
-```typescript
-{
-  query: ["React Router", "authentication", "JWT"],  // Array = multi-concept
-  limit: 10
-}
-```
-
-### What We Should Do
-
-**Priority**: MEDIUM
-
-**Implementation**:
-
-1. **Add multi-concept search to Recall**:
-   ```ruby
-   # lib/claude_memory/recall.rb
-   def search_concepts(concepts, limit: 10, scope: :all)
-     # Search each concept independently
-     concept_results = concepts.map do |concept|
-       search(concept, limit: limit * 5, scope: scope)
-     end
-
-     # Build map: fact_id → [results]
-     fact_map = Hash.new { |h, k| h[k] = [] }
-     concept_results.each_with_index do |results, concept_idx|
-       results.each do |result|
-         fact_map[result.id] << { result: result, concept_idx: concept_idx }
-       end
-     end
-
-     # Filter to facts matching ALL concepts
-     multi_concept_results = fact_map.select do |fact_id, results|
-       results.map { |r| r[:concept_idx] }.uniq.size == concepts.size
-     end
-
-     # Rank by average similarity
-     multi_concept_results.map do |fact_id, results|
-       similarities = results.map { |r| r[:result].similarity }
-       avg_similarity = similarities.sum / similarities.size
-
-       {
-         fact: results.first[:result].fact,
-         concept_similarities: similarities,
-         average_similarity: avg_similarity
-       }
-     end.sort_by { |r| -r[:average_similarity] }.take(limit)
-   end
-   ```
-
-2. **MCP tool**:
-   ```ruby
-   TOOLS << {
-     name: "memory.search_concepts",
-     description: "Search for facts matching ALL of the provided concepts (AND query)",
-     inputSchema: {
-       type: "object",
-       properties: {
-         concepts: {
-           type: "array",
-           items: { type: "string" },
-           minItems: 2,
-           maxItems: 5
-         },
-         limit: { type: "integer", default: 10 }
-       },
-       required: ["concepts"]
-     }
-   }
-   ```
-
-3. **Format output**:
-   ```ruby
-   def format_multi_concept_results(results, concepts)
-     return "No facts found matching all concepts" if results.empty?
-
-     output = "Found #{results.size} facts matching all concepts [#{concepts.join(' + ')}]:\n\n"
-
-     results.each_with_index do |result, idx|
-       output << "#{idx + 1}. #{result[:fact].subject} #{result[:fact].predicate} #{result[:fact].object}\n"
-
-       scores = result[:concept_similarities].zip(concepts)
-         .map { |sim, concept| "#{concept}: #{(sim * 100).round}%" }
-         .join(", ")
-       output << "   Concepts: #{scores}\n"
-       output << "   Average match: #{(result[:average_similarity] * 100).round}%\n\n"
-     end
-
-     output
-   end
-   ```
-
-**Benefits**:
-- Precise queries requiring multiple concepts to match
-- Better than single query with all concepts combined
-- Reduces false positives from partial matches
-
-**Trade-offs**:
-- Multiple search passes (N searches for N concepts)
-- More complex ranking logic
-- May miss facts if one concept has weak match
-
----
-
-## 8. Tool Usage Tracking
-
-### What Episodic-Memory Does
-
-**Dedicated tool_calls table**:
-```sql
-CREATE TABLE tool_calls (
-  id TEXT PRIMARY KEY,
-  exchange_id TEXT NOT NULL,
-  tool_name TEXT NOT NULL,
-  tool_input TEXT,
-  tool_result TEXT,
-  is_error BOOLEAN DEFAULT 0,
-  timestamp TEXT NOT NULL,
-  FOREIGN KEY (exchange_id) REFERENCES exchanges(id)
-);
-
-CREATE INDEX idx_tool_name ON tool_calls(tool_name);
-```
-
-**Extraction from JSONL**:
-- Parses tool_use blocks from assistant messages
-- Extracts tool name and input
-- Associates with exchange ID
-- Includes tools in embedding for better search
-
-**File**: `src/parser.ts` (lines 124-137)
-
-**Search Results Show Tools**:
-```
-1. [project, 2025-10-15]
-   "How do I fix the authentication bug?"
-   Tools: Read(5), Edit(2), Bash(1)
-   Lines 10-42 in conversation.jsonl
-```
-
-### What We Should Do
-
-**Priority**: HIGH
-
-**Implementation**:
-
-1. **Add tool_calls table**:
-   ```ruby
-   # lib/claude_memory/store/sqlite_store.rb
-   db.create_table :tool_calls do
-     primary_key :id
-     foreign_key :content_item_id, :content_items
-     String :tool_name, null: false
-     String :tool_input, text: true
-     String :tool_result, text: true
-     TrueClass :is_error, default: false
-     DateTime :timestamp, null: false
-   end
-
-   db.add_index :tool_calls, :tool_name
-   db.add_index :tool_calls, :content_item_id
-   ```
-
-2. **Extract from transcript during ingestion**:
-   ```ruby
-   # lib/claude_memory/ingest/ingester.rb
-   def extract_tool_calls(transcript_chunk)
-     tool_calls = []
-
-     # Parse JSONL
-     transcript_chunk.each_line do |line|
-       message = JSON.parse(line)
-       next unless message['type'] == 'assistant'
-
-       content = message['message']['content']
-       next unless content.is_a?(Array)
-
-       content.each do |block|
-         if block['type'] == 'tool_use'
-           tool_calls << {
-             tool_name: block['name'],
-             tool_input: block['input'].to_json,
-             timestamp: message['timestamp']
-           }
-         end
-       end
-     end
-
-     tool_calls
-   end
-   ```
-
-3. **Link to provenance**:
-   ```ruby
-   # Associate tools with content items
-   content_item = store.insert_content_item(transcript_chunk)
-   tool_calls = extract_tool_calls(transcript_chunk)
-
-   tool_calls.each do |tc|
-     store.insert_tool_call(
-       content_item_id: content_item.id,
-       **tc
-     )
-   end
-   ```
-
-4. **Query by tool usage**:
-   ```ruby
-   # Find facts discovered using specific tools
-   def facts_by_tool(tool_name)
-     db[:facts]
-       .join(:provenance, fact_id: :id)
-       .join(:tool_calls, content_item_id: :content_item_id)
-       .where(Sequel[:tool_calls][:tool_name] => tool_name)
-       .select_all(:facts)
-       .distinct
-       .all
-   end
-   ```
-
-5. **MCP tool**:
-   ```ruby
-   TOOLS << {
-     name: "memory.facts_by_tool",
-     description: "Find facts discovered using a specific tool (Read, Edit, Bash, etc.)",
-     inputSchema: {
-       type: "object",
-       properties: {
-         tool_name: { type: "string" },
-         limit: { type: "integer", default: 20 }
-       },
-       required: ["tool_name"]
-     }
-   }
-   ```
-
-**Benefits**:
-- Know which tools were used during fact discovery
-- Filter facts by discovery method
-- Debug ingestion issues
-- Understand patterns (e.g., most facts from Read tool)
-
-**Trade-offs**:
-- Additional table and foreign keys
-- Parsing complexity for tool extraction
-- Storage overhead
-
----
-
-## 9. Enhanced Session Metadata
-
-### What Episodic-Memory Does
-
-**Rich Metadata Capture**:
-```typescript
-interface ConversationExchange {
-  // ... basic fields ...
-
-  // Session context
-  sessionId?: string;
-  cwd?: string;
-  gitBranch?: string;
-  claudeVersion?: string;
-
-  // Thinking metadata
-  thinkingLevel?: string;
-  thinkingDisabled?: boolean;
-  thinkingTriggers?: string; // JSON array
-}
-```
-
-**Schema**:
-```sql
-ALTER TABLE exchanges ADD COLUMN session_id TEXT;
-ALTER TABLE exchanges ADD COLUMN cwd TEXT;
-ALTER TABLE exchanges ADD COLUMN git_branch TEXT;
-ALTER TABLE exchanges ADD COLUMN claude_version TEXT;
-ALTER TABLE exchanges ADD COLUMN thinking_level TEXT;
-ALTER TABLE exchanges ADD COLUMN thinking_disabled BOOLEAN;
-ALTER TABLE exchanges ADD COLUMN thinking_triggers TEXT;
-
-CREATE INDEX idx_session_id ON exchanges(session_id);
-CREATE INDEX idx_git_branch ON exchanges(git_branch);
-```
-
-**Use Cases**:
-- Filter conversations by git branch
-- Track facts learned in specific working directories
-- Understand thinking mode usage patterns
-
-### What We Should Do
-
-**Priority**: MEDIUM
-
-**Implementation**:
-
-1. **Extend content_items table**:
-   ```ruby
-   # Migration
-   db.alter_table :content_items do
-     add_column :cwd, String
-     add_column :git_branch, String
-     add_column :claude_version, String
-     add_column :thinking_level, String
-     add_column :thinking_disabled, TrueClass
-   end
-
-   db.add_index :content_items, :git_branch
-   ```
-
-2. **Extract from transcript**:
-   ```ruby
-   # lib/claude_memory/ingest/ingester.rb
-   def extract_metadata(transcript_chunk)
-     # Parse first message for metadata
-     first_line = transcript_chunk.lines.first
-     message = JSON.parse(first_line)
-
-     {
-       session_id: message['sessionId'],
-       cwd: message['cwd'],
-       git_branch: message['gitBranch'],
-       claude_version: message['version'],
-       thinking_level: message.dig('thinkingMetadata', 'level'),
-       thinking_disabled: message.dig('thinkingMetadata', 'disabled')
-     }
-   end
-   ```
-
-3. **Query by metadata**:
-   ```ruby
-   # Find facts learned on specific branch
-   def facts_by_branch(branch_name)
-     db[:facts]
-       .join(:provenance, fact_id: :id)
-       .join(:content_items, id: :content_item_id)
-       .where(Sequel[:content_items][:git_branch] => branch_name)
-       .select_all(:facts)
-       .distinct
-       .all
-   end
-   ```
-
-4. **MCP tool**:
-   ```ruby
-   TOOLS << {
-     name: "memory.facts_by_context",
-     description: "Find facts learned in specific context (branch, directory, etc.)",
-     inputSchema: {
-       type: "object",
-       properties: {
-         git_branch: { type: "string" },
-         cwd: { type: "string" },
-         limit: { type: "integer", default: 20 }
-       }
-     }
-   }
-   ```
-
-**Benefits**:
-- Context-aware fact retrieval
-- Understand where knowledge was acquired
-- Filter by development branch or working directory
-
-**Trade-offs**:
-- Additional columns and indexes
-- Metadata may not always be available in transcripts
-
----
-
-## 10. Incremental Sync with Background Processing
-
-### What Episodic-Memory Does
-
-**Incremental Sync**:
-```typescript
-function copyIfNewer(src: string, dest: string): boolean {
-  if (fs.existsSync(dest)) {
-    const srcStat = fs.statSync(src);
-    const destStat = fs.statSync(dest);
-    if (destStat.mtimeMs >= srcStat.mtimeMs) {
-      return false; // Dest is current, skip
-    }
-  }
-
-  // Atomic copy: temp file + rename
-  const tempDest = dest + '.tmp.' + process.pid;
-  fs.copyFileSync(src, tempDest);
-  fs.renameSync(tempDest, dest);
-  return true;
-}
-```
-
-**Background Sync**:
-```bash
-# SessionStart hook
-episodic-memory sync --background
-```
-
-Runs in background, user continues working immediately.
-
-**File**: `src/sync.ts`
-
-### What We Should Do
-
-**Priority**: HIGH
-
-**Implementation**:
-
-1. **Track modification times**:
-   ```ruby
-   # Migration
-   db.alter_table :content_items do
-     add_column :source_mtime, DateTime
-   end
-   ```
-
-2. **Skip unchanged files**:
-   ```ruby
-   # lib/claude_memory/ingest/ingester.rb
-   def should_ingest?(file_path)
-     mtime = File.mtime(file_path)
-
-     existing = store.content_item_by_path(file_path)
-     return true unless existing
-
-     existing.source_mtime.nil? || mtime > existing.source_mtime
-   end
-
-   def ingest(file_path)
-     return unless should_ingest?(file_path)
-
-     content = File.read(file_path)
-     store.insert_content_item(
-       path: file_path,
-       content: content,
-       source_mtime: File.mtime(file_path)
-     )
-
-     # Process content...
-   end
-   ```
-
-3. **Background processing**:
-   ```ruby
-   # lib/claude_memory/commands/hook/ingest_command.rb
-   def call(args)
-     opts = parse_options(args, { async: false })
-
-     if opts[:async]
-       # Fork and detach
-       pid = fork do
-         Process.setsid  # Detach from terminal
-         ingest_stdin
-       end
-       Process.detach(pid)
-
-       stdout.puts "Ingestion started in background (PID: #{pid})"
-       return 0
-     end
-
-     ingest_stdin
-     0
-   end
-   ```
-
-4. **Hook configuration**:
-   ```json
-   {
-     "hooks": {
-       "SessionStart": [{
-         "matcher": "startup|resume",
-         "hooks": [{
-           "type": "command",
-           "command": "claude-memory hook ingest --async",
-           "async": true
-         }]
-       }]
-     }
-   }
-   ```
-
-**Benefits**:
-- Fast subsequent ingestions (seconds vs minutes)
-- Non-blocking hooks (user continues working immediately)
-- Atomic operations (safe concurrent execution)
-
-**Trade-offs**:
-- Background process management complexity
-- Need to track modification times
-- Potential race conditions if multiple sessions start simultaneously
-
----
-
-## 11. Enhanced Statistics and Reporting
-
-### What Episodic-Memory Does
-
-**Comprehensive Stats**:
-```typescript
-interface IndexStats {
-  totalConversations: number;
-  conversationsWithSummaries: number;
-  conversationsWithoutSummaries: number;
-  totalExchanges: number;
-  dateRange?: { earliest: string; latest: string };
-  projectCount: number;
-  topProjects?: Array<{ project: string; count: number }>;
-  databaseSize?: string;
-}
-```
-
-**Output Format**:
-```
-Episodic Memory Index Statistics
-==================================================
-
-Total Conversations: 145
-Total Exchanges: 1,247
-
-With Summaries: 120
-Without Summaries: 25
-  (17.2% missing summaries)
-
-Date Range:
-  Earliest: 10/1/2025
-  Latest: 1/23/2026
-
-Unique Projects: 8
-
-Top Projects by Conversation Count:
-    42 - claude_memory
-    38 - my-app
-    22 - docs-site
-    ...
-```
-
-**File**: `src/stats.ts`
-
-### What We Should Do
-
-**Priority**: MEDIUM
-
-**Implementation**:
-
-1. **Enhanced stats command**:
-   ```ruby
-   # lib/claude_memory/commands/stats_command.rb
-   class StatsCommand < BaseCommand
-     def call(args)
-       stats = gather_stats
-
-       stdout.puts format_stats(stats)
-       0
-     end
-
-     private
-
-     def gather_stats
-       {
-         global: database_stats(Configuration.global_db_path),
-         project: database_stats(Configuration.project_db_path),
-         combined: combined_stats
-       }
-     end
-
-     def database_stats(db_path)
-       return nil unless File.exist?(db_path)
-
-       db = Sequel.sqlite(db_path)
-
-       {
-         facts: {
-           total: db[:facts].count,
-           active: db[:facts].where(superseded_by_id: nil).count,
-           superseded: db[:facts].exclude(superseded_by_id: nil).count,
-           by_predicate: db[:facts]
-             .group(:predicate)
-             .select{ [predicate, count.function.*] }
-             .order(Sequel.desc(2))
-             .limit(10)
-             .all
-         },
-         entities: {
-           total: db[:entities].count,
-           by_type: db[:entities]
-             .group(:entity_type)
-             .select{ [entity_type, count.function.*] }
-             .all
-         },
-         content_items: {
-           total: db[:content_items].count,
-           date_range: db[:content_items]
-             .select{ [min(created_at).as(earliest), max(created_at).as(latest)] }
-             .first
-         },
-         conflicts: {
-           open: db[:conflicts].where(status: 'open').count,
-           resolved: db[:conflicts].where(status: 'resolved').count
-         },
-         provenance: {
-           facts_with_provenance: db[:provenance].select(:fact_id).distinct.count,
-           total_receipts: db[:provenance].count
-         }
-       }
-     end
-
-     def format_stats(stats)
-       output = "ClaudeMemory Statistics\n"
-       output << "=" * 50 << "\n\n"
-
-       if stats[:global]
-         output << "GLOBAL DATABASE\n"
-         output << format_db_stats(stats[:global])
-         output << "\n"
-       end
-
-       if stats[:project]
-         output << "PROJECT DATABASE\n"
-         output << format_db_stats(stats[:project])
-         output << "\n"
-       end
-
-       output
-     end
-   end
-   ```
-
-2. **MCP tool for stats**:
-   ```ruby
-   TOOLS << {
-     name: "memory.stats",
-     description: "Get detailed statistics about the memory system",
-     inputSchema: {
-       type: "object",
-       properties: {
-         scope: { type: "string", enum: ["global", "project", "all"], default: "all" }
-       }
-     }
-   }
-   ```
-
-**Benefits**:
-- Visibility into memory system health
-- Identify coverage gaps (missing provenance, etc.)
-- Understand predicate usage patterns
-- Debug issues with concrete numbers
-
-**Trade-offs**:
-- Complex aggregation queries
-- Formatting complexity
-
----
-
-## 12. WAL Mode for Better Concurrency
-
-### What Episodic-Memory Does
-
-**Enable WAL Mode**:
-```typescript
-// Enable WAL mode for better concurrency
-db.pragma('journal_mode = WAL');
-```
-
-**File**: `src/db.ts` (line 54)
-
-**Benefits**:
-- Readers don't block writers
-- Writers don't block readers
-- Better performance for concurrent access
-- Safer for background sync operations
-
-### What We Should Do
-
-**Priority**: LOW (easy win)
-
-**Implementation**:
-
-```ruby
-# lib/claude_memory/store/sqlite_store.rb
-def initialize(db_path)
-  @db = Sequel.sqlite(db_path)
-
-  # Enable WAL mode for better concurrency
-  @db.pragma('journal_mode = WAL')
-
-  # Other pragmas
-  @db.pragma('synchronous = NORMAL')
-  @db.pragma('foreign_keys = ON')
-
-  create_schema unless schema_exists?
-end
-```
-
-**Benefits**:
-- Better concurrency (multiple readers, non-blocking writes)
-- Improved performance
-- Safer for concurrent hook execution
-- One-line change
-
-**Trade-offs**:
-- Creates -wal and -shm files alongside database
-- Slightly more disk space usage
-- Not compatible with network filesystems (NFS)
+## Remaining Improvements
+
+The following sections (6-12 from the original analysis) have been implemented and moved to the "Implemented Improvements" section above:
+
+- ✅ Section 6: Local Vector Embeddings for Semantic Search
+- ✅ Section 7: Multi-Concept AND Search  
+- ✅ Section 8: Tool Usage Tracking
+- ✅ Section 9: Enhanced Session Metadata
+- ✅ Section 10: Incremental Sync (mtime-based)
+- ✅ Section 11: Enhanced Statistics and Reporting
+- ✅ Section 12: WAL Mode for Better Concurrency
+
+**For remaining unimplemented improvements, see:** [remaining_improvements.md](./remaining_improvements.md)
+
+Key remaining items:
+- Background processing for hooks (--async flag)
+- ROI metrics and token economics tracking
+- Structured logging
+- Embed command for backfilling embeddings
 
 ---
 
 ## Implementation Priorities
 
-### High Priority (Next Sprint)
+### Medium Priority
 
-1. **WAL Mode** (1 hour) - One-line change, immediate concurrency benefit
-2. **Tool Usage Tracking** (1-2 days) - High value for debugging and filtering
-3. **Incremental Sync** (2-3 days) - Major performance improvement for hooks
-4. **Session Metadata** (1 day) - Useful context for facts
+1. **Background Processing** - Non-blocking hooks for better UX
+2. **ROI Metrics** - Track token economics for distillation
 
-### Medium Priority (Next Quarter)
+### Low Priority
 
-5. **Local Vector Embeddings** (1-2 weeks) - Enables semantic search (requires ONNX setup)
-6. **Multi-Concept AND Search** (2-3 days) - Better query precision
-7. **Enhanced Statistics** (2-3 days) - Better system visibility
-8. **Background Processing** (3-5 days) - Non-blocking hooks
-9. **ROI Metrics** (from claude-mem) - Track token economics for distillation
-
-### Low Priority (Future)
-
-10. **Health Monitoring** - Only if we add background worker
-11. **Web Viewer UI** - Only if users request visualization
-12. **Dual Integration** - Only if we add Claude Code hooks integration
-13. **Config-Driven Context** - Only if users request snapshot customization
+3. **Structured Logging** - Better debugging with JSON logs
+4. **Embed Command** - Backfill embeddings for existing facts
+5. **Health Monitoring** - Only if we add background worker
+6. **Web Viewer UI** - Only if users request visualization
+7. **Configuration-Driven Context** - Only if users request snapshot customization
 
 ---
 
 ## Migration Path
 
-### Next Sprint (Remaining Tasks)
+### Completed ✓
 
-- [ ] Add metrics table for token tracking during distillation
-- [ ] Track token costs in ingestion pipeline
-- [ ] Display ROI metrics in `claude-memory status` command
+- [x] WAL mode for better concurrency
+- [x] Enhanced statistics command
+- [x] Session metadata tracking
+- [x] Tool usage tracking
+- [x] Semantic search with TF-IDF embeddings
+- [x] Multi-concept AND search
+- [x] Incremental sync with mtime tracking
+- [x] Context-aware queries
+
+### Remaining Tasks
+
+- [ ] Background processing (--async flag for hooks)
+- [ ] ROI metrics table for token tracking during distillation
+- [ ] Structured logging implementation
+- [ ] Embed command for backfilling embeddings
 
 ### Future (If Requested)
 
-- [ ] Add vector embeddings (if users request semantic search)
 - [ ] Build web viewer (if users request visualization)
 - [ ] Add HTTP-based health checks (if background worker is added)
 - [ ] Configuration-driven snapshot generation (if users request customization)
@@ -1815,6 +955,17 @@ end
 4. Semantic shortcuts (decisions, conventions, architecture)
 5. Exit code strategy (hook error handling)
 
+### Successfully Adopted from Episodic-Memory ✓
+
+1. **WAL Mode** - Better concurrency with Write-Ahead Logging
+2. **Tool Usage Tracking** - Dedicated table tracking which tools discovered facts
+3. **Incremental Sync** - mtime-based change detection for fast re-ingestion
+4. **Session Metadata** - Context capture (git branch, cwd, Claude version)
+5. **Local Vector Embeddings** - TF-IDF semantic search alongside FTS5
+6. **Multi-Concept AND Search** - Precise queries matching 2-5 concepts simultaneously
+7. **Enhanced Statistics** - Comprehensive reporting on facts, entities, provenance
+8. **Context-Aware Queries** - Filter by branch, directory, or tools used
+
 ### Our Unique Advantages
 
 1. **Dual-database architecture** - Global + project scopes
@@ -1822,21 +973,14 @@ end
 3. **Truth maintenance** - Conflict resolution and supersession
 4. **Predicate policies** - Single vs multi-value semantics
 5. **Ruby ecosystem** - Simpler dependencies, easier install
+6. **Lightweight embeddings** - No external dependencies (TF-IDF vs Transformers.js)
 
-### High-Value Opportunities from Episodic-Memory
+### Remaining Opportunities
 
-1. **WAL Mode** - One-line change for better concurrency
-2. **Tool Usage Tracking** - Know which tools were used during fact discovery
-3. **Incremental Sync** - Fast subsequent ingestions (seconds vs minutes)
-4. **Session Metadata** - Context about where/when facts were learned
-5. **Local Vector Embeddings** - Semantic search alongside FTS5
-6. **Multi-Concept AND Search** - Precise queries requiring multiple concepts
-7. **Enhanced Statistics** - Better system visibility and health monitoring
-8. **Background Processing** - Non-blocking hooks for better UX
-
-### Remaining Opportunities from claude-mem
-
-- **ROI Metrics** - Track token economics for distillation cost/benefit visibility
+- **Background Processing** - Non-blocking hooks for better UX (from episodic-memory)
+- **ROI Metrics** - Track token economics for distillation (from claude-mem)
+- **Structured Logging** - JSON-formatted logs for debugging
+- **Embed Command** - Backfill embeddings for existing facts
 - **Health Monitoring** - Only if we add background worker
 - **Web Viewer UI** - Only if users request visualization
 - **Configuration-Driven Context** - Only if users request snapshot customization
@@ -1862,12 +1006,14 @@ end
 - Knowledge graph with provenance
 - Semantic shortcuts for common queries
 
-**Best of both worlds**:
-- Add vector embeddings to ClaudeMemory for semantic search
-- Keep fact-based knowledge graph for structured queries
-- Adopt incremental sync and tool tracking from episodic-memory
-- Maintain truth maintenance and conflict resolution
-- Add session metadata for richer context
+**Best of both worlds (achieved)**:
+- ✅ Added vector embeddings for semantic search (TF-IDF based)
+- ✅ Kept fact-based knowledge graph for structured queries
+- ✅ Adopted incremental sync and tool tracking from episodic-memory
+- ✅ Maintained truth maintenance and conflict resolution
+- ✅ Added session metadata for richer context
+- ✅ Implemented multi-concept AND search
+- ✅ Enhanced statistics and reporting
 
 ---
 
@@ -1879,4 +1025,6 @@ end
 
 ---
 
-*This document has been updated to reflect completed implementations and new insights from episodic-memory. Five major improvements from claude-mem have been successfully integrated. The document now includes high-value patterns from episodic-memory that can enhance ClaudeMemory while maintaining its unique advantages.*
+*This document has been updated to reflect completed implementations. Thirteen major improvements have been successfully integrated: 5 from claude-mem and 8 from episodic-memory. ClaudeMemory now combines the best of both systems while maintaining its unique advantages in fact-based knowledge representation and truth maintenance.*
+
+*Last updated: 2026-01-23 - Major implementation milestone achieved*
