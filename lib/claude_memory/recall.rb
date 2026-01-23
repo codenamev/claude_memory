@@ -24,8 +24,9 @@ module ClaudeMemory
       end
     end
 
-    def initialize(store_or_manager, fts: nil, project_path: nil, env: ENV)
+    def initialize(store_or_manager, fts: nil, project_path: nil, env: ENV, embedding_generator: nil)
       @project_path = project_path || env["CLAUDE_PROJECT_DIR"] || Dir.pwd
+      @embedding_generator = embedding_generator || Embeddings::Generator.new
 
       if store_or_manager.is_a?(Store::StoreManager)
         @manager = store_or_manager
@@ -76,6 +77,48 @@ module ClaudeMemory
         conflicts_legacy(scope: scope)
       else
         conflicts_dual(scope: scope)
+      end
+    end
+
+    def facts_by_branch(branch_name, limit: 20, scope: SCOPE_ALL)
+      if @legacy_mode
+        facts_by_context_legacy(:git_branch, branch_name, limit: limit, scope: scope)
+      else
+        facts_by_context_dual(:git_branch, branch_name, limit: limit, scope: scope)
+      end
+    end
+
+    def facts_by_directory(cwd, limit: 20, scope: SCOPE_ALL)
+      if @legacy_mode
+        facts_by_context_legacy(:cwd, cwd, limit: limit, scope: scope)
+      else
+        facts_by_context_dual(:cwd, cwd, limit: limit, scope: scope)
+      end
+    end
+
+    def facts_by_tool(tool_name, limit: 20, scope: SCOPE_ALL)
+      if @legacy_mode
+        facts_by_tool_legacy(tool_name, limit: limit, scope: scope)
+      else
+        facts_by_tool_dual(tool_name, limit: limit, scope: scope)
+      end
+    end
+
+    def query_semantic(text, limit: 10, scope: SCOPE_ALL, mode: :both)
+      if @legacy_mode
+        query_semantic_legacy(text, limit: limit, scope: scope, mode: mode)
+      else
+        query_semantic_dual(text, limit: limit, scope: scope, mode: mode)
+      end
+    end
+
+    def query_concepts(concepts, limit: 10, scope: SCOPE_ALL)
+      raise ArgumentError, "Must provide 2-5 concepts" unless (2..5).cover?(concepts.size)
+
+      if @legacy_mode
+        query_concepts_legacy(concepts, limit: limit, scope: scope)
+      else
+        query_concepts_dual(concepts, limit: limit, scope: scope)
       end
     end
 
@@ -503,6 +546,369 @@ module ClaudeMemory
 
     def find_receipts(fact_id)
       find_receipts_from_store(@legacy_store, fact_id)
+    end
+
+    # Context-aware query helpers
+
+    def facts_by_context_dual(column, value, limit:, scope:)
+      results = []
+
+      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
+        @manager.ensure_project! if @manager.project_exists?
+        if @manager.project_store
+          project_results = facts_by_context_single(@manager.project_store, column, value, limit: limit, source: :project)
+          results.concat(project_results)
+        end
+      end
+
+      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
+        @manager.ensure_global! if @manager.global_exists?
+        if @manager.global_store
+          global_results = facts_by_context_single(@manager.global_store, column, value, limit: limit, source: :global)
+          results.concat(global_results)
+        end
+      end
+
+      dedupe_and_sort(results, limit)
+    end
+
+    def facts_by_context_legacy(column, value, limit:, scope:)
+      facts_by_context_single(@legacy_store, column, value, limit: limit, source: :legacy)
+    end
+
+    def facts_by_context_single(store, column, value, limit:, source:)
+      # Find content items matching the context
+      content_ids = store.content_items
+        .where(column => value)
+        .select(:id)
+        .map { |row| row[:id] }
+
+      return [] if content_ids.empty?
+
+      # Find facts linked to those content items via provenance
+      fact_ids = store.provenance
+        .where(content_item_id: content_ids)
+        .select(:fact_id)
+        .distinct
+        .map { |row| row[:fact_id] }
+
+      return [] if fact_ids.empty?
+
+      # Batch fetch facts and their provenance
+      facts_by_id = batch_find_facts(store, fact_ids)
+      receipts_by_fact_id = batch_find_receipts(store, fact_ids)
+
+      fact_ids.map do |fact_id|
+        fact = facts_by_id[fact_id]
+        next unless fact
+
+        {
+          fact: fact,
+          receipts: receipts_by_fact_id[fact_id] || [],
+          source: source
+        }
+      end.compact.take(limit)
+    end
+
+    def facts_by_tool_dual(tool_name, limit:, scope:)
+      results = []
+
+      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
+        @manager.ensure_project! if @manager.project_exists?
+        if @manager.project_store
+          project_results = facts_by_tool_single(@manager.project_store, tool_name, limit: limit, source: :project)
+          results.concat(project_results)
+        end
+      end
+
+      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
+        @manager.ensure_global! if @manager.global_exists?
+        if @manager.global_store
+          global_results = facts_by_tool_single(@manager.global_store, tool_name, limit: limit, source: :global)
+          results.concat(global_results)
+        end
+      end
+
+      dedupe_and_sort(results, limit)
+    end
+
+    def facts_by_tool_legacy(tool_name, limit:, scope:)
+      facts_by_tool_single(@legacy_store, tool_name, limit: limit, source: :legacy)
+    end
+
+    def facts_by_tool_single(store, tool_name, limit:, source:)
+      # Find content items where the tool was used
+      content_ids = store.tool_calls
+        .where(tool_name: tool_name)
+        .select(:content_item_id)
+        .distinct
+        .map { |row| row[:content_item_id] }
+
+      return [] if content_ids.empty?
+
+      # Find facts linked to those content items via provenance
+      fact_ids = store.provenance
+        .where(content_item_id: content_ids)
+        .select(:fact_id)
+        .distinct
+        .map { |row| row[:fact_id] }
+
+      return [] if fact_ids.empty?
+
+      # Batch fetch facts and their provenance
+      facts_by_id = batch_find_facts(store, fact_ids)
+      receipts_by_fact_id = batch_find_receipts(store, fact_ids)
+
+      fact_ids.map do |fact_id|
+        fact = facts_by_id[fact_id]
+        next unless fact
+
+        {
+          fact: fact,
+          receipts: receipts_by_fact_id[fact_id] || [],
+          source: source
+        }
+      end.compact.take(limit)
+    end
+
+    # Semantic search helpers
+
+    def query_semantic_dual(text, limit:, scope:, mode:)
+      results = []
+
+      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
+        @manager.ensure_project! if @manager.project_exists?
+        if @manager.project_store
+          project_results = query_semantic_single(@manager.project_store, text, limit: limit * 3, mode: mode, source: :project)
+          results.concat(project_results)
+        end
+      end
+
+      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
+        @manager.ensure_global! if @manager.global_exists?
+        if @manager.global_store
+          global_results = query_semantic_single(@manager.global_store, text, limit: limit * 3, mode: mode, source: :global)
+          results.concat(global_results)
+        end
+      end
+
+      dedupe_and_sort(results, limit)
+    end
+
+    def query_semantic_legacy(text, limit:, scope:, mode:)
+      query_semantic_single(@legacy_store, text, limit: limit, mode: mode, source: :legacy)
+    end
+
+    def query_semantic_single(store, text, limit:, mode:, source:)
+      vector_results = []
+      text_results = []
+
+      # Vector search mode
+      if mode == :vector || mode == :both
+        vector_results = search_by_vector(store, text, limit, source)
+      end
+
+      # Text search mode (FTS)
+      if mode == :text || mode == :both
+        text_results = search_by_fts(store, text, limit, source)
+      end
+
+      # Merge and deduplicate
+      merge_search_results(vector_results, text_results, limit)
+    end
+
+    def search_by_vector(store, query_text, limit, source)
+      # Generate query embedding
+      query_embedding = @embedding_generator.generate(query_text)
+
+      # Load facts with embeddings
+      facts_data = store.facts_with_embeddings(limit: 5000)
+      return [] if facts_data.empty?
+
+      # Parse embeddings and prepare candidates
+      candidates = facts_data.map do |row|
+        embedding = JSON.parse(row[:embedding_json])
+        {
+          fact_id: row[:id],
+          embedding: embedding,
+          subject_entity_id: row[:subject_entity_id],
+          predicate: row[:predicate],
+          object_literal: row[:object_literal],
+          scope: row[:scope]
+        }
+      rescue JSON::ParserError
+        nil
+      end.compact
+
+      return [] if candidates.empty?
+
+      # Calculate similarities and rank
+      top_matches = Embeddings::Similarity.top_k(query_embedding, candidates, limit)
+
+      # Batch fetch full fact details
+      fact_ids = top_matches.map { |m| m[:candidate][:fact_id] }
+      facts_by_id = batch_find_facts(store, fact_ids)
+      receipts_by_fact_id = batch_find_receipts(store, fact_ids)
+
+      # Build results with similarity scores
+      top_matches.map do |match|
+        fact_id = match[:candidate][:fact_id]
+        fact = facts_by_id[fact_id]
+        next unless fact
+
+        {
+          fact: fact,
+          receipts: receipts_by_fact_id[fact_id] || [],
+          source: source,
+          similarity: match[:similarity]
+        }
+      end.compact
+    end
+
+    def search_by_fts(store, query_text, limit, source)
+      # Use existing FTS search infrastructure
+      fts = Index::LexicalFTS.new(store)
+      content_ids = fts.search(query_text, limit: limit * 2)
+
+      return [] if content_ids.empty?
+
+      # Find facts from content items
+      fact_ids = store.provenance
+        .where(content_item_id: content_ids)
+        .select(:fact_id)
+        .distinct
+        .map { |row| row[:fact_id] }
+
+      return [] if fact_ids.empty?
+
+      # Batch fetch facts
+      facts_by_id = batch_find_facts(store, fact_ids)
+      receipts_by_fact_id = batch_find_receipts(store, fact_ids)
+
+      fact_ids.map do |fact_id|
+        fact = facts_by_id[fact_id]
+        next unless fact
+
+        {
+          fact: fact,
+          receipts: receipts_by_fact_id[fact_id] || [],
+          source: source,
+          similarity: 0.5  # Default score for FTS results
+        }
+      end.compact.take(limit)
+    end
+
+    def merge_search_results(vector_results, text_results, limit)
+      # Combine results, preferring vector similarity scores
+      combined = {}
+
+      vector_results.each do |result|
+        fact_id = result[:fact][:id]
+        combined[fact_id] = result
+      end
+
+      text_results.each do |result|
+        fact_id = result[:fact][:id]
+        # Only add if not already present from vector search
+        combined[fact_id] ||= result
+      end
+
+      # Sort by similarity score (highest first)
+      combined.values
+        .sort_by { |r| -(r[:similarity] || 0) }
+        .take(limit)
+    end
+
+    # Multi-concept search helpers
+
+    def query_concepts_dual(concepts, limit:, scope:)
+      results = []
+
+      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
+        @manager.ensure_project! if @manager.project_exists?
+        if @manager.project_store
+          project_results = query_concepts_single(@manager.project_store, concepts, limit: limit * 2, source: :project)
+          results.concat(project_results)
+        end
+      end
+
+      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
+        @manager.ensure_global! if @manager.global_exists?
+        if @manager.global_store
+          global_results = query_concepts_single(@manager.global_store, concepts, limit: limit * 2, source: :global)
+          results.concat(global_results)
+        end
+      end
+
+      # Deduplicate and sort by average similarity
+      dedupe_by_fact_id(results, limit)
+    end
+
+    def query_concepts_legacy(concepts, limit:, scope:)
+      query_concepts_single(@legacy_store, concepts, limit: limit, source: :legacy)
+    end
+
+    def query_concepts_single(store, concepts, limit:, source:)
+      # Search each concept independently with higher limit for intersection
+      concept_results = concepts.map do |concept|
+        search_by_vector(store, concept, limit * 5, source)
+      end
+
+      # Build map: fact_id => [results per concept]
+      fact_map = Hash.new { |h, k| h[k] = [] }
+
+      concept_results.each_with_index do |results, concept_idx|
+        results.each do |result|
+          fact_id = result[:fact][:id]
+          fact_map[fact_id] << {
+            result: result,
+            concept_idx: concept_idx,
+            similarity: result[:similarity] || 0.0
+          }
+        end
+      end
+
+      # Filter to facts matching ALL concepts
+      multi_concept_facts = fact_map.select do |_fact_id, matches|
+        represented_concepts = matches.map { |m| m[:concept_idx] }.uniq
+        represented_concepts.size == concepts.size
+      end
+
+      return [] if multi_concept_facts.empty?
+
+      # Rank by average similarity across all concepts
+      ranked = multi_concept_facts.map do |fact_id, matches|
+        similarities = matches.map { |m| m[:similarity] }
+        avg_similarity = similarities.sum / similarities.size.to_f
+
+        # Use the first match for fact and receipts data
+        first_match = matches.first[:result]
+
+        {
+          fact: first_match[:fact],
+          receipts: first_match[:receipts],
+          source: source,
+          similarity: avg_similarity,
+          concept_similarities: similarities
+        }
+      end
+
+      # Sort by average similarity (highest first)
+      ranked.sort_by { |r| -r[:similarity] }.take(limit)
+    end
+
+    def dedupe_by_fact_id(results, limit)
+      seen = {}
+
+      results.each do |result|
+        fact_id = result[:fact][:id]
+        # Keep the result with highest similarity for each fact
+        if !seen[fact_id] || seen[fact_id][:similarity] < result[:similarity]
+          seen[fact_id] = result
+        end
+      end
+
+      seen.values.sort_by { |r| -r[:similarity] }.take(limit)
     end
   end
 end

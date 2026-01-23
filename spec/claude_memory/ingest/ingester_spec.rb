@@ -40,6 +40,7 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
       File.write(transcript_path, "first\n")
       ingester.ingest(source: "claude_code", session_id: "sess-1", transcript_path: transcript_path)
 
+      sleep 1.01  # Ensure mtime changes (filesystem has 1-second resolution)
       File.write(transcript_path, "first\nsecond\n")
       result = ingester.ingest(source: "claude_code", session_id: "sess-1", transcript_path: transcript_path)
 
@@ -52,13 +53,16 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
       ingester.ingest(source: "claude_code", session_id: "sess-1", transcript_path: transcript_path)
 
       result = ingester.ingest(source: "claude_code", session_id: "sess-1", transcript_path: transcript_path)
-      expect(result[:status]).to eq(:no_change)
+      # With incremental sync, unchanged files are skipped based on mtime
+      expect(result[:status]).to eq(:skipped)
+      expect(result[:reason]).to eq("unchanged")
     end
 
     it "handles file shrinking (compaction)" do
       File.write(transcript_path, "very long content\n")
       ingester.ingest(source: "claude_code", session_id: "sess-1", transcript_path: transcript_path)
 
+      sleep 1.01  # Ensure mtime changes (filesystem has 1-second resolution)
       File.write(transcript_path, "short\n")
       result = ingester.ingest(source: "claude_code", session_id: "sess-1", transcript_path: transcript_path)
 
@@ -73,7 +77,15 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
 
       store.update_delta_cursor("sess-1", transcript_path, 0)
 
+      # Touch the file to update mtime (must wait long enough for filesystem to register change)
+      sleep 1.01
+      FileUtils.touch(transcript_path)
+
+      # With incremental sync + mtime changed, should re-ingest from cursor position
       result2 = ingester.ingest(source: "claude_code", session_id: "sess-1", transcript_path: transcript_path)
+
+      # Should get the same content_id back (content deduplication)
+      expect(result2[:status]).to eq(:ingested)
       expect(result2[:content_id]).to eq(id1)
     end
 

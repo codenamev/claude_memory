@@ -110,6 +110,16 @@ module ClaudeMemory
             }
           },
           {
+            name: "memory.stats",
+            description: "Get detailed statistics about the memory system (facts by predicate, entities by type, provenance coverage, conflicts, database sizes)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                scope: {type: "string", enum: ["all", "global", "project"], description: "Show stats for: all (default), global, or project", default: "all"}
+              }
+            }
+          },
+          {
             name: "memory.promote",
             description: "Promote a project fact to global memory. Use when user says a preference should apply everywhere.",
             inputSchema: {
@@ -203,6 +213,65 @@ module ClaudeMemory
                 limit: {type: "integer", default: 10, description: "Maximum results to return"}
               }
             }
+          },
+          {
+            name: "memory.facts_by_tool",
+            description: "Find facts discovered using a specific tool (Read, Edit, Bash, etc.)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                tool_name: {type: "string", description: "Tool name (Read, Edit, Bash, etc.)"},
+                limit: {type: "integer", default: 20, description: "Maximum results to return"},
+                scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"}
+              },
+              required: ["tool_name"]
+            }
+          },
+          {
+            name: "memory.facts_by_context",
+            description: "Find facts learned in specific context (branch, directory)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                git_branch: {type: "string", description: "Git branch name"},
+                cwd: {type: "string", description: "Working directory path"},
+                limit: {type: "integer", default: 20, description: "Maximum results to return"},
+                scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"}
+              }
+            }
+          },
+          {
+            name: "memory.recall_semantic",
+            description: "Search facts using semantic similarity (finds conceptually related facts using vector embeddings)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                query: {type: "string", description: "Search query"},
+                mode: {type: "string", enum: ["vector", "text", "both"], default: "both", description: "Search mode: vector (embeddings), text (FTS), or both (hybrid)"},
+                limit: {type: "integer", default: 10, description: "Maximum results to return"},
+                scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"}
+              },
+              required: ["query"]
+            }
+          },
+          {
+            name: "memory.search_concepts",
+            description: "Search for facts matching ALL of the provided concepts (AND query). Ranks by average similarity across all concepts.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                concepts: {
+                  type: "array",
+                  items: {type: "string"},
+                  minItems: 2,
+                  maxItems: 5,
+                  description: "2-5 concepts that must all be present"
+                },
+                limit: {type: "integer", default: 10, description: "Maximum results to return"},
+                scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"}
+              },
+              required: ["concepts"]
+            }
           }
         ]
       end
@@ -225,6 +294,8 @@ module ClaudeMemory
           sweep_now(arguments)
         when "memory.status"
           status
+        when "memory.stats"
+          stats(arguments)
         when "memory.promote"
           promote(arguments)
         when "memory.store_extraction"
@@ -235,6 +306,14 @@ module ClaudeMemory
           conventions(arguments)
         when "memory.architecture"
           architecture(arguments)
+        when "memory.facts_by_tool"
+          facts_by_tool(arguments)
+        when "memory.facts_by_context"
+          facts_by_context(arguments)
+        when "memory.recall_semantic"
+          recall_semantic(arguments)
+        when "memory.search_concepts"
+          search_concepts(arguments)
         else
           {error: "Unknown tool: #{name}"}
         end
@@ -430,6 +509,35 @@ module ClaudeMemory
         result
       end
 
+      def stats(args)
+        scope = args["scope"] || "all"
+        result = {scope: scope, databases: {}}
+
+        if @manager
+          if scope == "all" || scope == "global"
+            if @manager.global_exists?
+              @manager.ensure_global!
+              result[:databases][:global] = detailed_stats(@manager.global_store)
+            else
+              result[:databases][:global] = {exists: false}
+            end
+          end
+
+          if scope == "all" || scope == "project"
+            if @manager.project_exists?
+              @manager.ensure_project!
+              result[:databases][:project] = detailed_stats(@manager.project_store)
+            else
+              result[:databases][:project] = {exists: false}
+            end
+          end
+        else
+          result[:databases][:legacy] = detailed_stats(@legacy_store)
+        end
+
+        result
+      end
+
       def promote(args)
         return {error: "Promote requires StoreManager"} unless @manager
 
@@ -567,6 +675,123 @@ module ClaudeMemory
         }
       end
 
+      def facts_by_tool(args)
+        tool_name = args["tool_name"]
+        scope = args["scope"] || "all"
+        limit = args["limit"] || 20
+
+        results = @recall.facts_by_tool(tool_name, limit: limit, scope: scope)
+
+        {
+          tool_name: tool_name,
+          scope: scope,
+          count: results.size,
+          facts: results.map do |r|
+            {
+              id: r[:fact][:id],
+              subject: r[:fact][:subject_name],
+              predicate: r[:fact][:predicate],
+              object: r[:fact][:object_literal],
+              scope: r[:fact][:scope],
+              source: r[:source],
+              receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
+            }
+          end
+        }
+      end
+
+      def facts_by_context(args)
+        scope = args["scope"] || "all"
+        limit = args["limit"] || 20
+
+        if args["git_branch"]
+          results = @recall.facts_by_branch(args["git_branch"], limit: limit, scope: scope)
+          context_type = "git_branch"
+          context_value = args["git_branch"]
+        elsif args["cwd"]
+          results = @recall.facts_by_directory(args["cwd"], limit: limit, scope: scope)
+          context_type = "cwd"
+          context_value = args["cwd"]
+        else
+          return {error: "Must provide either git_branch or cwd parameter"}
+        end
+
+        {
+          context_type: context_type,
+          context_value: context_value,
+          scope: scope,
+          count: results.size,
+          facts: results.map do |r|
+            {
+              id: r[:fact][:id],
+              subject: r[:fact][:subject_name],
+              predicate: r[:fact][:predicate],
+              object: r[:fact][:object_literal],
+              scope: r[:fact][:scope],
+              source: r[:source],
+              receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
+            }
+          end
+        }
+      end
+
+      def recall_semantic(args)
+        query = args["query"]
+        mode = (args["mode"] || "both").to_sym
+        scope = args["scope"] || "all"
+        limit = args["limit"] || 10
+
+        results = @recall.query_semantic(query, limit: limit, scope: scope, mode: mode)
+
+        {
+          query: query,
+          mode: mode.to_s,
+          scope: scope,
+          count: results.size,
+          facts: results.map do |r|
+            {
+              id: r[:fact][:id],
+              subject: r[:fact][:subject_name],
+              predicate: r[:fact][:predicate],
+              object: r[:fact][:object_literal],
+              scope: r[:fact][:scope],
+              source: r[:source],
+              similarity: r[:similarity],
+              receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
+            }
+          end
+        }
+      end
+
+      def search_concepts(args)
+        concepts = args["concepts"]
+        scope = args["scope"] || "all"
+        limit = args["limit"] || 10
+
+        return {error: "Must provide 2-5 concepts"} unless (2..5).cover?(concepts.size)
+
+        results = @recall.query_concepts(concepts, limit: limit, scope: scope)
+
+        {
+          concepts: concepts,
+          scope: scope,
+          count: results.size,
+          facts: results.map do |r|
+            {
+              id: r[:fact][:id],
+              subject: r[:fact][:subject_name],
+              predicate: r[:fact][:predicate],
+              object: r[:fact][:object_literal],
+              scope: r[:fact][:scope],
+              source: r[:source],
+              average_similarity: r[:similarity],
+              concept_similarities: r[:concept_similarities],
+              receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
+            }
+          end
+        }
+      end
+
       def db_stats(store)
         {
           exists: true,
@@ -576,6 +801,100 @@ module ClaudeMemory
           open_conflicts: store.conflicts.where(status: "open").count,
           schema_version: store.schema_version
         }
+      end
+
+      def detailed_stats(store)
+        result = {exists: true}
+
+        # Facts statistics
+        total_facts = store.facts.count
+        active_facts = store.facts.where(status: "active").count
+        superseded_facts = store.facts.where(status: "superseded").count
+
+        result[:facts] = {
+          total: total_facts,
+          active: active_facts,
+          superseded: superseded_facts
+        }
+
+        # Top predicates
+        if active_facts > 0
+          top_predicates = store.db[:facts]
+            .where(status: "active")
+            .group_and_count(:predicate)
+            .order(Sequel.desc(:count))
+            .limit(10)
+            .all
+            .map { |row| {predicate: row[:predicate], count: row[:count]} }
+
+          result[:facts][:top_predicates] = top_predicates
+        end
+
+        # Entities by type
+        entity_counts = store.db[:entities]
+          .group_and_count(:type)
+          .order(Sequel.desc(:count))
+          .all
+          .map { |row| {type: row[:type], count: row[:count]} }
+
+        result[:entities] = {
+          total: store.entities.count,
+          by_type: entity_counts
+        }
+
+        # Content items
+        content_count = store.content_items.count
+        result[:content_items] = {
+          total: content_count
+        }
+
+        if content_count > 0
+          first_date = store.content_items.min(:occurred_at)
+          last_date = store.content_items.max(:occurred_at)
+          result[:content_items][:date_range] = {
+            first: first_date,
+            last: last_date
+          }
+        end
+
+        # Provenance coverage
+        if active_facts > 0
+          facts_with_provenance = store.db[:provenance]
+            .join(:facts, id: :fact_id)
+            .where(Sequel[:facts][:status] => "active")
+            .select(Sequel[:provenance][:fact_id])
+            .distinct
+            .count
+
+          coverage_percentage = (facts_with_provenance * 100.0 / active_facts).round(1)
+
+          result[:provenance] = {
+            facts_with_sources: facts_with_provenance,
+            total_active_facts: active_facts,
+            coverage_percentage: coverage_percentage
+          }
+        else
+          result[:provenance] = {
+            facts_with_sources: 0,
+            total_active_facts: 0,
+            coverage_percentage: 0
+          }
+        end
+
+        # Conflicts
+        open_conflicts = store.conflicts.where(status: "open").count
+        resolved_conflicts = store.conflicts.where(status: "resolved").count
+
+        result[:conflicts] = {
+          open: open_conflicts,
+          resolved: resolved_conflicts,
+          total: open_conflicts + resolved_conflicts
+        }
+
+        # Schema version
+        result[:schema_version] = store.schema_version
+
+        result
       end
     end
   end
