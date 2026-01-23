@@ -2,6 +2,8 @@
 
 This document contains the improvements that have NOT yet been implemented from the episodic-memory and claude-mem analysis.
 
+**Note:** The "index" command to generate embeddings for existing facts has been completed (2026-01-23).
+
 ---
 
 ## 1. Background Processing for Hooks
@@ -257,58 +259,6 @@ session_summaries: {
 
 ---
 
-## 4. Command to Generate Embeddings for Existing Facts
-
-### Implementation
-
-**Priority**: LOW
-
-Add a command to backfill embeddings for facts that don't have them yet:
-
-```ruby
-# lib/claude_memory/commands/embed_command.rb
-class EmbedCommand < BaseCommand
-  def call(args)
-    opts = parse_options(args, {
-      db: ClaudeMemory.project_db_path,
-      batch_size: 100
-    })
-
-    store = Store::SQLiteStore.new(opts[:db])
-    generator = Embeddings::Generator.new
-
-    # Find facts without embeddings
-    facts = store.facts.where(embedding_json: nil).all
-
-    stdout.puts "Generating embeddings for #{facts.size} facts..."
-
-    facts.each_slice(opts[:batch_size]) do |batch|
-      batch.each do |fact|
-        text = "#{fact[:subject]} #{fact[:predicate]} #{fact[:object_literal]}"
-        embedding = generator.generate(text)
-
-        store.update_fact_embedding(fact[:id], embedding)
-      end
-
-      stdout.puts "  Processed #{batch.size} facts..."
-    end
-
-    stdout.puts "Done!"
-    0
-  end
-end
-```
-
-**Benefits**:
-- Enables semantic search on existing facts
-- Batch processing for efficiency
-- Progress reporting
-
-**Trade-offs**:
-- Can be slow for large fact counts
-- May need to run periodically
-
----
 
 ## Features to Avoid
 
@@ -375,7 +325,6 @@ end
 ### Low Priority
 
 3. **Structured Logging** - Better debugging with JSON logs
-4. **Embed Command** - Backfill embeddings for existing facts
-5. **Health Monitoring** - Only if we add background worker
-6. **Web Viewer UI** - Only if users request visualization
-7. **Configuration-Driven Context** - Only if users request snapshot customization
+4. **Health Monitoring** - Only if we add background worker
+5. **Web Viewer UI** - Only if users request visualization
+6. **Configuration-Driven Context** - Only if users request snapshot customization
