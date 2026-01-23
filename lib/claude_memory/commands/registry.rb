@@ -11,6 +11,7 @@ module ClaudeMemory
         "help" => "HelpCommand",
         "version" => "VersionCommand",
         "doctor" => "DoctorCommand",
+        "stats" => "StatsCommand",
         "promote" => "PromoteCommand",
         "search" => "SearchCommand",
         "explain" => "ExplainCommand",

@@ -6,13 +6,21 @@ require "json"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 2
+      SCHEMA_VERSION = 5
 
       attr_reader :db
 
       def initialize(db_path)
         @db_path = db_path
         @db = Sequel.sqlite(db_path)
+
+        # Enable WAL mode for better concurrency
+        # - Multiple readers don't block each other
+        # - Writers don't block readers
+        # - Safer concurrent hook execution
+        @db.run("PRAGMA journal_mode = WAL")
+        @db.run("PRAGMA synchronous = NORMAL")
+
         ensure_schema!
       end
 
@@ -56,6 +64,10 @@ module ClaudeMemory
         @db[:conflicts]
       end
 
+      def tool_calls
+        @db[:tool_calls]
+      end
+
       private
 
       def ensure_schema!
@@ -69,6 +81,9 @@ module ClaudeMemory
         current = get_meta("schema_version")&.to_i || 0
 
         migrate_to_v2! if current < 2
+        migrate_to_v3! if current < 3
+        migrate_to_v4! if current < 4
+        migrate_to_v5! if current < 5
       end
 
       def migrate_to_v2!
@@ -90,12 +105,77 @@ module ClaudeMemory
         end
       end
 
+      def migrate_to_v3!
+        # Add session metadata columns to content_items
+        columns = @db.schema(:content_items).map(&:first)
+        unless columns.include?(:git_branch)
+          @db.alter_table(:content_items) do
+            add_column :git_branch, String
+            add_column :cwd, String
+            add_column :claude_version, String
+            add_column :thinking_level, String
+          end
+        end
+
+        # Add index for filtering by branch
+        create_index_if_not_exists(:content_items, :git_branch, :idx_content_items_git_branch)
+
+        # Create tool_calls table for tracking tool usage
+        @db.create_table?(:tool_calls) do
+          primary_key :id
+          foreign_key :content_item_id, :content_items, on_delete: :cascade
+          String :tool_name, null: false
+          String :tool_input, text: true  # JSON of input parameters
+          String :tool_result, text: true  # Truncated result (first 500 chars)
+          TrueClass :is_error, default: false
+          String :timestamp, null: false
+        end
+
+        create_index_if_not_exists(:tool_calls, :tool_name, :idx_tool_calls_tool_name)
+        create_index_if_not_exists(:tool_calls, :content_item_id, :idx_tool_calls_content_item)
+      end
+
+      def migrate_to_v4!
+        # Add embeddings column to facts for semantic search
+        columns = @db.schema(:facts).map(&:first)
+        unless columns.include?(:embedding_json)
+          @db.alter_table(:facts) do
+            add_column :embedding_json, String, text: true  # JSON array of floats
+          end
+        end
+
+        # Note: We use JSON storage for embeddings instead of sqlite-vec extension
+        # Similarity calculations are done in Ruby using cosine similarity
+        # Future: Could migrate to native vector extension or external vector DB
+      end
+
+      def migrate_to_v5!
+        # Add source_mtime for incremental sync
+        columns = @db.schema(:content_items).map(&:first)
+        unless columns.include?(:source_mtime)
+          @db.alter_table(:content_items) do
+            add_column :source_mtime, String  # ISO8601 timestamp of source file mtime
+          end
+        end
+
+        # Index for efficient mtime lookups
+        create_index_if_not_exists(:content_items, :source_mtime, :idx_content_items_source_mtime)
+      end
+
       def create_tables!
         @db.create_table?(:meta) do
           String :key, primary_key: true
           String :value
         end
 
+        # Content items store ingested transcript chunks with metadata
+        # metadata_json stores extensible session metadata as JSON:
+        # {
+        #   "git_branch": "feature/auth",
+        #   "cwd": "/path/to/project",
+        #   "claude_version": "4.5",
+        #   "tools_used": ["Read", "Edit", "Bash"]
+        # }
         @db.create_table?(:content_items) do
           primary_key :id
           String :source, null: false
@@ -107,7 +187,7 @@ module ClaudeMemory
           String :text_hash, null: false
           Integer :byte_len, null: false
           String :raw_text, text: true
-          String :metadata_json, text: true
+          String :metadata_json, text: true  # Extensible JSON metadata
         end
 
         @db.create_table?(:delta_cursors) do
@@ -204,7 +284,8 @@ module ClaudeMemory
       public
 
       def upsert_content_item(source:, text_hash:, byte_len:, session_id: nil, transcript_path: nil,
-        project_path: nil, occurred_at: nil, raw_text: nil, metadata: nil)
+        project_path: nil, occurred_at: nil, raw_text: nil, metadata: nil,
+        git_branch: nil, cwd: nil, claude_version: nil, thinking_level: nil, source_mtime: nil)
         existing = content_items.where(text_hash: text_hash, session_id: session_id).get(:id)
         return existing if existing
 
@@ -219,8 +300,39 @@ module ClaudeMemory
           text_hash: text_hash,
           byte_len: byte_len,
           raw_text: raw_text,
-          metadata_json: metadata&.to_json
+          metadata_json: metadata&.to_json,
+          git_branch: git_branch,
+          cwd: cwd,
+          claude_version: claude_version,
+          thinking_level: thinking_level,
+          source_mtime: source_mtime
         )
+      end
+
+      def content_item_by_transcript_and_mtime(transcript_path, mtime_iso8601)
+        content_items
+          .where(transcript_path: transcript_path, source_mtime: mtime_iso8601)
+          .first
+      end
+
+      def insert_tool_calls(content_item_id, tool_calls_data)
+        tool_calls_data.each do |tc|
+          tool_calls.insert(
+            content_item_id: content_item_id,
+            tool_name: tc[:tool_name],
+            tool_input: tc[:tool_input],
+            tool_result: tc[:tool_result],
+            is_error: tc[:is_error] || false,
+            timestamp: tc[:timestamp]
+          )
+        end
+      end
+
+      def tool_calls_for_content_item(content_item_id)
+        tool_calls
+          .where(content_item_id: content_item_id)
+          .order(:timestamp)
+          .all
       end
 
       def get_delta_cursor(session_id, transcript_path)
@@ -272,7 +384,7 @@ module ClaudeMemory
         )
       end
 
-      def update_fact(fact_id, status: nil, valid_to: nil, scope: nil, project_path: nil)
+      def update_fact(fact_id, status: nil, valid_to: nil, scope: nil, project_path: nil, embedding: nil)
         updates = {}
         updates[:status] = status if status
         updates[:valid_to] = valid_to if valid_to
@@ -282,10 +394,27 @@ module ClaudeMemory
           updates[:project_path] = (scope == "global") ? nil : project_path
         end
 
+        if embedding
+          updates[:embedding_json] = embedding.to_json
+        end
+
         return false if updates.empty?
 
         facts.where(id: fact_id).update(updates)
         true
+      end
+
+      def update_fact_embedding(fact_id, embedding_vector)
+        facts.where(id: fact_id).update(embedding_json: embedding_vector.to_json)
+      end
+
+      def facts_with_embeddings(limit: 1000)
+        facts
+          .where(Sequel.~(embedding_json: nil))
+          .where(status: "active")
+          .select(:id, :subject_entity_id, :predicate, :object_literal, :embedding_json, :scope)
+          .limit(limit)
+          .all
       end
 
       def facts_for_slot(subject_entity_id, predicate, status: "active")
