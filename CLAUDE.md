@@ -253,6 +253,7 @@ The gem includes an MCP server (`claude-memory serve-mcp`) that exposes memory o
 
 Available MCP tools:
 - `memory.recall` - Search for relevant facts (scope filtering supported)
+- `memory.check_setup` - Check initialization status and version (diagnostics)
 - `memory.explain` - Get detailed fact provenance
 - `memory.promote` - Promote project fact to global
 - `memory.status` - Health check for both databases

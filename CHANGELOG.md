@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+**Setup & Initialization**
+- Version markers in CLAUDE.md files for upgrade detection
+  - HTML comment format: `<!-- ClaudeMemory vX.Y.Z -->`
+  - Enables version comparison and upgrade workflows
+- `memory.check_setup` MCP tool for initialization detection
+  - Returns status: healthy, needs_upgrade, partially_initialized, not_initialized
+  - Checks databases, CLAUDE.md, version, and hooks configuration
+  - Provides actionable recommendations
+- `/setup-memory` skill for installation guidance
+  - Comprehensive troubleshooting documentation
+  - Step-by-step setup instructions
+  - Links to diagnostic tools
+
+**Error Handling**
+- Graceful error messages when databases are missing or not accessible
+- Structured error responses with recommendations
+- Directs users to `memory.check_setup` for diagnosis
+
+**Documentation**
+- Auto-initialization and upgrade design document (docs/auto_init_design.md)
+- Multi-phase upgrade strategy documentation
+- Comprehensive test coverage (53 new tests)
+
+### Changed
+- MCP tool descriptions now emphasize memory-first workflow
+- Tool descriptions are more directive ("Check FIRST", "Use BEFORE")
+- Init command now adds version markers to generated CLAUDE.md files
+
+### Internal
+- Init command test suite (19 examples)
+- Setup detection test suite (25 examples)
+- Error handling test suite (4 examples)
+
 ## [0.3.0] - 2026-01-26
 
 ### Added

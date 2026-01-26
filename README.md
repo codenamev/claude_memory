@@ -34,9 +34,21 @@ From within Claude Code, add the marketplace and install the plugin:
 /plugin install claude-memory
 ```
 
-### 3. Analyze Your Project
+### 3. Initialize Memory
 
-Run the analyze command to bootstrap memory with your project's tech stack:
+Initialize both global and project-specific memory:
+
+```bash
+claude-memory init
+```
+
+This creates:
+- **Global database** (`~/.claude/memory.sqlite3`) - User-wide preferences
+- **Project database** (`.claude/memory.sqlite3`) - Project-specific knowledge
+
+### 4. Analyze Your Project (Optional)
+
+Bootstrap memory with your project's tech stack:
 
 ```
 /claude-memory:analyze
@@ -44,7 +56,7 @@ Run the analyze command to bootstrap memory with your project's tech stack:
 
 This reads your project files (Gemfile, package.json, etc.) and stores facts about languages, frameworks, tools, and conventions.
 
-### 4. Verify Setup
+### 5. Verify Setup
 ```bash
 claude-memory doctor
 ```
@@ -104,9 +116,66 @@ Claude: [uses it during session]
 
 Supported tags: `<private>`, `<no-memory>`, `<secret>`
 
+## Upgrading
+
+Existing users can upgrade seamlessly:
+
+```bash
+gem update claude_memory
+```
+
+All database migrations happen automatically. Run `claude-memory doctor` to verify.
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
+
+## Troubleshooting
+
+### Check Setup Status
+
+If memory tools aren't working, check initialization status:
+
+```
+memory.check_setup
+```
+
+This returns:
+- Initialization status (healthy, needs_upgrade, not_initialized)
+- Version information
+- Missing components
+- Actionable recommendations
+
+### Installation Help
+
+Need help getting started? Run:
+
+```
+/setup-memory
+```
+
+This skill provides:
+- Step-by-step installation instructions
+- Common error solutions
+- Post-installation verification
+- Upgrade guidance
+
+### Health Check
+
+Verify your ClaudeMemory installation:
+
+```bash
+claude-memory doctor
+```
+
+This checks:
+- Database existence and integrity
+- Schema version compatibility
+- Hooks configuration
+- Snapshot status
+- Stuck operations
+
 ## Documentation
 
-- 📖 [Getting Started](docs/GETTING_STARTED.md) - Step-by-step onboarding *(coming soon)*
+- 📖 [Getting Started](docs/GETTING_STARTED.md) - Step-by-step onboarding
 - 💡 [Examples](docs/EXAMPLES.md) - Use cases and workflows
 - 🔧 [Plugin Setup](docs/PLUGIN.md) - Claude Code integration
 - 🏗️ [Architecture](docs/architecture.md) - Technical deep dive
