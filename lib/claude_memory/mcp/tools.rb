@@ -20,11 +20,11 @@ module ClaudeMemory
         [
           {
             name: "memory.recall",
-            description: "Recall facts matching a query. Searches both global and project databases.",
+            description: "IMPORTANT: Check memory FIRST before reading files or exploring code. Recalls facts matching a query from distilled knowledge in both global and project databases. Use this to find existing knowledge about modules, patterns, decisions, and conventions before resorting to file reads or code searches.",
             inputSchema: {
               type: "object",
               properties: {
-                query: {type: "string", description: "Search query"},
+                query: {type: "string", description: "Search query for existing knowledge (e.g., 'authentication flow', 'error handling', 'database setup')"},
                 limit: {type: "integer", description: "Max results", default: 10},
                 scope: {type: "string", enum: ["all", "global", "project"], description: "Filter by scope: 'all' (default), 'global', or 'project'", default: "all"}
               },
@@ -33,11 +33,11 @@ module ClaudeMemory
           },
           {
             name: "memory.recall_index",
-            description: "Layer 1: Search for facts and get lightweight index (IDs, previews, token counts). Use this first before fetching full details.",
+            description: "Layer 1: CHECK MEMORY FIRST with this lightweight search. Returns fact previews, IDs, and token costs without full details. Use before exploring code to see what knowledge already exists. Follow up with memory.recall_details for specific facts.",
             inputSchema: {
               type: "object",
               properties: {
-                query: {type: "string", description: "Search query for fact discovery"},
+                query: {type: "string", description: "Search query for existing knowledge (e.g., 'client errors', 'database choice')"},
                 limit: {type: "integer", description: "Maximum results to return", default: 20},
                 scope: {type: "string", enum: ["all", "global", "project"], description: "Scope: 'all' (both), 'global' (user-wide), 'project' (current only)", default: "all"}
               },
@@ -186,7 +186,7 @@ module ClaudeMemory
           },
           {
             name: "memory.decisions",
-            description: "Quick access to architectural decisions, constraints, and rules",
+            description: "Quick access to architectural decisions, constraints, and rules. Use BEFORE implementing features to understand existing decisions and constraints.",
             inputSchema: {
               type: "object",
               properties: {
@@ -196,7 +196,7 @@ module ClaudeMemory
           },
           {
             name: "memory.conventions",
-            description: "Quick access to coding conventions and style preferences (global scope)",
+            description: "Quick access to coding conventions and style preferences (global scope). Check BEFORE writing code to follow established patterns.",
             inputSchema: {
               type: "object",
               properties: {
@@ -206,7 +206,7 @@ module ClaudeMemory
           },
           {
             name: "memory.architecture",
-            description: "Quick access to framework choices and architectural patterns",
+            description: "Quick access to framework choices and architectural patterns. Check FIRST when working with frameworks or making architectural decisions.",
             inputSchema: {
               type: "object",
               properties: {
