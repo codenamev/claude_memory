@@ -37,26 +37,41 @@ module ClaudeMemory
         source_mtime = File.exist?(transcript_path) ? File.mtime(transcript_path).utc.iso8601 : nil
 
         text_hash = Digest::SHA256.hexdigest(delta)
-        content_id = @store.upsert_content_item(
-          source: source,
-          session_id: session_id,
-          transcript_path: transcript_path,
-          project_path: resolved_project,
-          text_hash: text_hash,
-          byte_len: delta.bytesize,
-          raw_text: delta,
-          git_branch: metadata[:git_branch],
-          cwd: metadata[:cwd],
-          claude_version: metadata[:claude_version],
-          thinking_level: metadata[:thinking_level],
-          source_mtime: source_mtime
-        )
 
-        # Store tool calls if any were extracted
-        @store.insert_tool_calls(content_id, tool_calls) unless tool_calls.empty?
+        # Wrap entire ingestion pipeline in transaction for atomicity
+        # If any step fails, cursor position is not updated, allowing retry
+        content_id = nil
+        begin
+          @store.db.transaction do
+            content_id = @store.upsert_content_item(
+              source: source,
+              session_id: session_id,
+              transcript_path: transcript_path,
+              project_path: resolved_project,
+              text_hash: text_hash,
+              byte_len: delta.bytesize,
+              raw_text: delta,
+              git_branch: metadata[:git_branch],
+              cwd: metadata[:cwd],
+              claude_version: metadata[:claude_version],
+              thinking_level: metadata[:thinking_level],
+              source_mtime: source_mtime
+            )
 
-        @fts.index_content_item(content_id, delta)
-        @store.update_delta_cursor(session_id, transcript_path, new_offset)
+            # Store tool calls if any were extracted
+            @store.insert_tool_calls(content_id, tool_calls) unless tool_calls.empty?
+
+            # FTS indexing (FTS5 supports transactions)
+            @fts.index_content_item(content_id, delta)
+
+            # Update cursor LAST - only after all other operations succeed
+            # This ensures that if any step fails, we can retry from the same offset
+            @store.update_delta_cursor(session_id, transcript_path, new_offset)
+          end
+        rescue => e
+          # Re-raise with context for better error messages
+          raise StandardError, "Ingestion failed for session #{session_id}: #{e.message}"
+        end
 
         {status: :ingested, content_id: content_id, bytes_read: delta.bytesize, project_path: resolved_project}
       end
