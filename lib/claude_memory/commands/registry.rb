@@ -25,7 +25,8 @@ module ClaudeMemory
         "init" => "InitCommand",
         "serve-mcp" => "ServeMcpCommand",
         "hook" => "HookCommand",
-        "index" => "IndexCommand"
+        "index" => "IndexCommand",
+        "recover" => "RecoverCommand"
       }.freeze
 
       # Find a command class by name
