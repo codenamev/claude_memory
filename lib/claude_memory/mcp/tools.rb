@@ -347,6 +347,8 @@ module ClaudeMemory
             }
           end
         }
+      rescue Sequel::DatabaseError, Sequel::DatabaseConnectionError, SQLite3::CantOpenException, Errno::ENOENT => e
+        database_not_found_error(e)
       end
 
       def recall_index(args)
@@ -800,6 +802,19 @@ module ClaudeMemory
               receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
             }
           end
+        }
+      end
+
+      def database_not_found_error(error)
+        {
+          error: "Database not found or not accessible",
+          message: "ClaudeMemory may not be initialized. Run memory.check_setup for detailed status.",
+          details: error.message,
+          recommendations: [
+            "Run memory.check_setup to diagnose the issue",
+            "If not initialized, run: claude-memory init",
+            "For help: claude-memory doctor"
+          ]
         }
       end
 
