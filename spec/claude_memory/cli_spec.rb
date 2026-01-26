@@ -81,7 +81,7 @@ RSpec.describe ClaudeMemory::CLI do
       expect(run_cli("db:init", "--global")).to eq(0)
       expect(File.exist?(File.join(fake_home, ".claude", "memory.sqlite3"))).to be true
       expect(stdout.string).to include("Global database initialized")
-      expect(stdout.string).to include("Schema version: 5")
+      expect(stdout.string).to include("Schema version: 6")
     end
 
     it "creates project database with --project" do

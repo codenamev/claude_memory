@@ -148,9 +148,9 @@ RSpec.describe ClaudeMemory::Commands::IndexCommand do
       expect(exit_code).to eq(0)
       output = stdout.string
       expect(output).to include("Indexing 6 facts")
-      expect(output).to include("Processed 2 / 6")
-      expect(output).to include("Processed 4 / 6")
-      expect(output).to include("Processed 6 / 6")
+      expect(output).to include("Processed 2 facts")
+      expect(output).to include("Processed 4 facts")
+      expect(output).to include("Processed 6 facts")
     end
 
     it "returns error for invalid scope" do
