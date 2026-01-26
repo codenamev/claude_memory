@@ -113,6 +113,7 @@ module ClaudeMemory
         claude_md_path = File.join(global_claude_dir, "CLAUDE.md")
 
         memory_instruction = <<~MD
+          <!-- ClaudeMemory v#{ClaudeMemory::VERSION} -->
           # ClaudeMemory
 
           ClaudeMemory provides long-term memory across all your sessions.
@@ -207,6 +208,7 @@ module ClaudeMemory
         claude_md_path = File.join(claude_dir, "CLAUDE.md")
 
         memory_instruction = <<~MD
+          <!-- ClaudeMemory v#{ClaudeMemory::VERSION} -->
           # ClaudeMemory
 
           This project has ClaudeMemory enabled for both project-specific and global knowledge.
