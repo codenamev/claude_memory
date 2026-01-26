@@ -76,6 +76,32 @@ module ClaudeMemory
               warnings << "#{label}: No content has been ingested yet"
             end
 
+            # Check for stuck operations
+            tracker = ClaudeMemory::Infrastructure::OperationTracker.new(store)
+            stuck_ops = tracker.stuck_operations
+            if stuck_ops.any?
+              stuck_ops.each do |op|
+                warnings << "#{label}: Stuck operation '#{op[:operation_type]}' (started #{op[:started_at]}). Run 'claude-memory recover' to reset."
+              end
+            end
+            stdout.puts "  Stuck operations: #{stuck_ops.size}"
+
+            # Run schema validation
+            validator = ClaudeMemory::Infrastructure::SchemaValidator.new(store)
+            validation = validator.validate
+            stdout.puts "  Schema health: #{validation[:valid] ? "healthy" : "issues detected"}"
+
+            # Report validation issues
+            if validation[:issues].any?
+              validation[:issues].each do |issue|
+                if issue[:severity] == "error"
+                  issues << "#{label}: #{issue[:message]}"
+                else
+                  warnings << "#{label}: #{issue[:message]}"
+                end
+              end
+            end
+
             store.close
           rescue => e
             issues << "#{label} database error: #{e.message}"
