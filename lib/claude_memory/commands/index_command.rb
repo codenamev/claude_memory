@@ -47,42 +47,94 @@ module ClaudeMemory
         end
 
         store = Store::SQLiteStore.new(db_path)
+        tracker = Infrastructure::OperationTracker.new(store)
 
-        # Find facts to index
-        facts = if opts[:force]
-          store.facts.all
+        # Check for existing progress (resumption support)
+        checkpoint = tracker.get_checkpoint(operation_type: "index_embeddings", scope: label)
+        if checkpoint && !opts[:force]
+          stdout.puts "#{label.capitalize} database: Resuming from previous run (processed #{checkpoint[:processed_items]} facts)..."
+          resume_from_fact_id = checkpoint[:checkpoint_data][:last_fact_id]
         else
-          store.facts.where(embedding_json: nil).all
+          resume_from_fact_id = nil
         end
 
-        if facts.empty?
+        # Find facts to index
+        facts_dataset = if opts[:force]
+          store.facts
+        else
+          store.facts.where(embedding_json: nil)
+        end
+
+        # If resuming, skip facts we've already processed
+        if resume_from_fact_id
+          facts_dataset = facts_dataset.where(Sequel.lit("id > ?", resume_from_fact_id))
+        end
+
+        facts = facts_dataset.order(:id).all
+
+        if facts.empty? && !checkpoint
           stdout.puts "#{label.capitalize} database: All facts already indexed"
+          store.close
+          return
+        elsif facts.empty? && checkpoint
+          # Resume found nothing left to do - mark as completed
+          tracker.complete_operation(checkpoint[:operation_id])
+          stdout.puts "#{label.capitalize} database: Resumed operation completed (nothing left to index)"
           store.close
           return
         end
 
+        # Start or continue operation tracking
+        operation_id = checkpoint ? checkpoint[:operation_id] : tracker.start_operation(
+          operation_type: "index_embeddings",
+          scope: label,
+          total_items: facts.size,
+          checkpoint_data: {last_fact_id: nil}
+        )
+
         stdout.puts "#{label.capitalize} database: Indexing #{facts.size} facts..."
 
-        processed = 0
-        facts.each_slice(opts[:batch_size]) do |batch|
-          batch.each do |fact|
-            # Generate text representation
-            text = build_fact_text(fact, store)
+        processed = checkpoint ? checkpoint[:processed_items] : 0
+        begin
+          facts.each_slice(opts[:batch_size]) do |batch|
+            # Wrap batch processing in transaction for atomicity
+            store.db.transaction do
+              batch.each do |fact|
+                # Generate text representation
+                text = build_fact_text(fact, store)
 
-            # Generate embedding
-            embedding = generator.generate(text)
+                # Generate embedding
+                embedding = generator.generate(text)
 
-            # Store embedding
-            store.update_fact_embedding(fact[:id], embedding)
+                # Store embedding
+                store.update_fact_embedding(fact[:id], embedding)
 
-            processed += 1
+                processed += 1
+              end
+
+              # Update checkpoint after batch commits
+              last_fact_id = batch.last[:id]
+              tracker.update_progress(
+                operation_id,
+                processed_items: processed,
+                checkpoint_data: {last_fact_id: last_fact_id}
+              )
+            end
+
+            stdout.puts "  Processed #{processed} facts..."
           end
 
-          stdout.puts "  Processed #{processed} / #{facts.size} facts..."
+          # Mark operation as completed
+          tracker.complete_operation(operation_id)
+          stdout.puts "  Done!"
+        rescue => e
+          # Mark operation as failed
+          tracker.fail_operation(operation_id, e.message)
+          stderr.puts "  Failed: #{e.message}"
+          raise
+        ensure
+          store.close
         end
-
-        stdout.puts "  Done!"
-        store.close
       end
 
       def build_fact_text(fact, store)
