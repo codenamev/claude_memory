@@ -272,6 +272,14 @@ module ClaudeMemory
               },
               required: ["concepts"]
             }
+          },
+          {
+            name: "memory.check_setup",
+            description: "Check if ClaudeMemory is properly initialized. CALL THIS FIRST if memory tools fail or on first use. Returns initialization status, version info, and actionable recommendations.",
+            inputSchema: {
+              type: "object",
+              properties: {}
+            }
           }
         ]
       end
@@ -314,6 +322,8 @@ module ClaudeMemory
           recall_semantic(arguments)
         when "memory.search_concepts"
           search_concepts(arguments)
+        when "memory.check_setup"
+          check_setup
         else
           {error: "Unknown tool: #{name}"}
         end
@@ -790,6 +800,118 @@ module ClaudeMemory
               receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
             }
           end
+        }
+      end
+
+      def check_setup
+        issues = []
+        warnings = []
+        config = Configuration.new
+
+        # Check global database
+        global_db_exists = File.exist?(config.global_db_path)
+        unless global_db_exists
+          issues << "Global database not found at #{config.global_db_path}"
+        end
+
+        # Check project database
+        project_db_exists = File.exist?(config.project_db_path)
+        unless project_db_exists
+          warnings << "Project database not found at #{config.project_db_path}"
+        end
+
+        # Check for CLAUDE.md and version
+        claude_md_path = ".claude/CLAUDE.md"
+        claude_md_exists = File.exist?(claude_md_path)
+        current_version = nil
+        version_status = nil
+
+        if claude_md_exists
+          content = File.read(claude_md_path)
+          if content.include?("ClaudeMemory")
+            # Extract version from HTML comment
+            if content =~ /<!-- ClaudeMemory v([\d.]+) -->/
+              current_version = $1
+              if current_version == ClaudeMemory::VERSION
+                version_status = "up_to_date"
+              else
+                version_status = "outdated"
+                warnings << "Configuration version (v#{current_version}) is older than ClaudeMemory (v#{ClaudeMemory::VERSION}). Consider running upgrade."
+              end
+            else
+              version_status = "no_version_marker"
+              warnings << "CLAUDE.md has ClaudeMemory section but no version marker"
+            end
+          else
+            warnings << "CLAUDE.md exists but no ClaudeMemory configuration found"
+          end
+        else
+          warnings << "No .claude/CLAUDE.md found"
+        end
+
+        # Check hooks configuration
+        hooks_configured = false
+        settings_paths = [".claude/settings.json", ".claude/settings.local.json"]
+        settings_paths.each do |path|
+          if File.exist?(path)
+            begin
+              config_data = JSON.parse(File.read(path))
+              if config_data["hooks"]&.any?
+                hooks_configured = true
+                break
+              end
+            rescue JSON::ParserError
+              warnings << "Invalid JSON in #{path}"
+            end
+          end
+        end
+
+        unless hooks_configured
+          warnings << "No hooks configured for automatic ingestion"
+        end
+
+        # Determine overall status
+        initialized = global_db_exists && claude_md_exists
+        status = if initialized && version_status == "up_to_date"
+          "healthy"
+        elsif initialized && version_status == "outdated"
+          "needs_upgrade"
+        elsif global_db_exists && !claude_md_exists
+          "partially_initialized"
+        else
+          "not_initialized"
+        end
+
+        # Generate recommendations
+        recommendations = []
+        if !initialized
+          recommendations << "Run: claude-memory init"
+          recommendations << "This will create databases, configure hooks, and set up CLAUDE.md"
+        elsif version_status == "outdated"
+          recommendations << "Run: claude-memory upgrade (when available)"
+          recommendations << "Or manually run: claude-memory init to update CLAUDE.md"
+        elsif warnings.any?
+          recommendations << "Run: claude-memory doctor --fix (when available)"
+          recommendations << "Or check individual issues and fix manually"
+        end
+
+        {
+          status: status,
+          initialized: initialized,
+          version: {
+            current: current_version || "unknown",
+            latest: ClaudeMemory::VERSION,
+            status: version_status || "unknown"
+          },
+          components: {
+            global_database: global_db_exists,
+            project_database: project_db_exists,
+            claude_md: claude_md_exists,
+            hooks_configured: hooks_configured
+          },
+          issues: issues,
+          warnings: warnings,
+          recommendations: recommendations
         }
       end
 
