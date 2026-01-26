@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-01-23*
+*Updated: 2026-01-26*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
@@ -26,6 +26,7 @@ The following improvements from the original analysis have been successfully imp
 11. **Multi-Concept AND Search** - Query facts matching all of 2-5 concepts simultaneously
 12. **Incremental Sync** - mtime-based change detection to skip unchanged transcript files
 13. **Context-Aware Queries** - Filter facts by git branch, directory, or tools used
+14. **ROI Metrics Tracking** - ingestion_metrics table tracking token economics for distillation efficiency (2026-01-26)
 
 ---
 
@@ -234,111 +235,7 @@ This document analyzes two complementary memory systems:
 
 ---
 
-## 1. ROI Metrics and Token Economics
-
-### What claude-mem Does
-
-**Discovery Token Tracking**:
-- `discovery_tokens` field on observations table
-- Tracks tokens spent discovering each piece of knowledge
-- Cumulative metrics in session summaries
-- Footer displays ROI: "Access 10k tokens for 2,500t"
-
-**File**: `src/services/sqlite/Database.ts`
-
-```typescript
-observations: {
-  id: INTEGER PRIMARY KEY,
-  title: TEXT,
-  narrative: TEXT,
-  discovery_tokens: INTEGER,  // ← Cost tracking
-  created_at_epoch: INTEGER
-}
-
-session_summaries: {
-  cumulative_discovery_tokens: INTEGER,  // ← Running total
-  observation_count: INTEGER
-}
-```
-
-**Context Footer Example**:
-```markdown
-💡 **Token Economics:**
-- Context shown: 2,500 tokens
-- Research captured: 10,000 tokens
-- ROI: 4x compression
-```
-
-### What We Should Do
-
-**Priority**: MEDIUM
-
-**Implementation**:
-
-1. **Add metrics table**:
-   ```ruby
-   create_table :ingestion_metrics do
-     primary_key :id
-     foreign_key :content_item_id, :content_items
-     Integer :input_tokens
-     Integer :output_tokens
-     Integer :facts_extracted
-     DateTime :created_at
-   end
-   ```
-
-2. **Track during distillation**:
-   ```ruby
-   # lib/claude_memory/distill/distiller.rb
-   def distill(content)
-     response = api_call(content)
-     facts = extract_facts(response)
-
-     store_metrics(
-       input_tokens: response.usage.input_tokens,
-       output_tokens: response.usage.output_tokens,
-       facts_extracted: facts.size
-     )
-
-     facts
-   end
-   ```
-
-3. **Display in CLI**:
-   ```ruby
-   # claude-memory stats
-   def stats_cmd
-     metrics = store.aggregate_metrics
-     puts "Token Economics:"
-     puts "  Input: #{metrics[:input_tokens]} tokens"
-     puts "  Output: #{metrics[:output_tokens]} tokens"
-     puts "  Facts: #{metrics[:facts_extracted]}"
-     puts "  Efficiency: #{metrics[:facts_extracted] / metrics[:input_tokens].to_f} facts/token"
-   end
-   ```
-
-4. **Add to published snapshot**:
-   ```markdown
-   <!-- At bottom of .claude/rules/claude_memory.generated.md -->
-
-   ---
-
-   *Memory stats: 145 facts from 12,500 ingested tokens (86 facts/1k tokens)*
-   ```
-
-**Benefits**:
-- Visibility into memory system efficiency
-- Justifies API costs (shows compression ratio)
-- Helps tune distillation prompts for better extraction
-
-**Trade-offs**:
-- Requires API usage tracking
-- Adds database complexity
-- May not be meaningful for all distiller implementations
-
----
-
-## 2. Health Monitoring and Process Management
+## 1. Health Monitoring and Process Management
 
 ### What claude-mem Does
 
@@ -1116,7 +1013,6 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 ### Remaining Tasks
 
 - [ ] Background processing (--async flag for hooks)
-- [ ] ROI metrics table for token tracking during distillation
 - [ ] LLM response caching (from QMD, when distiller is active)
 - [ ] Structured logging implementation
 - [ ] Embed command for backfilling embeddings
@@ -1140,6 +1036,7 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 3. Clean architecture (command pattern, slim CLI)
 4. Semantic shortcuts (decisions, conventions, architecture)
 5. Exit code strategy (hook error handling)
+6. ROI metrics tracking (token economics for distillation efficiency)
 
 ### Successfully Adopted from Episodic-Memory ✓
 
@@ -1211,6 +1108,6 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 
 ---
 
-*This document has been updated to reflect completed implementations. Thirteen major improvements have been successfully integrated: 5 from claude-mem and 8 from episodic-memory. ClaudeMemory now combines the best of both systems while maintaining its unique advantages in fact-based knowledge representation and truth maintenance.*
+*This document has been updated to reflect completed implementations. Fourteen major improvements have been successfully integrated: 6 from claude-mem and 8 from episodic-memory. ClaudeMemory now combines the best of both systems while maintaining its unique advantages in fact-based knowledge representation and truth maintenance.*
 
-*Last updated: 2026-01-23 - Major implementation milestone achieved*
+*Last updated: 2026-01-26 - Added ROI metrics tracking for distillation token economics*
