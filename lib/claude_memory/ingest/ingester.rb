@@ -8,7 +8,7 @@ module ClaudeMemory
       def initialize(store, fts: nil, env: ENV, metadata_extractor: nil, tool_extractor: nil)
         @store = store
         @fts = fts || Index::LexicalFTS.new(store)
-        @env = env
+        @config = Configuration.new(env)
         @metadata_extractor = metadata_extractor || MetadataExtractor.new
         @tool_extractor = tool_extractor || ToolExtractor.new
       end
@@ -91,7 +91,7 @@ module ClaudeMemory
       end
 
       def detect_project_path
-        @env["CLAUDE_PROJECT_DIR"] || Dir.pwd
+        @config.project_dir
       end
     end
   end

@@ -8,21 +8,21 @@ module ClaudeMemory
       attr_reader :global_store, :project_store, :project_path
 
       def initialize(global_db_path: nil, project_db_path: nil, project_path: nil, env: ENV)
-        @project_path = project_path || env["CLAUDE_PROJECT_DIR"] || Dir.pwd
-        @global_db_path = global_db_path || self.class.default_global_db_path(env)
-        @project_db_path = project_db_path || self.class.default_project_db_path(@project_path)
+        config = Configuration.new(env)
+        @project_path = project_path || config.project_dir
+        @global_db_path = global_db_path || config.global_db_path
+        @project_db_path = project_db_path || config.project_db_path(@project_path)
 
         @global_store = nil
         @project_store = nil
       end
 
       def self.default_global_db_path(env = ENV)
-        home = env["HOME"] || File.expand_path("~")
-        File.join(home, ".claude", "memory.sqlite3")
+        Configuration.new(env).global_db_path
       end
 
       def self.default_project_db_path(project_path = Dir.pwd)
-        File.join(project_path, ".claude", "memory.sqlite3")
+        Configuration.new.project_db_path(project_path)
       end
 
       def ensure_global!

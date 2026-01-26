@@ -565,7 +565,8 @@ module ClaudeMemory
         facts = (args["facts"] || []).map { |f| symbolize_keys(f) }
         decisions = (args["decisions"] || []).map { |d| symbolize_keys(d) }
 
-        project_path = ENV["CLAUDE_PROJECT_DIR"] || Dir.pwd
+        config = Configuration.new
+        project_path = config.project_dir
         occurred_at = Time.now.utc.iso8601
 
         searchable_text = build_searchable_text(entities, facts, decisions)

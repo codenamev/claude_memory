@@ -73,11 +73,10 @@ require_relative "claude_memory/version"
 
 module ClaudeMemory
   def self.global_db_path(env = ENV)
-    home = env["HOME"] || File.expand_path("~")
-    File.join(home, ".claude", "memory.sqlite3")
+    Configuration.new(env).global_db_path
   end
 
   def self.project_db_path(project_path = Dir.pwd)
-    File.join(project_path, ".claude", "memory.sqlite3")
+    Configuration.new.project_db_path(project_path)
   end
 end
