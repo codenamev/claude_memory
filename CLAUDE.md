@@ -285,3 +285,33 @@ Key conventions:
 - Prefer explicit returns only when control flow is complex
 - Use Sequel's dataset methods (avoid raw SQL where possible)
 - Keep CLI commands focused; extract complex logic to dedicated classes
+
+## Custom Commands
+
+### `/review-for-quality`
+
+Runs a comprehensive quality review of the entire codebase.
+
+**What it does:**
+1. Launches a Plan agent to thoroughly explore the codebase
+2. Critically reviews code for Ruby best-practices, idiom use, and overall quality
+3. Analyzes through the perspectives of 5 Ruby experts:
+   - **Sandi Metz** - POODR principles, single responsibility, small objects
+   - **Jeremy Evans** - Sequel best practices, performance, simplicity
+   - **Kent Beck** - Test-driven development, simple design, revealing intent
+   - **Avdi Grimm** - Confident Ruby, explicit code, null objects, tell-don't-ask
+   - **Gary Bernhardt** - Boundaries, functional core/imperative shell, fast tests
+4. Updates `docs/quality_review.md` with findings including:
+   - Specific file:line references for every issue
+   - Which expert's principle is violated
+   - Concrete improvement suggestions with code examples
+   - Priority levels (Critical 🔴 / High / Medium 🟡 / Low)
+   - Metrics comparison showing progress since last review
+   - Quick wins that can be done immediately
+
+**Usage:**
+```
+/review-for-quality
+```
+
+**Output:** Updated `docs/quality_review.md` with dated review and actionable refactoring recommendations.

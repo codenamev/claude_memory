@@ -900,20 +900,169 @@ Key remaining items:
 
 ---
 
-## Implementation Priorities
+## QMD-Inspired Improvements (2026-01-26)
+
+Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizations for search quality and performance. QMD is an on-device markdown search engine with hybrid BM25 + vector + LLM reranking, achieving 50%+ Hit@3 improvement over BM25-only search.
+
+**See detailed analysis**: [docs/influence/qmd.md](./influence/qmd.md)
+
+### High Priority ⭐
+
+#### 1. **Native Vector Storage (sqlite-vec)** ⭐ CRITICAL
+
+- **Value**: 10-100x faster KNN queries, enables larger fact databases
+- **QMD Proof**: Handles 10,000+ documents with sub-second vector queries
+- **Current Issue**: JSON embedding storage requires loading all facts, O(n) Ruby similarity calculation
+- **Solution**: sqlite-vec extension with native C KNN queries
+- **Implementation**:
+  - Schema migration v7: Create `facts_vec` virtual table using `vec0`
+  - Two-step query pattern (avoid JOINs - they hang with vec tables!)
+  - Update `Embeddings::Similarity` class
+  - Backfill existing embeddings
+- **Trade-off**: Adds native dependency (acceptable, well-maintained, cross-platform)
+- **Recommendation**: **ADOPT IMMEDIATELY** - This is foundational
+
+#### 2. **Reciprocal Rank Fusion (RRF) Algorithm** ⭐ HIGH VALUE
+
+- **Value**: 50% improvement in Hit@3 for medium-difficulty queries (QMD evaluation)
+- **QMD Proof**: Evaluation suite shows consistent improvements across all query types
+- **Current Issue**: Naive deduplication doesn't properly fuse ranking signals
+- **Solution**: Mathematical fusion of FTS + vector ranked lists with position-aware scoring
+- **Formula**: `score = Σ(weight / (k + rank + 1))` with top-rank bonus
+- **Implementation**:
+  - Create `Recall::RRFusion` class
+  - Update `Recall#query_semantic_dual` to use RRF
+  - Apply weights: original query ×2, expanded queries ×1
+  - Add top-rank bonus: +0.05 for #1, +0.02 for #2-3
+- **Trade-off**: Slightly more complex than naive merging (acceptable, well-tested)
+- **Recommendation**: **ADOPT IMMEDIATELY** - Pure algorithmic improvement
+
+#### 3. **Docid Short Hash System** ⭐ MEDIUM VALUE
+
+- **Value**: Better UX, cross-database fact references
+- **QMD Proof**: Used in all output, enables `qmd get #abc123`
+- **Current Issue**: Integer IDs are database-specific, not user-friendly
+- **Solution**: 8-character hash IDs for facts (e.g., `#abc123de`)
+- **Implementation**:
+  - Schema migration v8: Add `docid` column (indexed, unique)
+  - Backfill existing facts with SHA256-based docids
+  - Update CLI commands (`explain`, `recall`) to accept docids
+  - Update MCP tools to accept docids
+  - Update output formatting to show docids
+- **Trade-off**: Hash collisions possible (8 chars = 1 in 4.3 billion, very rare)
+- **Recommendation**: **ADOPT IN PHASE 2** - Clear UX improvement
+
+#### 4. **Smart Expansion Detection** ⭐ MEDIUM VALUE
+
+- **Value**: Skip unnecessary vector search when FTS finds exact match
+- **QMD Proof**: Saves 2-3 seconds on 60% of queries (exact keyword matches)
+- **Current Issue**: Always runs both FTS and vector search, even for exact matches
+- **Solution**: Heuristic detection of strong FTS signal
+- **Thresholds**: `top_score >= 0.85` AND `gap >= 0.15`
+- **Implementation**:
+  - Create `Recall::ExpansionDetector` class
+  - Update `Recall#query_semantic_dual` to check before vector search
+  - Add optional metrics tracking (skip rate, latency saved)
+- **Trade-off**: May miss semantic results for exact matches (acceptable)
+- **Recommendation**: **ADOPT IN PHASE 3** - Clear performance win
 
 ### Medium Priority
 
-1. **Background Processing** - Non-blocking hooks for better UX
-2. **ROI Metrics** - Track token economics for distillation
+#### 5. **Document Chunking for Long Transcripts**
+
+- **Value**: Better embeddings for long content (>3000 chars)
+- **QMD Approach**: 800 tokens, 15% overlap, semantic boundary detection
+- **Break Priority**: paragraph > sentence > line > word
+- **Implementation**: Modify ingestion to chunk long content_items before embedding
+- **Consideration**: Only if users report issues with long transcripts
+- **Recommendation**: **DEFER** - Not urgent, TF-IDF handles shorter content well
+
+#### 6. **LLM Response Caching**
+
+- **Value**: Reduce API costs for repeated distillation
+- **QMD Proof**: Hash-based caching with 80% hit rate
+- **Implementation**:
+  - Add `llm_cache` table (hash, result, created_at)
+  - Cache key: `SHA256(operation + model + input)`
+  - Probabilistic cleanup: 1% chance per operation, keep latest 1000
+- **Consideration**: Most valuable when distiller is fully implemented
+- **Recommendation**: **ADOPT WHEN DISTILLER ACTIVE** - Cost savings
+
+#### 7. **Enhanced Snippet Extraction**
+
+- **Value**: Better search result previews with query term highlighting
+- **QMD Approach**: Find line with most query term matches, extract 1 line before + 2 after
+- **Implementation**: Add to `Recall` output formatting
+- **Consideration**: Improves UX but not critical
+- **Recommendation**: **CONSIDER** - Nice-to-have
+
+### Low Priority / Not Recommended
+
+#### 8. **Neural Embeddings (EmbeddingGemma)** (DEFER)
+
+- **QMD Model**: 300M params, 300MB download, 384 dimensions
+- **Value**: Better semantic search quality (+40% Hit@3 over TF-IDF)
+- **Cost**: 300MB download, 300MB VRAM, 2s cold start, complex dependency
+- **Decision**: **DEFER** - TF-IDF sufficient for now, revisit if users report poor quality
+
+#### 9. **Cross-Encoder Reranking** (REJECT)
+
+- **QMD Model**: Qwen3-Reranker-0.6B (640MB)
+- **Value**: Better ranking precision via LLM scoring
+- **Cost**: 640MB model, 400ms latency per query, complex dependency
+- **Decision**: **REJECT** - Over-engineering for fact retrieval
+
+#### 10. **Query Expansion (LLM)** (REJECT)
+
+- **QMD Model**: Qwen3-1.7B (2.2GB)
+- **Value**: Generate alternative query phrasings for better recall
+- **Cost**: 2.2GB model, 800ms latency per query
+- **Decision**: **REJECT** - No LLM in recall path, too heavy
+
+#### 11. **YAML Collection System** (REJECT)
+
+- **QMD Use**: Multi-directory indexing with per-path contexts
+- **Our Use**: Dual-database (global + project) already provides clean separation
+- **Decision**: **REJECT** - Our approach is cleaner for our use case
+
+#### 12. **Content-Addressable Storage** (REJECT)
+
+- **QMD Use**: Deduplicates documents by SHA256 hash
+- **Our Use**: Facts deduplicated by signature, not content hash
+- **Decision**: **REJECT** - Different data model
+
+#### 13. **Virtual Path System** (REJECT)
+
+- **QMD Use**: `qmd://collection/path` unified namespace
+- **Our Use**: Dual-database provides clear namespace
+- **Decision**: **REJECT** - Unnecessary complexity
+
+---
+
+## Implementation Priorities
+
+### High Priority (QMD-Inspired)
+
+1. **Native Vector Storage (sqlite-vec)** ⭐ - 10-100x faster KNN, foundational improvement
+2. **Reciprocal Rank Fusion (RRF)** ⭐ - 50% better search quality, pure algorithm
+3. **Docid Short Hashes** - Better UX for fact references
+4. **Smart Expansion Detection** - Skip unnecessary vector search when FTS is confident
+
+### Medium Priority
+
+5. **Background Processing** - Non-blocking hooks for better UX (from episodic-memory)
+6. **ROI Metrics** - Track token economics for distillation (from claude-mem)
+7. **LLM Response Caching** - Reduce API costs (from QMD)
+8. **Document Chunking** - Better embeddings for long transcripts (from QMD, if needed)
 
 ### Low Priority
 
-3. **Structured Logging** - Better debugging with JSON logs
-4. **Embed Command** - Backfill embeddings for existing facts
-5. **Health Monitoring** - Only if we add background worker
-6. **Web Viewer UI** - Only if users request visualization
-7. **Configuration-Driven Context** - Only if users request snapshot customization
+9. **Structured Logging** - Better debugging with JSON logs
+10. **Embed Command** - Backfill embeddings for existing facts
+11. **Enhanced Snippet Extraction** - Query-aware snippet preview (from QMD)
+12. **Health Monitoring** - Only if we add background worker
+13. **Web Viewer UI** - Only if users request visualization
+14. **Configuration-Driven Context** - Only if users request snapshot customization
 
 ---
 
@@ -930,15 +1079,52 @@ Key remaining items:
 - [x] Incremental sync with mtime tracking
 - [x] Context-aware queries
 
+### Phase 1: Vector Storage Upgrade (from QMD) - IMMEDIATE
+
+- [ ] Add sqlite-vec extension support (gem or FFI)
+- [ ] Create schema migration v7: `facts_vec` virtual table using `vec0`
+- [ ] Backfill existing embeddings from JSON to native vectors
+- [ ] Update `Embeddings::Similarity` class for native KNN (two-step query pattern)
+- [ ] Test migration on existing databases
+- [ ] Document extension installation in README
+- [ ] Benchmark: Measure KNN query improvement (expect 10-100x)
+
+### Phase 2: RRF Fusion (from QMD) - IMMEDIATE
+
+- [ ] Implement `Recall::RRFusion` class with k=60 parameter
+- [ ] Update `Recall#query_semantic_dual` to use RRF fusion
+- [ ] Apply weights: original query ×2, expanded queries ×1
+- [ ] Add top-rank bonus: +0.05 for #1, +0.02 for #2-3
+- [ ] Test with synthetic ranked lists (unit tests)
+- [ ] Validate improvements with real queries
+
+### Phase 3: UX Improvements (from QMD) - NEAR-TERM
+
+- [ ] Schema migration v8: Add `docid` column (8-char hash, indexed, unique)
+- [ ] Backfill existing facts with SHA256-based docids
+- [ ] Update CLI commands to accept/display docids (`ExplainCommand`, `RecallCommand`)
+- [ ] Update MCP tools for docid support (`memory.explain`, `memory.recall`)
+- [ ] Test cross-database docid lookups
+
+### Phase 4: Performance Optimizations (from QMD) - NEAR-TERM
+
+- [ ] Implement `Recall::ExpansionDetector` class
+- [ ] Update `Recall#query_semantic_dual` to check before vector search
+- [ ] Add metrics tracking (skip rate, avg latency saved)
+- [ ] Tune thresholds based on usage patterns
+
 ### Remaining Tasks
 
 - [ ] Background processing (--async flag for hooks)
 - [ ] ROI metrics table for token tracking during distillation
+- [ ] LLM response caching (from QMD, when distiller is active)
 - [ ] Structured logging implementation
 - [ ] Embed command for backfilling embeddings
 
 ### Future (If Requested)
 
+- [ ] Document chunking for long transcripts (from QMD, if users report issues)
+- [ ] Enhanced snippet extraction (from QMD, for better search result previews)
 - [ ] Build web viewer (if users request visualization)
 - [ ] Add HTTP-based health checks (if background worker is added)
 - [ ] Configuration-driven snapshot generation (if users request customization)
