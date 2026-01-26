@@ -6,7 +6,7 @@ require "json"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 5
+      SCHEMA_VERSION = 6
 
       attr_reader :db
 
@@ -68,98 +68,171 @@ module ClaudeMemory
         @db[:tool_calls]
       end
 
+      def operation_progress
+        @db[:operation_progress]
+      end
+
+      def schema_health
+        @db[:schema_health]
+      end
+
       private
 
       def ensure_schema!
         create_tables!
-        run_migrations!
-        set_meta("schema_version", SCHEMA_VERSION.to_s)
         set_meta("created_at", Time.now.utc.iso8601) unless get_meta("created_at")
+        run_migrations_safely!
       end
 
-      def run_migrations!
+      def run_migrations_safely!
         current = get_meta("schema_version")&.to_i || 0
 
-        migrate_to_v2! if current < 2
-        migrate_to_v3! if current < 3
-        migrate_to_v4! if current < 4
-        migrate_to_v5! if current < 5
+        migrate_to_v2_safe! if current < 2
+        migrate_to_v3_safe! if current < 3
+        migrate_to_v4_safe! if current < 4
+        migrate_to_v5_safe! if current < 5
+        migrate_to_v6_safe! if current < 6
       end
 
-      def migrate_to_v2!
-        columns = @db.schema(:content_items).map(&:first)
-        unless columns.include?(:project_path)
-          @db.alter_table(:content_items) do
-            add_column :project_path, String
+      def migrate_to_v2_safe!
+        @db.transaction do
+          columns = @db.schema(:content_items).map(&:first)
+          unless columns.include?(:project_path)
+            @db.alter_table(:content_items) do
+              add_column :project_path, String
+            end
           end
-        end
 
-        columns = @db.schema(:facts).map(&:first)
-        unless columns.include?(:scope)
-          @db.alter_table(:facts) do
-            add_column :scope, String, default: "project"
-            add_column :project_path, String
-            add_index :scope, name: :idx_facts_scope
-            add_index :project_path, name: :idx_facts_project
+          columns = @db.schema(:facts).map(&:first)
+          unless columns.include?(:scope)
+            @db.alter_table(:facts) do
+              add_column :scope, String, default: "project"
+              add_column :project_path, String
+              add_index :scope, name: :idx_facts_scope
+              add_index :project_path, name: :idx_facts_project
+            end
           end
+
+          # Update version INSIDE transaction for atomicity
+          set_meta("schema_version", "2")
         end
+      rescue => e
+        raise StandardError, "Migration to v2 failed: #{e.message}"
       end
 
-      def migrate_to_v3!
-        # Add session metadata columns to content_items
-        columns = @db.schema(:content_items).map(&:first)
-        unless columns.include?(:git_branch)
-          @db.alter_table(:content_items) do
-            add_column :git_branch, String
-            add_column :cwd, String
-            add_column :claude_version, String
-            add_column :thinking_level, String
+      def migrate_to_v3_safe!
+        @db.transaction do
+          # Add session metadata columns to content_items
+          columns = @db.schema(:content_items).map(&:first)
+          unless columns.include?(:git_branch)
+            @db.alter_table(:content_items) do
+              add_column :git_branch, String
+              add_column :cwd, String
+              add_column :claude_version, String
+              add_column :thinking_level, String
+            end
           end
+
+          # Add index for filtering by branch
+          create_index_if_not_exists(:content_items, :git_branch, :idx_content_items_git_branch)
+
+          # Create tool_calls table for tracking tool usage
+          @db.create_table?(:tool_calls) do
+            primary_key :id
+            foreign_key :content_item_id, :content_items, on_delete: :cascade
+            String :tool_name, null: false
+            String :tool_input, text: true  # JSON of input parameters
+            String :tool_result, text: true  # Truncated result (first 500 chars)
+            TrueClass :is_error, default: false
+            String :timestamp, null: false
+          end
+
+          create_index_if_not_exists(:tool_calls, :tool_name, :idx_tool_calls_tool_name)
+          create_index_if_not_exists(:tool_calls, :content_item_id, :idx_tool_calls_content_item)
+
+          # Update version INSIDE transaction for atomicity
+          set_meta("schema_version", "3")
         end
-
-        # Add index for filtering by branch
-        create_index_if_not_exists(:content_items, :git_branch, :idx_content_items_git_branch)
-
-        # Create tool_calls table for tracking tool usage
-        @db.create_table?(:tool_calls) do
-          primary_key :id
-          foreign_key :content_item_id, :content_items, on_delete: :cascade
-          String :tool_name, null: false
-          String :tool_input, text: true  # JSON of input parameters
-          String :tool_result, text: true  # Truncated result (first 500 chars)
-          TrueClass :is_error, default: false
-          String :timestamp, null: false
-        end
-
-        create_index_if_not_exists(:tool_calls, :tool_name, :idx_tool_calls_tool_name)
-        create_index_if_not_exists(:tool_calls, :content_item_id, :idx_tool_calls_content_item)
+      rescue => e
+        raise StandardError, "Migration to v3 failed: #{e.message}"
       end
 
-      def migrate_to_v4!
-        # Add embeddings column to facts for semantic search
-        columns = @db.schema(:facts).map(&:first)
-        unless columns.include?(:embedding_json)
-          @db.alter_table(:facts) do
-            add_column :embedding_json, String, text: true  # JSON array of floats
+      def migrate_to_v4_safe!
+        @db.transaction do
+          # Add embeddings column to facts for semantic search
+          columns = @db.schema(:facts).map(&:first)
+          unless columns.include?(:embedding_json)
+            @db.alter_table(:facts) do
+              add_column :embedding_json, String, text: true  # JSON array of floats
+            end
           end
-        end
 
-        # Note: We use JSON storage for embeddings instead of sqlite-vec extension
-        # Similarity calculations are done in Ruby using cosine similarity
-        # Future: Could migrate to native vector extension or external vector DB
+          # Note: We use JSON storage for embeddings instead of sqlite-vec extension
+          # Similarity calculations are done in Ruby using cosine similarity
+          # Future: Could migrate to native vector extension or external vector DB
+
+          # Update version INSIDE transaction for atomicity
+          set_meta("schema_version", "4")
+        end
+      rescue => e
+        raise StandardError, "Migration to v4 failed: #{e.message}"
       end
 
-      def migrate_to_v5!
-        # Add source_mtime for incremental sync
-        columns = @db.schema(:content_items).map(&:first)
-        unless columns.include?(:source_mtime)
-          @db.alter_table(:content_items) do
-            add_column :source_mtime, String  # ISO8601 timestamp of source file mtime
+      def migrate_to_v5_safe!
+        @db.transaction do
+          # Add source_mtime for incremental sync
+          columns = @db.schema(:content_items).map(&:first)
+          unless columns.include?(:source_mtime)
+            @db.alter_table(:content_items) do
+              add_column :source_mtime, String  # ISO8601 timestamp of source file mtime
+            end
           end
-        end
 
-        # Index for efficient mtime lookups
-        create_index_if_not_exists(:content_items, :source_mtime, :idx_content_items_source_mtime)
+          # Index for efficient mtime lookups
+          create_index_if_not_exists(:content_items, :source_mtime, :idx_content_items_source_mtime)
+
+          # Update version INSIDE transaction for atomicity
+          set_meta("schema_version", "5")
+        end
+      rescue => e
+        raise StandardError, "Migration to v5 failed: #{e.message}"
+      end
+
+      def migrate_to_v6_safe!
+        @db.transaction do
+          # Create operation_progress table for tracking long-running operations
+          @db.create_table?(:operation_progress) do
+            primary_key :id
+            String :operation_type, null: false  # "index_embeddings", "sweep", "distill"
+            String :scope, null: false           # "global" or "project"
+            String :status, null: false          # "running", "completed", "failed"
+            Integer :total_items
+            Integer :processed_items, default: 0
+            String :checkpoint_data, text: true  # JSON for resumption
+            String :started_at, null: false
+            String :completed_at
+          end
+
+          create_index_if_not_exists(:operation_progress, :operation_type, :idx_operation_progress_type)
+          create_index_if_not_exists(:operation_progress, :status, :idx_operation_progress_status)
+
+          # Create schema_health table for validation results
+          @db.create_table?(:schema_health) do
+            primary_key :id
+            String :checked_at, null: false
+            Integer :schema_version, null: false
+            String :validation_status, null: false  # "healthy", "corrupt", "unknown"
+            String :issues_json, text: true         # Array of detected problems
+            String :table_counts_json, text: true   # Snapshot of table row counts
+          end
+
+          create_index_if_not_exists(:schema_health, :checked_at, :idx_schema_health_checked_at)
+
+          # Update version INSIDE transaction for atomicity
+          set_meta("schema_version", "6")
+        end
+      rescue => e
+        raise StandardError, "Migration to v6 failed: #{e.message}"
       end
 
       def create_tables!
