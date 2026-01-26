@@ -27,7 +27,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
 
       # Verify version was updated
-      expect(store.schema_version).to eq(6)
+      expect(store.schema_version).to eq(7)
 
       # Verify v2 schema changes exist
       columns = store.db.schema(:content_items).map(&:first)
@@ -52,7 +52,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       # Verify migration completed atomically:
       # - Version is at 6
       # - All v6 tables were created
-      expect(store.schema_version).to eq(6)
+      expect(store.schema_version).to eq(7)
 
       tables = store.db.tables
       expect(tables).to include(:operation_progress)
@@ -107,7 +107,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
 
       # Verify we reached v6
-      expect(store.schema_version).to eq(6)
+      expect(store.schema_version).to eq(7)
 
       # Verify v2 additions exist
       columns = store.db.schema(:facts).map(&:first)
@@ -155,7 +155,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
 
       # Verify version updated
-      expect(store.schema_version).to eq(6)
+      expect(store.schema_version).to eq(7)
 
       # Verify existing data preserved
       expect(store.facts.count).to eq(initial_fact_count)
@@ -183,6 +183,105 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       # Verify expected indexes exist
       expect(operation_indexes).to include("idx_operation_progress_type", "idx_operation_progress_status")
       expect(health_indexes).to include("idx_schema_health_checked_at")
+
+      store.close
+    end
+  end
+
+  describe "upgrade path from v6 to v7" do
+    it "successfully migrates existing v6 database to v7" do
+      # Create v6 database with real data
+      store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+
+      # Insert some test data
+      store.find_or_create_entity(type: "repo", name: "test_repo")
+      content_item_id = store.upsert_content_item(
+        source: "test",
+        text_hash: "abc123",
+        byte_len: 100
+      )
+
+      # Manually set version to 6
+      store.db[:meta].where(key: "schema_version").update(value: "6")
+      initial_fact_count = store.facts.count
+      store.close
+
+      # Open again to trigger v7 migration
+      store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+
+      # Verify version updated
+      expect(store.schema_version).to eq(7)
+
+      # Verify existing data preserved
+      expect(store.facts.count).to eq(initial_fact_count)
+
+      # Verify new ingestion_metrics table created
+      tables = store.db.tables
+      expect(tables).to include(:ingestion_metrics)
+
+      # Verify new table is empty initially
+      expect(store.ingestion_metrics.count).to eq(0)
+
+      # Verify we can insert metrics
+      metric_id = store.record_ingestion_metrics(
+        content_item_id: content_item_id,
+        input_tokens: 1000,
+        output_tokens: 200,
+        facts_extracted: 5
+      )
+      expect(metric_id).to be > 0
+
+      # Verify metrics were recorded correctly
+      metric = store.ingestion_metrics.where(id: metric_id).first
+      expect(metric[:input_tokens]).to eq(1000)
+      expect(metric[:output_tokens]).to eq(200)
+      expect(metric[:facts_extracted]).to eq(5)
+
+      store.close
+    end
+
+    it "creates proper indexes for ingestion_metrics table" do
+      store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+
+      # Query indexes
+      metrics_indexes = store.db["SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='ingestion_metrics'"].all.map { |r| r[:name] }
+
+      # Verify expected indexes exist
+      expect(metrics_indexes).to include("idx_ingestion_metrics_content_item", "idx_ingestion_metrics_created_at")
+
+      store.close
+    end
+
+    it "can aggregate metrics correctly" do
+      store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+
+      # Create some content items and metrics
+      content_item_id1 = store.upsert_content_item(source: "test1", text_hash: "hash1", byte_len: 100)
+      content_item_id2 = store.upsert_content_item(source: "test2", text_hash: "hash2", byte_len: 200)
+
+      store.record_ingestion_metrics(
+        content_item_id: content_item_id1,
+        input_tokens: 1000,
+        output_tokens: 200,
+        facts_extracted: 10
+      )
+
+      store.record_ingestion_metrics(
+        content_item_id: content_item_id2,
+        input_tokens: 2000,
+        output_tokens: 400,
+        facts_extracted: 15
+      )
+
+      # Get aggregate metrics
+      metrics = store.aggregate_ingestion_metrics
+
+      expect(metrics).not_to be_nil
+      expect(metrics[:total_input_tokens]).to eq(3000)
+      expect(metrics[:total_output_tokens]).to eq(600)
+      expect(metrics[:total_facts_extracted]).to eq(25)
+      expect(metrics[:total_operations]).to eq(2)
+      expect(metrics[:avg_facts_per_1k_input_tokens]).to eq(8.33)
 
       store.close
     end

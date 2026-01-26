@@ -6,7 +6,7 @@ require "json"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 6
+      SCHEMA_VERSION = 7
 
       attr_reader :db
 
@@ -74,6 +74,10 @@ module ClaudeMemory
 
       def schema_health
         @db[:schema_health]
+      end
+
+      def ingestion_metrics
+        @db[:ingestion_metrics]
       end
 
       def upsert_content_item(source:, text_hash:, byte_len:, session_id: nil, transcript_path: nil,
@@ -252,6 +256,63 @@ module ClaudeMemory
         fact_links.insert(from_fact_id: from_fact_id, to_fact_id: to_fact_id, link_type: link_type)
       end
 
+      # Record token usage metrics for a distillation operation
+      #
+      # @param content_item_id [Integer] The content item that was distilled
+      # @param input_tokens [Integer] Tokens sent to the API
+      # @param output_tokens [Integer] Tokens returned from the API
+      # @param facts_extracted [Integer] Number of facts extracted
+      # @return [Integer] The created metric record ID
+      def record_ingestion_metrics(content_item_id:, input_tokens:, output_tokens:, facts_extracted:)
+        ingestion_metrics.insert(
+          content_item_id: content_item_id,
+          input_tokens: input_tokens,
+          output_tokens: output_tokens,
+          facts_extracted: facts_extracted,
+          created_at: Time.now.utc.iso8601
+        )
+      end
+
+      # Get aggregate metrics across all distillation operations
+      #
+      # @return [Hash] Aggregated metrics with keys:
+      #   - total_input_tokens: Total tokens sent to API
+      #   - total_output_tokens: Total tokens returned from API
+      #   - total_facts_extracted: Total facts extracted
+      #   - total_operations: Number of distillation operations
+      #   - avg_facts_per_1k_input_tokens: Average efficiency metric
+      def aggregate_ingestion_metrics
+        # standard:disable Performance/Detect (Sequel DSL requires .select{}.first)
+        result = ingestion_metrics
+          .select {
+            [
+              sum(:input_tokens).as(:total_input),
+              sum(:output_tokens).as(:total_output),
+              sum(:facts_extracted).as(:total_facts),
+              count(:id).as(:total_ops)
+            ]
+          }
+          .first
+        # standard:enable Performance/Detect
+
+        return nil if result.nil? || result[:total_ops].to_i.zero?
+
+        total_input = result[:total_input].to_i
+        total_output = result[:total_output].to_i
+        total_facts = result[:total_facts].to_i
+        total_ops = result[:total_ops].to_i
+
+        efficiency = total_input.zero? ? 0.0 : (total_facts.to_f / total_input * 1000).round(2)
+
+        {
+          total_input_tokens: total_input,
+          total_output_tokens: total_output,
+          total_facts_extracted: total_facts,
+          total_operations: total_ops,
+          avg_facts_per_1k_input_tokens: efficiency
+        }
+      end
+
       private
 
       def ensure_schema!
@@ -268,6 +329,7 @@ module ClaudeMemory
         migrate_to_v4_safe! if current < 4
         migrate_to_v5_safe! if current < 5
         migrate_to_v6_safe! if current < 6
+        migrate_to_v7_safe! if current < 7
       end
 
       def migrate_to_v2_safe!
@@ -409,6 +471,30 @@ module ClaudeMemory
         end
       rescue => e
         raise StandardError, "Migration to v6 failed: #{e.message}"
+      end
+
+      def migrate_to_v7_safe!
+        @db.transaction do
+          # Create ingestion_metrics table for ROI tracking
+          # Tracks token economics: how many tokens were spent during distillation
+          # to extract how many facts. Shows efficiency of memory system.
+          @db.create_table?(:ingestion_metrics) do
+            primary_key :id
+            foreign_key :content_item_id, :content_items, null: false
+            Integer :input_tokens         # Tokens sent to distillation API
+            Integer :output_tokens        # Tokens returned from distillation API
+            Integer :facts_extracted      # Number of facts extracted from this content
+            String :created_at, null: false
+          end
+
+          create_index_if_not_exists(:ingestion_metrics, :content_item_id, :idx_ingestion_metrics_content_item)
+          create_index_if_not_exists(:ingestion_metrics, :created_at, :idx_ingestion_metrics_created_at)
+
+          # Update version INSIDE transaction for atomicity
+          set_meta("schema_version", "7")
+        end
+      rescue => e
+        raise StandardError, "Migration to v7 failed: #{e.message}"
       end
 
       def create_tables!

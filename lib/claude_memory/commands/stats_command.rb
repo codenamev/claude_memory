@@ -75,6 +75,10 @@ module ClaudeMemory
           print_conflict_stats(db)
           stdout.puts
 
+          # ROI Metrics (if available)
+          print_roi_metrics(db)
+          stdout.puts
+
           # Database size
           print_database_size(db_path)
           stdout.puts
@@ -169,6 +173,40 @@ module ClaudeMemory
         stdout.puts "Conflicts: #{open} open, #{resolved} resolved (#{total} total)"
       end
 
+      def print_roi_metrics(db)
+        # Check if ingestion_metrics table exists (schema v7+)
+        return unless db.table_exists?(:ingestion_metrics)
+
+        # standard:disable Performance/Detect (Sequel DSL requires .select{}.first)
+        result = db[:ingestion_metrics]
+          .select {
+            [
+              sum(:input_tokens).as(:total_input),
+              sum(:output_tokens).as(:total_output),
+              sum(:facts_extracted).as(:total_facts),
+              count(:id).as(:total_ops)
+            ]
+          }
+          .first
+        # standard:enable Performance/Detect
+
+        return if result.nil? || result[:total_ops].to_i.zero?
+
+        total_input = result[:total_input].to_i
+        total_output = result[:total_output].to_i
+        total_facts = result[:total_facts].to_i
+        total_ops = result[:total_ops].to_i
+
+        efficiency = total_input.zero? ? 0.0 : (total_facts.to_f / total_input * 1000).round(2)
+
+        stdout.puts "Token Economics (Distillation ROI):"
+        stdout.puts "  Input Tokens: #{format_number(total_input)}"
+        stdout.puts "  Output Tokens: #{format_number(total_output)}"
+        stdout.puts "  Facts Extracted: #{format_number(total_facts)}"
+        stdout.puts "  Operations: #{format_number(total_ops)}"
+        stdout.puts "  Efficiency: #{efficiency} facts per 1,000 input tokens"
+      end
+
       def print_database_size(db_path)
         size_bytes = File.size(db_path)
         size_kb = (size_bytes / 1024.0).round(1)
@@ -190,6 +228,11 @@ module ClaudeMemory
 
         # Fallback to first 10 chars
         iso8601_string[0...10]
+      end
+
+      def format_number(num)
+        # Format number with comma separators (e.g., 1234567 => "1,234,567")
+        num.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse
       end
     end
   end
