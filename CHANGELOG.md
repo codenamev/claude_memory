@@ -4,6 +4,72 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-01-26
+
+### Added
+
+**Database & Infrastructure**
+- Schema version 6 with new tables:
+  - `operation_progress` - Track long-running operation state (index generation, migrations)
+  - `schema_health` - Record schema validation results and migration history
+- WAL (Write-Ahead Logging) mode for better concurrency and crash recovery
+- Incremental sync with `source_mtime` tracking to avoid re-processing unchanged files
+- Atomic migrations with per-migration transactions for safety
+- Configuration class for centralized ENV access and testability
+
+**Search & Recall**
+- `index` command to generate TF-IDF embeddings for semantic search
+- Index command resumability with checkpoints (recover from interruption)
+- Semantic search capabilities using TF-IDF embeddings
+- Improved full-text search with empty query handling
+
+**Session Intelligence**
+- Session metadata extraction:
+  - Git branch tracking (`git_branch`)
+  - Working directory context (`cwd`)
+  - Claude version tracking (`claude_version`)
+  - Tool usage patterns (`tool_calls`)
+- Session-aware fact extraction for better provenance
+
+**Developer Tools**
+- Enhanced `doctor` command with:
+  - Schema validation and integrity checks
+  - Migration history verification
+  - Recovery suggestions for corrupted databases
+- `stats` command for database statistics
+- Recovery command for stuck long-running operations
+- Transaction wrapper for ingestion atomicity
+
+**Quality Improvements**
+- Quality review workflow with Ruby expert perspectives:
+  - `/review-for-quality` skill for comprehensive codebase review
+  - Expert analysis from Sandi Metz, Jeremy Evans, Kent Beck, Avdi Grimm, Gary Bernhardt
+  - Automated quality documentation generation
+- Infrastructure abstractions (FileSystem, InMemoryFileSystem) for testability
+- Domain model enhancements with immutable, self-validating objects
+
+### Changed
+- Ingestion now tracks file modification time to skip unchanged content
+- Migration process now uses per-migration transactions for atomicity
+- Doctor command now includes schema validation and recovery guidance
+- Index operations can resume from checkpoints after interruption
+
+### Fixed
+- Public keyword placement in SQLiteStore (Ruby style conformance)
+- Transaction safety for multi-step database operations
+- Database locking issues during concurrent hook execution (added 5-second busy timeout)
+
+### Documentation
+- Complete getting started guide (GETTING_STARTED.md)
+- Enhanced plugin documentation with setup workflows
+- Comprehensive examples for all features
+- Architecture documentation updates
+
+### Internal
+- Consolidated ENV access via Configuration class
+- Registered new infrastructure modules in main loader
+- Improved test coverage for new features
+
 ## [0.2.0] - 2026-01-22
 
 ### Added
