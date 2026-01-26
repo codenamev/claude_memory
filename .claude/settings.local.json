@@ -20,7 +20,8 @@
       "mcp__plugin_claude-memory_memory__memory_store_extraction",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(grep:*)",
-      "Bash(gem list:*)"
+      "Bash(gem list:*)",
+      "Bash(ag:*)"
     ]
   },
   "enableAllProjectMcpServers": true
