@@ -31,6 +31,7 @@ module ClaudeMemory
         expire_disputed_facts if within_budget?
         prune_orphaned_provenance if within_budget?
         prune_old_content if within_budget?
+        checkpoint_wal if within_budget?
 
         @stats[:elapsed_seconds] = Time.now - @start_time
         @stats[:budget_honored] = @stats[:elapsed_seconds] <= budget
@@ -74,6 +75,11 @@ module ClaudeMemory
           .where { ingested_at < cutoff }
           .exclude(id: referenced_ids)
           .delete
+      end
+
+      def checkpoint_wal
+        @store.checkpoint_wal
+        @stats[:wal_checkpointed] = true
       end
     end
   end

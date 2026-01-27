@@ -34,6 +34,13 @@ module ClaudeMemory
         @db.disconnect
       end
 
+      # Checkpoint the WAL file to prevent unlimited growth
+      # This truncates the WAL after checkpointing
+      # Should be called periodically during maintenance/sweep operations
+      def checkpoint_wal
+        @db.run("PRAGMA wal_checkpoint(TRUNCATE)")
+      end
+
       def schema_version
         @db[:meta].where(key: "schema_version").get(:value)&.to_i
       end
@@ -365,7 +372,6 @@ module ClaudeMemory
           @db[:schema_info].insert(version: meta_version)
         end
       end
-
 
       def set_meta(key, value)
         @db[:meta].insert_conflict(target: :key, update: {value: value}).insert(key: key, value: value)
