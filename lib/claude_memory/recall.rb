@@ -154,22 +154,7 @@ module ClaudeMemory
     end
 
     def dedupe_and_sort_index(results, limit)
-      seen_signatures = Set.new
-      unique_results = []
-
-      results.each do |result|
-        sig = "#{result[:subject]}:#{result[:predicate]}:#{result[:object_preview]}"
-        next if seen_signatures.include?(sig)
-
-        seen_signatures.add(sig)
-        unique_results << result
-      end
-
-      # Sort by source priority (project first)
-      unique_results.sort_by do |item|
-        source_priority = (item[:source] == :project) ? 0 : 1
-        [source_priority]
-      end.first(limit)
+      Core::FactRanker.dedupe_and_sort_index(results, limit)
     end
 
     def query_single_store(store, query_text, limit:, source:)
@@ -255,22 +240,7 @@ module ClaudeMemory
     end
 
     def dedupe_and_sort(results, limit)
-      seen_signatures = Set.new
-      unique_results = []
-
-      results.each do |result|
-        fact = result[:fact]
-        sig = "#{fact[:subject_name]}:#{fact[:predicate]}:#{fact[:object_literal]}"
-        next if seen_signatures.include?(sig)
-
-        seen_signatures.add(sig)
-        unique_results << result
-      end
-
-      unique_results.sort_by do |item|
-        source_priority = (item[:source] == :project) ? 0 : 1
-        [source_priority, item[:fact][:created_at]]
-      end.first(limit)
+      Core::FactRanker.dedupe_and_sort(results, limit)
     end
 
     def changes_dual(since:, limit:, scope:)
@@ -466,13 +436,7 @@ module ClaudeMemory
     end
 
     def sort_by_scope_priority(facts_with_provenance)
-      facts_with_provenance.sort_by do |item|
-        fact = item[:fact]
-        is_current_project = fact[:project_path] == @project_path
-        is_global = fact[:scope] == "global"
-
-        [is_current_project ? 0 : 1, is_global ? 0 : 1]
-      end
+      Core::FactRanker.sort_by_scope_priority(facts_with_provenance, @project_path)
     end
 
     def find_provenance_by_content(content_id)
@@ -784,17 +748,7 @@ module ClaudeMemory
     end
 
     def dedupe_by_fact_id(results, limit)
-      seen = {}
-
-      results.each do |result|
-        fact_id = result[:fact][:id]
-        # Keep the result with highest similarity for each fact
-        if !seen[fact_id] || seen[fact_id][:similarity] < result[:similarity]
-          seen[fact_id] = result
-        end
-      end
-
-      seen.values.sort_by { |r| -r[:similarity] }.take(limit)
+      Core::FactRanker.dedupe_by_fact_id(results, limit)
     end
   end
 end
