@@ -20,7 +20,6 @@ Sequel.migration do
       String :source, null: false
       String :session_id
       String :transcript_path
-      String :project_path
       String :occurred_at
       String :ingested_at, null: false
       String :text_hash, null: false
@@ -68,8 +67,6 @@ Sequel.migration do
       Float :confidence, default: 1.0
       String :created_from
       String :created_at, null: false
-      String :scope, default: "project"
-      String :project_path
     end
 
     create_table?(:provenance) do
@@ -101,12 +98,9 @@ Sequel.migration do
     run "CREATE INDEX IF NOT EXISTS idx_facts_predicate ON facts(predicate)"
     run "CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_entity_id)"
     run "CREATE INDEX IF NOT EXISTS idx_facts_status ON facts(status)"
-    run "CREATE INDEX IF NOT EXISTS idx_facts_scope ON facts(scope)"
-    run "CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project_path)"
     run "CREATE INDEX IF NOT EXISTS idx_provenance_fact ON provenance(fact_id)"
     run "CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(entity_id)"
     run "CREATE INDEX IF NOT EXISTS idx_content_items_session ON content_items(session_id)"
-    run "CREATE INDEX IF NOT EXISTS idx_content_items_project ON content_items(project_path)"
   end
 
   down do

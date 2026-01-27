@@ -39,17 +39,12 @@ RSpec.describe "Migration 001: Create Initial Schema" do
     expect(indexes.keys).to include(
       :idx_facts_predicate,
       :idx_facts_subject,
-      :idx_facts_status,
-      :idx_facts_scope,
-      :idx_facts_project
+      :idx_facts_status
     )
 
     expect(db.indexes(:provenance).keys).to include(:idx_provenance_fact)
     expect(db.indexes(:entity_aliases).keys).to include(:idx_entity_aliases_entity)
-    expect(db.indexes(:content_items).keys).to include(
-      :idx_content_items_session,
-      :idx_content_items_project
-    )
+    expect(db.indexes(:content_items).keys).to include(:idx_content_items_session)
   end
 
   it "creates facts table with correct columns" do
@@ -71,10 +66,11 @@ RSpec.describe "Migration 001: Create Initial Schema" do
       :status,
       :confidence,
       :created_from,
-      :created_at,
-      :scope,
-      :project_path
+      :created_at
     )
+
+    # These columns are added in migration 002
+    expect(columns).not_to include(:scope, :project_path)
   end
 
   it "runs migration down successfully" do
@@ -112,14 +108,12 @@ RSpec.describe "Migration 001: Create Initial Schema" do
       subject_entity_id: entity_id,
       predicate: "prefers",
       object_literal: "Ruby",
-      created_at: Time.now.utc.iso8601,
-      scope: "global"
+      created_at: Time.now.utc.iso8601
     )
 
     # Query data
     fact = db[:facts].where(id: fact_id).first
     expect(fact[:predicate]).to eq("prefers")
     expect(fact[:object_literal]).to eq("Ruby")
-    expect(fact[:scope]).to eq("global")
   end
 end
