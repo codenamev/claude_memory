@@ -699,52 +699,13 @@ module ClaudeMemory
     end
 
     def query_concepts_single(store, concepts, limit:, source:)
-      # Search each concept independently with higher limit for intersection
+      # I/O: Search each concept independently with higher limit for intersection
       concept_results = concepts.map do |concept|
         search_by_vector(store, concept, limit * 5, source)
       end
 
-      # Build map: fact_id => [results per concept]
-      fact_map = Hash.new { |h, k| h[k] = [] }
-
-      concept_results.each_with_index do |results, concept_idx|
-        results.each do |result|
-          fact_id = result[:fact][:id]
-          fact_map[fact_id] << {
-            result: result,
-            concept_idx: concept_idx,
-            similarity: result[:similarity] || 0.0
-          }
-        end
-      end
-
-      # Filter to facts matching ALL concepts
-      multi_concept_facts = fact_map.select do |_fact_id, matches|
-        represented_concepts = matches.map { |m| m[:concept_idx] }.uniq
-        represented_concepts.size == concepts.size
-      end
-
-      return [] if multi_concept_facts.empty?
-
-      # Rank by average similarity across all concepts
-      ranked = multi_concept_facts.map do |fact_id, matches|
-        similarities = matches.map { |m| m[:similarity] }
-        avg_similarity = similarities.sum / similarities.size.to_f
-
-        # Use the first match for fact and receipts data
-        first_match = matches.first[:result]
-
-        {
-          fact: first_match[:fact],
-          receipts: first_match[:receipts],
-          source: source,
-          similarity: avg_similarity,
-          concept_similarities: similarities
-        }
-      end
-
-      # Sort by average similarity (highest first)
-      ranked.sort_by { |r| -r[:similarity] }.take(limit)
+      # Pure logic: Rank by average similarity across all concepts
+      Core::ConceptRanker.rank_by_concepts(concept_results, limit)
     end
 
     def dedupe_by_fact_id(results, limit)
