@@ -6,10 +6,11 @@ module ClaudeMemory
       def initialize(store)
         @store = store
         @db = store.db
-        ensure_fts_table!
+        @fts_table_ensured = false
       end
 
       def index_content_item(content_item_id, text)
+        ensure_fts_table!
         existing = @db[:content_fts].where(content_item_id: content_item_id).get(:content_item_id)
         return if existing
 
@@ -17,6 +18,7 @@ module ClaudeMemory
       end
 
       def search(query, limit: 20)
+        ensure_fts_table!
         return [] if query.nil? || query.strip.empty?
 
         if query.strip == "*"
@@ -48,10 +50,13 @@ module ClaudeMemory
       private
 
       def ensure_fts_table!
+        return if @fts_table_ensured
+
         @db.run(<<~SQL)
-          CREATE VIRTUAL TABLE IF NOT EXISTS content_fts 
+          CREATE VIRTUAL TABLE IF NOT EXISTS content_fts
           USING fts5(content_item_id UNINDEXED, text, tokenize='porter unicode61')
         SQL
+        @fts_table_ensured = true
       end
     end
   end
