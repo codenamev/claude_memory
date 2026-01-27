@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "sequel"
+require "sequel/extensions/migration"
 require "json"
 
 module ClaudeMemory
@@ -321,297 +322,50 @@ module ClaudeMemory
       private
 
       def ensure_schema!
-        create_tables!
+        migrations_path = File.expand_path("../../../db/migrations", __dir__)
+
+        # Handle backward compatibility: databases created with old migration system
+        sync_legacy_schema_version!
+
+        # Run Sequel migrations to bring database to target version
+        Sequel::Migrator.run(@db, migrations_path, target: SCHEMA_VERSION)
+
+        # Set created_at timestamp on first initialization
         set_meta("created_at", Time.now.utc.iso8601) unless get_meta("created_at")
-        run_migrations_safely!
+
+        # Sync legacy schema_version meta key with Sequel's schema_info
+        # This maintains backwards compatibility with code that reads schema_version
+        sequel_version = @db[:schema_info].get(:version) if @db.table_exists?(:schema_info)
+        set_meta("schema_version", sequel_version.to_s) if sequel_version
       end
 
-      def run_migrations_safely!
-        current = get_meta("schema_version")&.to_i || 0
+      # Sync legacy schema_version from meta table to Sequel's schema_info
+      # Handles two cases:
+      # 1. No schema_info table exists (old system, pre-Sequel migrations)
+      # 2. schema_info exists but is out of sync with meta.schema_version
+      def sync_legacy_schema_version!
+        return unless @db.table_exists?(:meta)
 
-        migrate_to_v2_safe! if current < 2
-        migrate_to_v3_safe! if current < 3
-        migrate_to_v4_safe! if current < 4
-        migrate_to_v5_safe! if current < 5
-        migrate_to_v6_safe! if current < 6
-        migrate_to_v7_safe! if current < 7
+        meta_version = get_meta("schema_version")&.to_i
+        return unless meta_version && meta_version >= 2
+
+        # Verify database actually has v2+ schema (defensive check)
+        columns = @db.schema(:content_items).map(&:first) if @db.table_exists?(:content_items)
+        return unless columns&.include?(:project_path)
+
+        # Create or update schema_info to match meta.schema_version
+        @db.create_table?(:schema_info) do
+          Integer :version, null: false, default: 0
+        end
+
+        sequel_version = @db[:schema_info].get(:version)
+        if sequel_version.nil? || sequel_version < meta_version
+          # Update schema_info to match meta (old system's version)
+          @db[:schema_info].delete
+          @db[:schema_info].insert(version: meta_version)
+        end
       end
 
-      def migrate_to_v2_safe!
-        @db.transaction do
-          columns = @db.schema(:content_items).map(&:first)
-          unless columns.include?(:project_path)
-            @db.alter_table(:content_items) do
-              add_column :project_path, String
-            end
-          end
-
-          columns = @db.schema(:facts).map(&:first)
-          unless columns.include?(:scope)
-            @db.alter_table(:facts) do
-              add_column :scope, String, default: "project"
-              add_column :project_path, String
-              add_index :scope, name: :idx_facts_scope
-              add_index :project_path, name: :idx_facts_project
-            end
-          end
-
-          # Update version INSIDE transaction for atomicity
-          set_meta("schema_version", "2")
-        end
-      rescue => e
-        raise StandardError, "Migration to v2 failed: #{e.message}"
-      end
-
-      def migrate_to_v3_safe!
-        @db.transaction do
-          # Add session metadata columns to content_items
-          columns = @db.schema(:content_items).map(&:first)
-          unless columns.include?(:git_branch)
-            @db.alter_table(:content_items) do
-              add_column :git_branch, String
-              add_column :cwd, String
-              add_column :claude_version, String
-              add_column :thinking_level, String
-            end
-          end
-
-          # Add index for filtering by branch
-          create_index_if_not_exists(:content_items, :git_branch, :idx_content_items_git_branch)
-
-          # Create tool_calls table for tracking tool usage
-          @db.create_table?(:tool_calls) do
-            primary_key :id
-            foreign_key :content_item_id, :content_items, on_delete: :cascade
-            String :tool_name, null: false
-            String :tool_input, text: true  # JSON of input parameters
-            String :tool_result, text: true  # Truncated result (first 500 chars)
-            TrueClass :is_error, default: false
-            String :timestamp, null: false
-          end
-
-          create_index_if_not_exists(:tool_calls, :tool_name, :idx_tool_calls_tool_name)
-          create_index_if_not_exists(:tool_calls, :content_item_id, :idx_tool_calls_content_item)
-
-          # Update version INSIDE transaction for atomicity
-          set_meta("schema_version", "3")
-        end
-      rescue => e
-        raise StandardError, "Migration to v3 failed: #{e.message}"
-      end
-
-      def migrate_to_v4_safe!
-        @db.transaction do
-          # Add embeddings column to facts for semantic search
-          columns = @db.schema(:facts).map(&:first)
-          unless columns.include?(:embedding_json)
-            @db.alter_table(:facts) do
-              add_column :embedding_json, String, text: true  # JSON array of floats
-            end
-          end
-
-          # Note: We use JSON storage for embeddings instead of sqlite-vec extension
-          # Similarity calculations are done in Ruby using cosine similarity
-          # Future: Could migrate to native vector extension or external vector DB
-
-          # Update version INSIDE transaction for atomicity
-          set_meta("schema_version", "4")
-        end
-      rescue => e
-        raise StandardError, "Migration to v4 failed: #{e.message}"
-      end
-
-      def migrate_to_v5_safe!
-        @db.transaction do
-          # Add source_mtime for incremental sync
-          columns = @db.schema(:content_items).map(&:first)
-          unless columns.include?(:source_mtime)
-            @db.alter_table(:content_items) do
-              add_column :source_mtime, String  # ISO8601 timestamp of source file mtime
-            end
-          end
-
-          # Index for efficient mtime lookups
-          create_index_if_not_exists(:content_items, :source_mtime, :idx_content_items_source_mtime)
-
-          # Update version INSIDE transaction for atomicity
-          set_meta("schema_version", "5")
-        end
-      rescue => e
-        raise StandardError, "Migration to v5 failed: #{e.message}"
-      end
-
-      def migrate_to_v6_safe!
-        @db.transaction do
-          # Create operation_progress table for tracking long-running operations
-          @db.create_table?(:operation_progress) do
-            primary_key :id
-            String :operation_type, null: false  # "index_embeddings", "sweep", "distill"
-            String :scope, null: false           # "global" or "project"
-            String :status, null: false          # "running", "completed", "failed"
-            Integer :total_items
-            Integer :processed_items, default: 0
-            String :checkpoint_data, text: true  # JSON for resumption
-            String :started_at, null: false
-            String :completed_at
-          end
-
-          create_index_if_not_exists(:operation_progress, :operation_type, :idx_operation_progress_type)
-          create_index_if_not_exists(:operation_progress, :status, :idx_operation_progress_status)
-
-          # Create schema_health table for validation results
-          @db.create_table?(:schema_health) do
-            primary_key :id
-            String :checked_at, null: false
-            Integer :schema_version, null: false
-            String :validation_status, null: false  # "healthy", "corrupt", "unknown"
-            String :issues_json, text: true         # Array of detected problems
-            String :table_counts_json, text: true   # Snapshot of table row counts
-          end
-
-          create_index_if_not_exists(:schema_health, :checked_at, :idx_schema_health_checked_at)
-
-          # Update version INSIDE transaction for atomicity
-          set_meta("schema_version", "6")
-        end
-      rescue => e
-        raise StandardError, "Migration to v6 failed: #{e.message}"
-      end
-
-      def migrate_to_v7_safe!
-        @db.transaction do
-          # Create ingestion_metrics table for ROI tracking
-          # Tracks token economics: how many tokens were spent during distillation
-          # to extract how many facts. Shows efficiency of memory system.
-          @db.create_table?(:ingestion_metrics) do
-            primary_key :id
-            foreign_key :content_item_id, :content_items, null: false
-            Integer :input_tokens         # Tokens sent to distillation API
-            Integer :output_tokens        # Tokens returned from distillation API
-            Integer :facts_extracted      # Number of facts extracted from this content
-            String :created_at, null: false
-          end
-
-          create_index_if_not_exists(:ingestion_metrics, :content_item_id, :idx_ingestion_metrics_content_item)
-          create_index_if_not_exists(:ingestion_metrics, :created_at, :idx_ingestion_metrics_created_at)
-
-          # Update version INSIDE transaction for atomicity
-          set_meta("schema_version", "7")
-        end
-      rescue => e
-        raise StandardError, "Migration to v7 failed: #{e.message}"
-      end
-
-      def create_tables!
-        @db.create_table?(:meta) do
-          String :key, primary_key: true
-          String :value
-        end
-
-        # Content items store ingested transcript chunks with metadata
-        # metadata_json stores extensible session metadata as JSON:
-        # {
-        #   "git_branch": "feature/auth",
-        #   "cwd": "/path/to/project",
-        #   "claude_version": "4.5",
-        #   "tools_used": ["Read", "Edit", "Bash"]
-        # }
-        @db.create_table?(:content_items) do
-          primary_key :id
-          String :source, null: false
-          String :session_id
-          String :transcript_path
-          String :project_path
-          String :occurred_at
-          String :ingested_at, null: false
-          String :text_hash, null: false
-          Integer :byte_len, null: false
-          String :raw_text, text: true
-          String :metadata_json, text: true  # Extensible JSON metadata
-        end
-
-        @db.create_table?(:delta_cursors) do
-          primary_key :id
-          String :session_id, null: false
-          String :transcript_path, null: false
-          Integer :last_byte_offset, null: false, default: 0
-          String :updated_at, null: false
-          unique [:session_id, :transcript_path]
-        end
-
-        @db.create_table?(:entities) do
-          primary_key :id
-          String :type, null: false
-          String :canonical_name, null: false
-          String :slug, null: false, unique: true
-          String :created_at, null: false
-        end
-
-        @db.create_table?(:entity_aliases) do
-          primary_key :id
-          foreign_key :entity_id, :entities, null: false
-          String :source
-          String :alias, null: false
-          Float :confidence, default: 1.0
-        end
-
-        @db.create_table?(:facts) do
-          primary_key :id
-          foreign_key :subject_entity_id, :entities
-          String :predicate, null: false
-          foreign_key :object_entity_id, :entities
-          String :object_literal
-          String :datatype
-          String :polarity, default: "positive"
-          String :valid_from
-          String :valid_to
-          String :status, default: "active"
-          Float :confidence, default: 1.0
-          String :created_from
-          String :created_at, null: false
-          String :scope, default: "project"
-          String :project_path
-        end
-
-        @db.create_table?(:provenance) do
-          primary_key :id
-          foreign_key :fact_id, :facts, null: false
-          foreign_key :content_item_id, :content_items
-          String :quote, text: true
-          foreign_key :attribution_entity_id, :entities
-          String :strength, default: "stated"
-        end
-
-        @db.create_table?(:fact_links) do
-          primary_key :id
-          foreign_key :from_fact_id, :facts, null: false
-          foreign_key :to_fact_id, :facts, null: false
-          String :link_type, null: false
-        end
-
-        @db.create_table?(:conflicts) do
-          primary_key :id
-          foreign_key :fact_a_id, :facts, null: false
-          foreign_key :fact_b_id, :facts, null: false
-          String :status, default: "open"
-          String :detected_at, null: false
-          String :notes, text: true
-        end
-
-        create_index_if_not_exists(:facts, :predicate, :idx_facts_predicate)
-        create_index_if_not_exists(:facts, :subject_entity_id, :idx_facts_subject)
-        create_index_if_not_exists(:facts, :status, :idx_facts_status)
-        create_index_if_not_exists(:facts, :scope, :idx_facts_scope)
-        create_index_if_not_exists(:facts, :project_path, :idx_facts_project)
-        create_index_if_not_exists(:provenance, :fact_id, :idx_provenance_fact)
-        create_index_if_not_exists(:entity_aliases, :entity_id, :idx_entity_aliases_entity)
-        create_index_if_not_exists(:content_items, :session_id, :idx_content_items_session)
-        create_index_if_not_exists(:content_items, :project_path, :idx_content_items_project)
-      end
-
-      def create_index_if_not_exists(table, column, name)
-        @db.run("CREATE INDEX IF NOT EXISTS #{name} ON #{table}(#{column})")
-      end
 
       def set_meta(key, value)
         @db[:meta].insert_conflict(target: :key, update: {value: value}).insert(key: key, value: value)
