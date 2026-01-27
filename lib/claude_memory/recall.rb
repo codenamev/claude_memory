@@ -248,7 +248,7 @@ module ClaudeMemory
     end
 
     def batch_find_facts(store, fact_ids)
-      store.facts
+      dataset = store.facts
         .left_join(:entities, id: :subject_entity_id)
         .select(
           Sequel[:facts][:id],
@@ -263,13 +263,12 @@ module ClaudeMemory
           Sequel[:facts][:scope],
           Sequel[:facts][:project_path]
         )
-        .where(Sequel[:facts][:id] => fact_ids)
-        .all
-        .each_with_object({}) { |fact, hash| hash[fact[:id]] = fact }
+
+      Core::BatchLoader.load_many(dataset, fact_ids, group_by: :single)
     end
 
     def batch_find_receipts(store, fact_ids)
-      store.provenance
+      dataset = store.provenance
         .left_join(:content_items, id: :content_item_id)
         .select(
           Sequel[:provenance][:id],
@@ -279,9 +278,8 @@ module ClaudeMemory
           Sequel[:content_items][:session_id],
           Sequel[:content_items][:occurred_at]
         )
-        .where(Sequel[:provenance][:fact_id] => fact_ids)
-        .all
-        .group_by { |receipt| receipt[:fact_id] }
+
+      Core::BatchLoader.load_many(dataset, fact_ids, group_by: :fact_id)
     end
 
     def dedupe_and_sort(results, limit)
