@@ -108,14 +108,21 @@ module ClaudeMemory
         return 0 if count.zero?
 
         now = Time.now.utc.iso8601
-        stuck.update(
-          status: "failed",
-          completed_at: now,
-          checkpoint_data: Sequel.function(:json_set,
-            Sequel.function(:coalesce, :checkpoint_data, "{}"),
-            "$.error",
-            "Reset by recover command - operation exceeded 24h timeout")
-        )
+        error_message = "Reset by recover command - operation exceeded 24h timeout"
+
+        # Fetch each stuck operation, update checkpoint in Ruby, then save
+        stuck.all.each do |op|
+          checkpoint = op[:checkpoint_data] ? JSON.parse(op[:checkpoint_data]) : {}
+          checkpoint["error"] = error_message
+
+          @store.db[:operation_progress]
+            .where(id: op[:id])
+            .update(
+              status: "failed",
+              completed_at: now,
+              checkpoint_data: JSON.generate(checkpoint)
+            )
+        end
 
         count
       end
@@ -126,18 +133,25 @@ module ClaudeMemory
       def cleanup_stale_operations!(operation_type, scope)
         threshold_time = (Time.now.utc - STALE_THRESHOLD_SECONDS).iso8601
         now = Time.now.utc.iso8601
+        error_message = "Automatically marked as failed - operation exceeded 24h timeout"
 
-        @store.db[:operation_progress]
+        stale = @store.db[:operation_progress]
           .where(operation_type: operation_type, scope: scope, status: "running")
           .where { started_at < threshold_time }
-          .update(
-            status: "failed",
-            completed_at: now,
-            checkpoint_data: Sequel.function(:json_set,
-              Sequel.function(:coalesce, :checkpoint_data, "{}"),
-              "$.error",
-              "Automatically marked as failed - operation exceeded 24h timeout")
-          )
+
+        # Fetch each stale operation, update checkpoint in Ruby, then save
+        stale.all.each do |op|
+          checkpoint = op[:checkpoint_data] ? JSON.parse(op[:checkpoint_data]) : {}
+          checkpoint["error"] = error_message
+
+          @store.db[:operation_progress]
+            .where(id: op[:id])
+            .update(
+              status: "failed",
+              completed_at: now,
+              checkpoint_data: JSON.generate(checkpoint)
+            )
+        end
       end
     end
   end
