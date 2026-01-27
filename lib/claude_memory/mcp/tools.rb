@@ -2,10 +2,13 @@
 
 require "json"
 require "digest"
+require_relative "tool_helpers"
 
 module ClaudeMemory
   module MCP
     class Tools
+      include ToolHelpers
+
       def initialize(store_or_manager)
         @recall = Recall.new(store_or_manager)
 
@@ -332,8 +335,9 @@ module ClaudeMemory
       private
 
       def recall(args)
-        scope = args["scope"] || "all"
-        results = @recall.query(args["query"], limit: args["limit"] || 10, scope: scope)
+        scope = extract_scope(args)
+        limit = extract_limit(args)
+        results = @recall.query(args["query"], limit: limit, scope: scope)
         {
           facts: results.map do |r|
             {
@@ -352,8 +356,9 @@ module ClaudeMemory
       end
 
       def recall_index(args)
-        scope = args["scope"] || "all"
-        results = @recall.query_index(args["query"], limit: args["limit"] || 20, scope: scope)
+        scope = extract_scope(args)
+        limit = extract_limit(args, default: 20)
+        results = @recall.query_index(args["query"], limit: limit, scope: scope)
 
         total_tokens = results.sum { |r| r[:token_estimate] }
 
@@ -690,8 +695,8 @@ module ClaudeMemory
 
       def facts_by_tool(args)
         tool_name = args["tool_name"]
-        scope = args["scope"] || "all"
-        limit = args["limit"] || 20
+        scope = extract_scope(args)
+        limit = extract_limit(args, default: 20)
 
         results = @recall.facts_by_tool(tool_name, limit: limit, scope: scope)
 
@@ -699,23 +704,13 @@ module ClaudeMemory
           tool_name: tool_name,
           scope: scope,
           count: results.size,
-          facts: results.map do |r|
-            {
-              id: r[:fact][:id],
-              subject: r[:fact][:subject_name],
-              predicate: r[:fact][:predicate],
-              object: r[:fact][:object_literal],
-              scope: r[:fact][:scope],
-              source: r[:source],
-              receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
-            }
-          end
+          facts: results.map { |r| format_result(r) }
         }
       end
 
       def facts_by_context(args)
-        scope = args["scope"] || "all"
-        limit = args["limit"] || 20
+        scope = extract_scope(args)
+        limit = extract_limit(args, default: 20)
 
         if args["git_branch"]
           results = @recall.facts_by_branch(args["git_branch"], limit: limit, scope: scope)
@@ -734,25 +729,15 @@ module ClaudeMemory
           context_value: context_value,
           scope: scope,
           count: results.size,
-          facts: results.map do |r|
-            {
-              id: r[:fact][:id],
-              subject: r[:fact][:subject_name],
-              predicate: r[:fact][:predicate],
-              object: r[:fact][:object_literal],
-              scope: r[:fact][:scope],
-              source: r[:source],
-              receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
-            }
-          end
+          facts: results.map { |r| format_result(r) }
         }
       end
 
       def recall_semantic(args)
         query = args["query"]
         mode = (args["mode"] || "both").to_sym
-        scope = args["scope"] || "all"
-        limit = args["limit"] || 10
+        scope = extract_scope(args)
+        limit = extract_limit(args)
 
         results = @recall.query_semantic(query, limit: limit, scope: scope, mode: mode)
 
@@ -778,8 +763,8 @@ module ClaudeMemory
 
       def search_concepts(args)
         concepts = args["concepts"]
-        scope = args["scope"] || "all"
-        limit = args["limit"] || 10
+        scope = extract_scope(args)
+        limit = extract_limit(args)
 
         return {error: "Must provide 2-5 concepts"} unless (2..5).cover?(concepts.size)
 
