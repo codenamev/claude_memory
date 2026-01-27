@@ -493,24 +493,10 @@ module ClaudeMemory
     # Context-aware query helpers
 
     def facts_by_context_dual(column, value, limit:, scope:)
-      results = []
-
-      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
-        @manager.ensure_project! if @manager.project_exists?
-        if @manager.project_store
-          project_results = facts_by_context_single(@manager.project_store, column, value, limit: limit, source: :project)
-          results.concat(project_results)
-        end
+      template = Recall::DualQueryTemplate.new(@manager)
+      results = template.execute(scope: scope, limit: limit) do |store, source|
+        facts_by_context_single(store, column, value, limit: limit, source: source)
       end
-
-      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        @manager.ensure_global! if @manager.global_exists?
-        if @manager.global_store
-          global_results = facts_by_context_single(@manager.global_store, column, value, limit: limit, source: :global)
-          results.concat(global_results)
-        end
-      end
-
       dedupe_and_sort(results, limit)
     end
 
@@ -553,24 +539,10 @@ module ClaudeMemory
     end
 
     def facts_by_tool_dual(tool_name, limit:, scope:)
-      results = []
-
-      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
-        @manager.ensure_project! if @manager.project_exists?
-        if @manager.project_store
-          project_results = facts_by_tool_single(@manager.project_store, tool_name, limit: limit, source: :project)
-          results.concat(project_results)
-        end
+      template = Recall::DualQueryTemplate.new(@manager)
+      results = template.execute(scope: scope, limit: limit) do |store, source|
+        facts_by_tool_single(store, tool_name, limit: limit, source: source)
       end
-
-      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        @manager.ensure_global! if @manager.global_exists?
-        if @manager.global_store
-          global_results = facts_by_tool_single(@manager.global_store, tool_name, limit: limit, source: :global)
-          results.concat(global_results)
-        end
-      end
-
       dedupe_and_sort(results, limit)
     end
 
@@ -616,24 +588,10 @@ module ClaudeMemory
     # Semantic search helpers
 
     def query_semantic_dual(text, limit:, scope:, mode:)
-      results = []
-
-      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
-        @manager.ensure_project! if @manager.project_exists?
-        if @manager.project_store
-          project_results = query_semantic_single(@manager.project_store, text, limit: limit * 3, mode: mode, source: :project)
-          results.concat(project_results)
-        end
+      template = Recall::DualQueryTemplate.new(@manager)
+      results = template.execute(scope: scope, limit: limit) do |store, source|
+        query_semantic_single(store, text, limit: limit * 3, mode: mode, source: source)
       end
-
-      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        @manager.ensure_global! if @manager.global_exists?
-        if @manager.global_store
-          global_results = query_semantic_single(@manager.global_store, text, limit: limit * 3, mode: mode, source: :global)
-          results.concat(global_results)
-        end
-      end
-
       dedupe_and_sort(results, limit)
     end
 
@@ -764,24 +722,10 @@ module ClaudeMemory
     # Multi-concept search helpers
 
     def query_concepts_dual(concepts, limit:, scope:)
-      results = []
-
-      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
-        @manager.ensure_project! if @manager.project_exists?
-        if @manager.project_store
-          project_results = query_concepts_single(@manager.project_store, concepts, limit: limit * 2, source: :project)
-          results.concat(project_results)
-        end
+      template = Recall::DualQueryTemplate.new(@manager)
+      results = template.execute(scope: scope, limit: limit) do |store, source|
+        query_concepts_single(store, concepts, limit: limit * 2, source: source)
       end
-
-      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        @manager.ensure_global! if @manager.global_exists?
-        if @manager.global_store
-          global_results = query_concepts_single(@manager.global_store, concepts, limit: limit * 2, source: :global)
-          results.concat(global_results)
-        end
-      end
-
       # Deduplicate and sort by average similarity
       dedupe_by_fact_id(results, limit)
     end
