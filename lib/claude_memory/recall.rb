@@ -126,46 +126,18 @@ module ClaudeMemory
     private
 
     def query_dual(query_text, limit:, scope:)
-      results = []
-
-      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
-        @manager.ensure_project! if @manager.project_exists?
-        if @manager.project_store
-          project_results = query_single_store(@manager.project_store, query_text, limit: limit, source: :project)
-          results.concat(project_results)
-        end
+      template = Recall::DualQueryTemplate.new(@manager)
+      results = template.execute(scope: scope, limit: limit) do |store, source|
+        query_single_store(store, query_text, limit: limit, source: source)
       end
-
-      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        @manager.ensure_global! if @manager.global_exists?
-        if @manager.global_store
-          global_results = query_single_store(@manager.global_store, query_text, limit: limit, source: :global)
-          results.concat(global_results)
-        end
-      end
-
       dedupe_and_sort(results, limit)
     end
 
     def query_index_dual(query_text, limit:, scope:)
-      results = []
-
-      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
-        @manager.ensure_project! if @manager.project_exists?
-        if @manager.project_store
-          project_results = query_index_single_store(@manager.project_store, query_text, limit: limit, source: :project)
-          results.concat(project_results)
-        end
+      template = Recall::DualQueryTemplate.new(@manager)
+      results = template.execute(scope: scope, limit: limit) do |store, source|
+        query_index_single_store(store, query_text, limit: limit, source: source)
       end
-
-      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        @manager.ensure_global! if @manager.global_exists?
-        if @manager.global_store
-          global_results = query_index_single_store(@manager.global_store, query_text, limit: limit, source: :global)
-          results.concat(global_results)
-        end
-      end
-
       dedupe_and_sort_index(results, limit)
     end
 
@@ -302,26 +274,12 @@ module ClaudeMemory
     end
 
     def changes_dual(since:, limit:, scope:)
-      results = []
-
-      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
-        @manager.ensure_project! if @manager.project_exists?
-        if @manager.project_store
-          project_changes = fetch_changes(@manager.project_store, since, limit)
-          project_changes.each { |c| c[:source] = :project }
-          results.concat(project_changes)
-        end
+      template = Recall::DualQueryTemplate.new(@manager)
+      results = template.execute(scope: scope, limit: limit) do |store, source|
+        changes = fetch_changes(store, since, limit)
+        changes.each { |c| c[:source] = source }
+        changes
       end
-
-      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        @manager.ensure_global! if @manager.global_exists?
-        if @manager.global_store
-          global_changes = fetch_changes(@manager.global_store, since, limit)
-          global_changes.each { |c| c[:source] = :global }
-          results.concat(global_changes)
-        end
-      end
-
       results.sort_by { |c| c[:created_at] }.reverse.first(limit)
     end
 
@@ -335,27 +293,12 @@ module ClaudeMemory
     end
 
     def conflicts_dual(scope:)
-      results = []
-
-      if scope == SCOPE_ALL || scope == SCOPE_PROJECT
-        @manager.ensure_project! if @manager.project_exists?
-        if @manager.project_store
-          project_conflicts = @manager.project_store.open_conflicts
-          project_conflicts.each { |c| c[:source] = :project }
-          results.concat(project_conflicts)
-        end
+      template = Recall::DualQueryTemplate.new(@manager)
+      template.execute(scope: scope) do |store, source|
+        conflicts = store.open_conflicts
+        conflicts.each { |c| c[:source] = source }
+        conflicts
       end
-
-      if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        @manager.ensure_global! if @manager.global_exists?
-        if @manager.global_store
-          global_conflicts = @manager.global_store.open_conflicts
-          global_conflicts.each { |c| c[:source] = :global }
-          results.concat(global_conflicts)
-        end
-      end
-
-      results
     end
 
     def explain_from_store(store, fact_id)
