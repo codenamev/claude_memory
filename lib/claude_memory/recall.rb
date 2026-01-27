@@ -409,30 +409,11 @@ module ClaudeMemory
     end
 
     def fact_matches_scope?(fact, scope)
-      return true if scope == SCOPE_ALL
-
-      fact_scope = fact[:scope] || "project"
-      fact_project = fact[:project_path]
-
-      case scope
-      when SCOPE_PROJECT
-        fact_scope == "project" && fact_project == @project_path
-      when SCOPE_GLOBAL
-        fact_scope == "global"
-      else
-        true
-      end
+      Core::ScopeFilter.matches?(fact, scope, @project_path)
     end
 
     def apply_scope_filter(dataset, scope)
-      case scope
-      when SCOPE_PROJECT
-        dataset.where(scope: "project", project_path: @project_path)
-      when SCOPE_GLOBAL
-        dataset.where(scope: "global")
-      else
-        dataset
-      end
+      Core::ScopeFilter.apply_to_dataset(dataset, scope, @project_path)
     end
 
     def sort_by_scope_priority(facts_with_provenance)
