@@ -224,4 +224,93 @@ RSpec.describe ClaudeMemory::Commands::InitCommand do
       expect(content.lines.first).to include("-->")
     end
   end
+
+  describe "idempotency" do
+    before do
+      ENV["HOME"] = @tmpdir
+    end
+
+    after do
+      ENV.delete("HOME")
+    end
+
+    it "can be run multiple times without duplicating hooks" do
+      # First run
+      command.call([])
+      first_config = JSON.parse(File.read(".claude/settings.json"))
+      first_hook_count = first_config["hooks"]["SessionStart"].size
+
+      # Second run
+      command.call([])
+      second_config = JSON.parse(File.read(".claude/settings.json"))
+      second_hook_count = second_config["hooks"]["SessionStart"].size
+
+      # Should have same number of hooks
+      expect(second_hook_count).to eq(first_hook_count)
+    end
+
+    it "preserves custom hooks when run multiple times" do
+      # First run
+      command.call([])
+
+      # Add custom hook
+      config = JSON.parse(File.read(".claude/settings.json"))
+      custom_hook = {
+        "hooks" => [
+          {"type" => "command", "command" => "echo 'custom'", "timeout" => 5}
+        ]
+      }
+      config["hooks"]["SessionStart"] << custom_hook
+      File.write(".claude/settings.json", JSON.pretty_generate(config))
+
+      # Second run
+      command.call([])
+
+      # Custom hook should still be present
+      final_config = JSON.parse(File.read(".claude/settings.json"))
+      custom_commands = final_config["hooks"]["SessionStart"].flat_map do |hook_array|
+        hook_array["hooks"].map { |h| h["command"] }
+      end
+
+      expect(custom_commands).to include("echo 'custom'")
+    end
+
+    it "does not duplicate CLAUDE.md content" do
+      # First run
+      command.call([])
+      first_content = File.read(".claude/CLAUDE.md")
+
+      # Second run
+      command.call([])
+      second_content = File.read(".claude/CLAUDE.md")
+
+      # Content should be identical
+      expect(second_content).to eq(first_content)
+    end
+
+    it "handles existing databases gracefully" do
+      # First run
+      command.call([])
+      expect(File.exist?(".claude/memory.sqlite3")).to be true
+
+      # Second run should not fail
+      expect { command.call([]) }.not_to raise_error
+    end
+
+    it "updates MCP server configuration on subsequent runs" do
+      # First run
+      command.call([])
+
+      # Manually change MCP config
+      config = JSON.parse(File.read(".claude.json"))
+      config["mcpServers"]["claude-memory"]["args"] = ["old-args"]
+      File.write(".claude.json", JSON.pretty_generate(config))
+
+      # Second run should fix it
+      command.call([])
+
+      final_config = JSON.parse(File.read(".claude.json"))
+      expect(final_config["mcpServers"]["claude-memory"]["args"]).to eq(["serve-mcp"])
+    end
+  end
 end

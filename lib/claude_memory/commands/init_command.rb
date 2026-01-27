@@ -87,7 +87,7 @@ module ClaudeMemory
 
         existing = load_json_file(settings_path)
         existing["hooks"] ||= {}
-        existing["hooks"].merge!(hooks_config["hooks"])
+        merge_hooks!(existing["hooks"], hooks_config["hooks"])
 
         File.write(settings_path, JSON.pretty_generate(existing))
         stdout.puts "✓ Configured hooks in #{settings_path}"
@@ -182,7 +182,7 @@ module ClaudeMemory
 
         existing = load_json_file(settings_path)
         existing["hooks"] ||= {}
-        existing["hooks"].merge!(hooks_config["hooks"])
+        merge_hooks!(existing["hooks"], hooks_config["hooks"])
 
         File.write(settings_path, JSON.pretty_generate(existing))
         stdout.puts "✓ Configured hooks in #{settings_path}"
@@ -305,6 +305,31 @@ module ClaudeMemory
         JSON.parse(File.read(path))
       rescue JSON::ParserError
         {}
+      end
+
+      # Merges hooks configuration idempotently
+      # - Adds new hook events if they don't exist
+      # - Preserves existing hooks and only adds claude-memory hooks if not present
+      # - Idempotent: running multiple times won't duplicate hooks
+      def merge_hooks!(existing_hooks, new_hooks)
+        new_hooks.each do |event, hook_arrays|
+          existing_hooks[event] ||= []
+
+          hook_arrays.each do |hook_array|
+            # Check if this hook configuration already exists
+            commands = hook_array["hooks"].map { |h| h["command"] }
+
+            # Only add if we don't already have these claude-memory commands
+            existing_commands = existing_hooks[event].flat_map do |existing_array|
+              existing_array["hooks"]&.map { |h| h["command"] } || []
+            end
+
+            # Add hook array if none of its commands are already present
+            unless commands.any? { |cmd| existing_commands.any? { |existing| existing&.include?("claude-memory") && existing.include?(cmd.split.last) } }
+              existing_hooks[event] << hook_array
+            end
+          end
+        end
       end
     end
   end
