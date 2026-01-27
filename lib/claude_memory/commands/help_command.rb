@@ -26,6 +26,7 @@ module ClaudeMemory
             search     Search indexed content
             serve-mcp  Start MCP server
             sweep      Run maintenance/pruning
+            uninstall  Remove ClaudeMemory configuration
             version    Show version number
 
           Run 'claude-memory <command> --help' for more information on a command.

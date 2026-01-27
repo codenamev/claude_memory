@@ -86,7 +86,7 @@ RSpec.describe "Recall Failure Modes" do
       it "handles concurrent read access safely" do
         # Insert test data
         entity_id = manager.project_store.find_or_create_entity(type: "application", name: "test")
-        fact_id = manager.project_store.insert_fact(
+        manager.project_store.insert_fact(
           subject_entity_id: entity_id,
           predicate: "status",
           object_literal: "active",

@@ -23,6 +23,7 @@ module ClaudeMemory
         "publish" => "PublishCommand",
         "db:init" => "DbInitCommand",
         "init" => "InitCommand",
+        "uninstall" => "UninstallCommand",
         "serve-mcp" => "ServeMcpCommand",
         "hook" => "HookCommand",
         "index" => "IndexCommand",

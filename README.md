@@ -172,6 +172,31 @@ This checks:
 - Hooks configuration
 - Snapshot status
 - Stuck operations
+- Orphaned hooks (hooks without MCP configuration)
+
+### Uninstalling
+
+To remove ClaudeMemory configuration:
+
+```bash
+# Remove hooks and MCP configuration (keeps databases)
+claude-memory uninstall
+
+# Remove everything including databases
+claude-memory uninstall --full
+
+# For global uninstall
+claude-memory uninstall --global
+claude-memory uninstall --global --full
+```
+
+The uninstall command removes:
+- Hooks from `.claude/settings.json`
+- MCP server from `.claude.json`
+- ClaudeMemory section from `CLAUDE.md`
+- Databases and generated files (with `--full`)
+
+**Note:** The `doctor` command will warn you if orphaned hooks are detected (hooks configured but MCP plugin removed). Run `claude-memory uninstall` to clean them up.
 
 ## Documentation
 
