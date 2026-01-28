@@ -471,16 +471,13 @@ module ClaudeMemory
       facts_by_id = batch_find_facts(store, fact_ids)
       receipts_by_fact_id = batch_find_receipts(store, fact_ids)
 
-      fact_ids.map do |fact_id|
-        fact = facts_by_id[fact_id]
-        next unless fact
-
-        {
-          fact: fact,
-          receipts: receipts_by_fact_id[fact_id] || [],
-          source: source
-        }
-      end.compact.take(limit)
+      results = Core::ResultBuilder.build_results(
+        fact_ids,
+        facts_by_id: facts_by_id,
+        receipts_by_fact_id: receipts_by_fact_id,
+        source: source
+      )
+      results.take(limit)
     end
 
     def facts_by_tool_dual(tool_name, limit:, scope:)
@@ -518,16 +515,13 @@ module ClaudeMemory
       facts_by_id = batch_find_facts(store, fact_ids)
       receipts_by_fact_id = batch_find_receipts(store, fact_ids)
 
-      fact_ids.map do |fact_id|
-        fact = facts_by_id[fact_id]
-        next unless fact
-
-        {
-          fact: fact,
-          receipts: receipts_by_fact_id[fact_id] || [],
-          source: source
-        }
-      end.compact.take(limit)
+      results = Core::ResultBuilder.build_results(
+        fact_ids,
+        facts_by_id: facts_by_id,
+        receipts_by_fact_id: receipts_by_fact_id,
+        source: source
+      )
+      results.take(limit)
     end
 
     # Semantic search helpers
@@ -596,18 +590,12 @@ module ClaudeMemory
       receipts_by_fact_id = batch_find_receipts(store, fact_ids)
 
       # Build results with similarity scores
-      top_matches.map do |match|
-        fact_id = match[:candidate][:fact_id]
-        fact = facts_by_id[fact_id]
-        next unless fact
-
-        {
-          fact: fact,
-          receipts: receipts_by_fact_id[fact_id] || [],
-          source: source,
-          similarity: match[:similarity]
-        }
-      end.compact
+      Core::ResultBuilder.build_results_with_scores(
+        top_matches,
+        facts_by_id: facts_by_id,
+        receipts_by_fact_id: receipts_by_fact_id,
+        source: source
+      )
     end
 
     def search_by_fts(store, query_text, limit, source)
@@ -630,17 +618,14 @@ module ClaudeMemory
       facts_by_id = batch_find_facts(store, fact_ids)
       receipts_by_fact_id = batch_find_receipts(store, fact_ids)
 
-      fact_ids.map do |fact_id|
-        fact = facts_by_id[fact_id]
-        next unless fact
-
-        {
-          fact: fact,
-          receipts: receipts_by_fact_id[fact_id] || [],
-          source: source,
-          similarity: 0.5  # Default score for FTS results
-        }
-      end.compact.take(limit)
+      results = Core::ResultBuilder.build_results(
+        fact_ids,
+        facts_by_id: facts_by_id,
+        receipts_by_fact_id: receipts_by_fact_id,
+        source: source,
+        similarity: 0.5  # Default score for FTS results
+      )
+      results.take(limit)
     end
 
     def merge_search_results(vector_results, text_results, limit)

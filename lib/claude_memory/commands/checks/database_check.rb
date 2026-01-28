@@ -98,7 +98,11 @@ module ClaudeMemory
 
           store.close
 
-          status = errors.any? ? :error : (warnings.any? ? :warning : :ok)
+          status = if errors.any?
+            :error
+          else
+            (warnings.any? ? :warning : :ok)
+          end
 
           {
             status: status,

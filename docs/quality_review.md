@@ -2,32 +2,33 @@
 
 **Reviewed by perspectives of:** Sandi Metz, Jeremy Evans, Kent Beck, Avdi Grimm, Gary Bernhardt
 
-**Review Date:** 2026-01-26 (Updated)
+**Review Date:** 2026-01-27 (Updated)
 
-**Previous Review:** 2026-01-21
+**Previous Review:** 2026-01-26
 
 ---
 
 ## Executive Summary
 
-**SIGNIFICANT PROGRESS MADE!** Since the January 21st review, major architectural improvements have been implemented:
+**EXCELLENT PROGRESS!** Since the January 26th review, critical architectural improvements continue:
 
-✅ **CLI Refactored** - Reduced from 867 lines to just 41 lines with command pattern
-✅ **16 Command Classes** - Each command now has single responsibility
-✅ **Transaction Safety** - Added to Resolver and Ingester
-✅ **Domain Objects** - Fact, Entity, Provenance, Conflict classes exist
-✅ **Value Objects** - SessionId, TranscriptPath, FactId, Result classes
-✅ **Null Objects** - NullFact, NullExplanation implemented
-✅ **Infrastructure Abstraction** - FileSystem and InMemoryFileSystem for testability
+### Major Wins Since Last Review ✅
 
-### New Critical Issues Found
+1. ✅ **Migrations System Refactored** - Now using proper Sequel migration files in `db/migrations/` (001-007)
+2. ✅ **DoctorCommand Refactored** - Reduced from 174 to 31 lines with extracted check classes
+3. ✅ **FactRanker Extracted** - Pure logic class extracted to `Core::FactRanker` (Gary Bernhardt pattern!)
+4. ✅ **Recall.rb Reduced** - From 914 to 754 lines (17% reduction)
+5. ✅ **SQLiteStore Reduced** - From 542 to 383 lines (29% reduction)
 
-However, new god objects have emerged and need attention:
+### Critical Issues Remaining
 
-1. **🔴 Recall.rb God Object** - 914 lines (lib/claude_memory/recall.rb)
-2. **🔴 MCP Tools.rb Too Large** - 901 lines (lib/claude_memory/mcp/tools.rb)
-3. **🟡 SQLiteStore Still Needs Work** - 542 lines with manual migrations
-4. **🟡 Massive Code Duplication** - Dual-database pattern repeated extensively
+Despite progress, **Recall.rb and MCP Tools remain god objects**:
+
+1. **🔴 Recall.rb Still a God Object** - 754 lines, 58 methods (down from 914/57 but still too large)
+2. **🔴 MCP Tools.rb Growing** - 1,039 lines (up from 901, +15%)
+3. **🔴 JSON Functions Still Present** - operation_tracker.rb breaking Sequel abstractions
+4. **🟡 String Timestamps Everywhere** - Should use DateTime columns
+5. **🟡 Code Duplication** - Dual-database pattern still repeated
 
 ---
 
@@ -35,16 +36,16 @@ However, new god objects have emerged and need attention:
 
 ### What's Been Fixed Since Last Review ✅
 
-- ✅ CLI god object eliminated (867 → 41 lines)
-- ✅ Command pattern properly implemented
-- ✅ Single Responsibility Principle for commands
-- ✅ DRY violations in commands addressed
+- ✅ **DoctorCommand refactored** - 174 → 31 lines, extracted 5 check classes
+- ✅ **FactRanker extracted** - Pure logic separated from I/O
+- ✅ **Migrations extracted** - Now 7 separate migration files
+- ✅ **Recall reduced** - 914 → 754 lines (but still too large)
 
-### New Critical Issues
+### Critical Issues Remaining
 
-#### 🔴 Recall.rb Is Now the God Object (recall.rb:1-914)
+#### 🔴 Recall.rb Still God Object (recall.rb:1-754)
 
-**Problem:** The `Recall` class has become the new god object at 914 lines, handling:
+**Problem:** Despite 17% reduction, still handles too many responsibilities:
 - Legacy single-database mode
 - Dual-database mode (global + project)
 - FTS search
@@ -53,523 +54,479 @@ However, new god objects have emerged and need attention:
 - Batch query optimization
 - Change tracking
 - Conflict queries
+- Tool-based fact queries
+- Context-based fact queries
 
-**Violations:**
-- Single Responsibility Principle massively violated
-- At least 8 distinct responsibilities
-- Conditional logic based on mode throughout
-- Methods > 20 lines common
+**Current State:**
+- **754 lines** (down from 914)
+- **58 methods** (up from 57)
+- Still violates SRP massively
+- 10+ distinct responsibilities
 
 **Evidence:**
 ```ruby
-# recall.rb:58-78 - query_dual method (21 lines)
-# recall.rb:127-147 - query_index_dual (21 lines)
-# recall.rb:305-327 - changes_dual (23 lines)
-# recall.rb:702-718 - query_semantic_single (17 lines)
-```
-
-**Recommended Fix:**
-Extract separate classes following Strategy pattern:
-```ruby
-# lib/claude_memory/recall/dual_store_strategy.rb
-class DualStoreStrategy
-  def query(query, limit:, scope:)
-    # Handles dual-database queries
-  end
-end
-
-# lib/claude_memory/recall/legacy_store_strategy.rb
-class LegacyStoreStrategy
-  def query(query, limit:, scope:)
-    # Handles single-database queries
-  end
-end
-
-# lib/claude_memory/recall/search_strategies/fts_search.rb
-class FtsSearch
-  def call(store, query, limit)
-    # Full-text search implementation
-  end
-end
-
-# lib/claude_memory/recall/search_strategies/semantic_search.rb
-class SemanticSearch
-  def call(store, query, limit)
-    # Vector embedding search
-  end
-end
-
-# lib/claude_memory/recall.rb - Becomes thin coordinator
-class Recall
-  def initialize(store_or_manager)
-    @strategy = build_strategy(store_or_manager)
-  end
-
-  def query(query, limit: 10, scope: "all")
-    @strategy.query(query, limit: limit, scope: scope)
-  end
-
-  private
-
-  def build_strategy(store_or_manager)
-    if store_or_manager.is_a?(Store::StoreManager)
-      DualStoreStrategy.new(store_or_manager)
-    else
-      LegacyStoreStrategy.new(store_or_manager)
-    end
-  end
-end
-```
-
-#### 🔴 Massive Code Duplication in Recall (DRY Violation)
-
-**Problem:** Every query method has three nearly-identical variants:
-- `query`, `query_dual`, `query_legacy` (lines 58-105)
-- `query_index`, `query_index_dual`, `query_index_legacy` (lines 127-169)
-- `changes`, `changes_dual`, `changes_legacy` (lines 305-351)
-- `conflicts`, `conflicts_dual`, `conflicts_legacy` (lines 374-420)
-
-**Example Duplication:**
-```ruby
-# recall.rb:58-78 - query_dual
-def query_dual(query, limit: 10, scope: "all")
-  return [] if query.nil? || query.strip.empty?
-
-  case scope
-  when "global"
-    query_from_store(@manager.global_store, query, limit)
-  when "project"
-    query_from_store(@manager.project_store, query, limit)
-  when "all"
-    global_results = query_from_store(@manager.global_store, query, limit / 2)
-    project_results = query_from_store(@manager.project_store, query, limit / 2)
-    merge_results(global_results, project_results, limit)
+# recall.rb:42-48 - Routing logic repeated everywhere
+def query(query_text, limit: 10, scope: SCOPE_ALL)
+  if @legacy_mode
+    query_legacy(query_text, limit: limit, scope: scope)
   else
-    []
+    query_dual(query_text, limit: limit, scope: scope)
   end
 end
 
-# recall.rb:81-105 - query_legacy (ALMOST IDENTICAL!)
-def query_legacy(query, limit: 10, scope: "all")
-  return [] if query.nil? || query.strip.empty?
-
-  case scope
-  when "global"
-    query_from_store(@store, query, limit).select { |r| r[:fact][:scope] == "global" }
-  when "project"
-    query_from_store(@store, query, limit).select { |r| r[:fact][:scope] == "project" }
-  when "all"
-    query_from_store(@store, query, limit)
-  else
-    []
-  end
-end
+# This pattern repeats for: query, query_index, explain, changes, conflicts,
+# facts_by_branch, facts_by_directory, facts_by_tool, query_semantic, query_concepts
 ```
 
-**Sandi Metz Says:** "DRY is about knowledge, not lines of code." This duplication represents the same knowledge expressed three times per method.
+**Sandi Metz Says:** "A class should have one reason to change. This has ten."
 
 **Recommended Fix:**
 ```ruby
-class DualStoreQueryExecutor
-  def execute(scope:, &block)
-    case scope
-    when "global"
-      block.call(manager.global_store)
-    when "project"
-      block.call(manager.project_store)
-    when "all"
-      merge_stores(&block)
+# lib/claude_memory/recall.rb - Thin coordinator (< 100 lines)
+module ClaudeMemory
+  class Recall
+    def initialize(store_or_manager, **options)
+      @strategy = build_strategy(store_or_manager, options)
+    end
+
+    def query(query_text, limit: 10, scope: SCOPE_ALL)
+      @strategy.query(query_text, limit: limit, scope: scope)
+    end
+
+    def query_semantic(query_text, limit: 10, scope: SCOPE_ALL, mode: "both")
+      @strategy.query_semantic(query_text, limit: limit, scope: scope, mode: mode)
+    end
+
+    # ... delegate all methods to strategy
+
+    private
+
+    def build_strategy(store_or_manager, options)
+      if store_or_manager.is_a?(Store::StoreManager)
+        Recall::DualStoreStrategy.new(store_or_manager, options)
+      else
+        Recall::LegacyStoreStrategy.new(store_or_manager, options)
+      end
     end
   end
+end
 
-  private
+# lib/claude_memory/recall/dual_store_strategy.rb (~300 lines)
+module ClaudeMemory
+  module Recall
+    class DualStoreStrategy
+      def initialize(manager, options)
+        @manager = manager
+        @fts = Recall::FtsSearch.new
+        @semantic = Recall::SemanticSearch.new(options[:embedding_generator])
+        @formatter = Recall::ResultFormatter.new
+      end
 
-  def merge_stores(&block)
-    global = block.call(manager.global_store)
-    project = block.call(manager.project_store)
-    merge_results(global, project)
+      def query(query_text, limit:, scope:)
+        @fts.search(@manager, query_text, limit: limit, scope: scope)
+      end
+
+      def query_semantic(query_text, limit:, scope:, mode:)
+        @semantic.search(@manager, query_text, limit: limit, scope: scope, mode: mode)
+      end
+
+      # ... other methods
+    end
   end
 end
 
-# Usage
-def query_dual(query, limit: 10, scope: "all")
-  return [] if query.nil? || query.strip.empty?
-
-  executor.execute(scope: scope) do |store|
-    query_from_store(store, query, limit)
-  end
-end
+# lib/claude_memory/recall/fts_search.rb (~100 lines)
+# lib/claude_memory/recall/semantic_search.rb (~150 lines)
+# lib/claude_memory/recall/result_formatter.rb (~100 lines)
 ```
 
-#### 🔴 MCP Tools.rb Violates SRP (mcp/tools.rb:1-901)
+**Estimated Effort:** 2-3 days
 
-**Problem:** Single file contains:
-- 17 tool definitions (TOOLS hash)
-- Tool parameter schemas
-- Handler implementations for all tools
-- Formatting logic
+#### 🔴 MCP Tools.rb Growing - Now at 1,039 Lines (mcp/tools.rb:1-1039)
+
+**Problem:** File has **GROWN 15%** since last review (901 → 1,039 lines)
+
+**Still Contains:**
+- 17+ tool definitions mixed with implementations
+- Parameter validation logic
+- Handler implementations
 - Stats aggregation
-- Error handling
+- Error formatting
+- Result formatting
+- JSON serialization
 
 **Violations:**
-- 901 lines in one file
-- Multiple responsibilities (definition + implementation + formatting)
-- Hard to test individual tools
+- Single file doing too much
 - Hard to find specific tool logic
+- Hard to test individual tools
+- Mixed concerns (definition + implementation + formatting)
 
 **Recommended Fix:**
 ```ruby
-# lib/claude_memory/mcp/tools.rb - Just registry (< 50 lines)
+# lib/claude_memory/mcp/server.rb
 module ClaudeMemory
   module MCP
-    TOOLS = {
-      "memory.recall" => Tools::Recall,
-      "memory.recall_index" => Tools::RecallIndex,
-      "memory.recall_details" => Tools::RecallDetails,
-      "memory.explain" => Tools::Explain,
-      # ... etc
-    }
-  end
-end
-
-# lib/claude_memory/mcp/tools/recall.rb
-module ClaudeMemory::MCP::Tools
-  class Recall
-    SCHEMA = {
-      name: "memory.recall",
-      description: "Recall facts matching a query.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query" },
-          limit: { type: "integer", default: 10 },
-          scope: { type: "string", enum: ["all", "global", "project"] }
-        },
-        required: ["query"]
+    class Server
+      TOOLS = {
+        "memory.recall" => Tools::Recall,
+        "memory.recall_index" => Tools::RecallIndex,
+        "memory.recall_details" => Tools::RecallDetails,
+        "memory.explain" => Tools::Explain,
+        "memory.promote" => Tools::Promote,
+        "memory.status" => Tools::Status,
+        "memory.changes" => Tools::Changes,
+        "memory.conflicts" => Tools::Conflicts,
+        "memory.sweep_now" => Tools::SweepNow,
+        "memory.decisions" => Tools::Decisions,
+        "memory.conventions" => Tools::Conventions,
+        "memory.architecture" => Tools::Architecture,
+        "memory.facts_by_tool" => Tools::FactsByTool,
+        "memory.facts_by_context" => Tools::FactsByContext,
+        "memory.recall_semantic" => Tools::RecallSemantic,
+        "memory.search_concepts" => Tools::SearchConcepts,
+        "memory.stats" => Tools::Stats
       }
-    }
 
-    def self.call(params, manager:)
-      query = params["query"]
-      limit = params.fetch("limit", 10)
-      scope = params.fetch("scope", "all")
+      def handle_tool_call(name, params)
+        tool_class = TOOLS[name]
+        return error_response("Unknown tool: #{name}") unless tool_class
 
-      recall = ClaudeMemory::Recall.new(manager)
-      results = recall.query(query, limit: limit, scope: scope)
-
-      Formatter.format_results(results)
+        tool_class.new(@manager).call(params)
+      end
     end
   end
 end
 
-# lib/claude_memory/mcp/tools/formatter.rb
-module ClaudeMemory::MCP::Tools
-  class Formatter
-    def self.format_results(results)
-      # Formatting logic extracted
+# lib/claude_memory/mcp/tools/recall.rb (~60 lines)
+module ClaudeMemory
+  module MCP
+    module Tools
+      class Recall < BaseTool
+        SCHEMA = {
+          name: "memory.recall",
+          description: "Recall facts matching a query.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              query: {type: "string", description: "Search query"},
+              limit: {type: "integer", default: 10},
+              scope: {type: "string", enum: ["all", "global", "project"], default: "all"}
+            },
+            required: ["query"]
+          }
+        }
+
+        def call(params)
+          query = params["query"]
+          limit = params.fetch("limit", 10)
+          scope = params.fetch("scope", "all")
+
+          recall = ClaudeMemory::Recall.new(@manager)
+          results = recall.query(query, limit: limit, scope: scope)
+
+          format_results(results)
+        end
+
+        private
+
+        def format_results(results)
+          {
+            content: [{
+              type: "text",
+              text: Formatter.format_fact_list(results)
+            }]
+          }
+        end
+      end
     end
   end
 end
+
+# lib/claude_memory/mcp/tools/base_tool.rb (~30 lines)
+# lib/claude_memory/mcp/tools/formatter.rb (~100 lines)
 ```
 
-#### 🟡 Doctor Command Still Does Too Much (commands/doctor_command.rb:1-174)
+**Estimated Effort:** 2 days
 
-**Problem:** 174 lines with multiple responsibilities:
-- Database checking
-- Schema validation
-- Hooks configuration checking
-- Snapshot file checking
-- Conflict detection
-- Output formatting
+#### 🟡 Massive Code Duplication Remains (recall.rb)
 
-**Recommended Fix:**
-```ruby
-# lib/claude_memory/commands/checks/database_check.rb
-class DatabaseCheck
-  def call(store)
-    {
-      name: "Database Connection",
-      status: store.db.test_connection ? :ok : :error,
-      details: "Connected to #{store.db.url}"
-    }
-  end
-end
+**Problem:** Every query method still has dual and legacy variants:
+- `query`, `query_dual`, `query_legacy`
+- `query_index`, `query_index_dual`, `query_index_legacy`
+- `changes`, `changes_dual`, `changes_legacy`
+- `conflicts`, `conflicts_dual`, `conflicts_legacy`
+- `facts_by_branch`, `facts_by_context_dual`, `facts_by_context_legacy`
 
-# lib/claude_memory/commands/checks/schema_check.rb
-class SchemaCheck
-  def call(store)
-    # Schema validation logic
-  end
-end
+This represents **duplicate knowledge** expressed multiple times.
 
-# lib/claude_memory/commands/doctor_command.rb - Now thin coordinator
-class DoctorCommand < BaseCommand
-  def call(args)
-    checks = [
-      DatabaseCheck.new,
-      SchemaCheck.new,
-      HooksCheck.new,
-      SnapshotCheck.new
-    ]
+**Sandi Metz Says:** "Refactor duplication before extracting abstractions."
 
-    results = checks.map { |check| check.call(store_manager) }
-    reporter.report(results)
+**Fix:** Extract strategy pattern (see Recall refactoring above).
 
-    results.any? { |r| r[:status] == :error } ? 1 : 0
-  end
-end
-```
+**Estimated Effort:** Included in Recall refactoring (2-3 days)
 
 ---
 
 ## 2. Jeremy Evans Perspective (Sequel Expert)
 
-### What's Been Fixed ✅
+### What's Been Fixed Since Last Review ✅
 
-- ✅ Most raw SQL replaced with Sequel datasets
-- ✅ Better use of Sequel's query builder
+- ✅ **Migrations refactored** - Now using Sequel::Migrator with proper migration files
+- ✅ **Migration directory created** - 7 migration files (001-007) in `db/migrations/`
+- ✅ **Manual migration code removed** - No more hand-rolled `migrate_to_vN!` methods
+- ✅ **SQLiteStore reduced** - 542 → 383 lines (29% reduction)
+
+**Evidence:**
+```ruby
+# sqlite_store.rb:4 - Now imports Sequel migrations
+require "sequel/extensions/migration"
+
+# Migration files exist:
+# db/migrations/001_create_initial_schema.rb
+# db/migrations/002_add_project_scoping.rb
+# db/migrations/003_add_session_metadata.rb
+# db/migrations/004_add_fact_embeddings.rb
+# db/migrations/005_add_incremental_sync.rb
+# db/migrations/006_add_operation_tracking.rb
+# db/migrations/007_add_ingestion_metrics.rb
+```
 
 ### Critical Issues Remaining
 
-#### 🔴 Manual Migrations Still in Place (sqlite_store.rb:68-143)
+#### 🔴 JSON Functions Break Sequel Abstraction (infrastructure/operation_tracker.rb:114-117, 136-139)
 
-**Problem:** Hand-rolled migration system:
+**Problem:** Using raw SQLite JSON functions instead of Sequel abstractions:
+
 ```ruby
-# sqlite_store.rb:68
-SCHEMA_VERSION = 6
+# operation_tracker.rb:111-118
+stuck.update(
+  status: "failed",
+  completed_at: now,
+  checkpoint_data: Sequel.function(:json_set,
+    Sequel.function(:coalesce, :checkpoint_data, "{}"),
+    "$.error",
+    "Reset by recover command - operation exceeded 24h timeout")
+)
 
-def run_migrations!
-  current = @db.fetch("PRAGMA user_version").first[:user_version]
-
-  migrate_to_v2! if current < 2
-  migrate_to_v3! if current < 3
-  migrate_to_v4! if current < 4
-  migrate_to_v5! if current < 5
-  migrate_to_v6! if current < 6
-
-  @db.run("PRAGMA user_version = #{SCHEMA_VERSION}")
-end
+# operation_tracker.rb:133-140
+@store.db[:operation_progress]
+  .where(operation_type: operation_type, scope: scope, status: "running")
+  .where { started_at < threshold_time }
+  .update(
+    status: "failed",
+    completed_at: now,
+    checkpoint_data: Sequel.function(:json_set,
+      Sequel.function(:coalesce, :checkpoint_data, "{}"),
+      "$.error",
+      "Automatically marked as failed - operation exceeded 24h timeout")
+  )
 ```
 
 **Issues:**
-- No rollback support
-- No migration files (everything in one method)
-- Hard to review individual migrations
-- Can't apply migrations selectively
-- No timestamp tracking
+- Breaks Sequel's database abstraction
+- SQLite-specific (not portable)
+- Hard to test
+- Complex nested function calls
+- Can't easily mock for testing
 
-**Jeremy Evans Would Say:** "Sequel has a robust migration framework. Use it."
+**Jeremy Evans Would Say:** "Handle JSON in Ruby. Use the database for storage, not logic."
 
 **Recommended Fix:**
 ```ruby
-# db/migrations/001_create_entities.rb
+# Option 1: Handle JSON in Ruby (preferred)
+def reset_stuck_operations(operation_type: nil, scope: nil)
+  # ... setup dataset ...
+
+  # Fetch, modify, save
+  stuck.all.each do |op|
+    checkpoint = op[:checkpoint_data] ? JSON.parse(op[:checkpoint_data]) : {}
+    checkpoint["error"] = "Reset by recover command - operation exceeded 24h timeout"
+
+    @store.db[:operation_progress]
+      .where(id: op[:id])
+      .update(
+        status: "failed",
+        completed_at: now,
+        checkpoint_data: JSON.generate(checkpoint)
+      )
+  end
+
+  stuck.count
+end
+
+# Option 2: Use Sequel's JSON plugin (if available for SQLite)
+Sequel.extension :sqlite_json_ops
+
+# Then use Sequel's JSON operations
+checkpoint_data: Sequel.pg_jsonb(:checkpoint_data).set(["error"], message)
+```
+
+**Estimated Effort:** 0.5 days
+
+#### 🔴 String Timestamps Everywhere (Throughout codebase)
+
+**Problem:** Using ISO8601 strings instead of DateTime columns:
+
+```ruby
+# sqlite_store.rb:95
+now = Time.now.utc.iso8601
+
+# sqlite_store.rb:165-166
+now = Time.now.utc.iso8601
+entities.insert(type: type, canonical_name: name, slug: slug, created_at: now)
+
+# operation_tracker.rb:17
+now = Time.now.utc.iso8601
+
+# Schema uses String columns for timestamps everywhere
+```
+
+**Issues:**
+- String comparison fragile (requires ISO8601 format)
+- No timezone enforcement at DB level
+- Manual conversion everywhere (Time.now.utc.iso8601 appears 20+ times)
+- Can't use Sequel's date operations
+- More storage than integer timestamps
+- Harder to do date arithmetic
+
+**Jeremy Evans Would Say:** "Use DateTime columns and let Sequel handle conversions."
+
+**Recommended Fix:**
+```ruby
+# Migration to convert string timestamps to DateTime
 Sequel.migration do
   up do
-    create_table(:entities) do
-      primary_key :id
-      String :type, null: false
-      String :name, null: false
-      DateTime :created_at, null: false
-      unique [:type, :name]
+    # For each table with timestamp strings:
+    # 1. Add new DateTime column
+    # 2. Copy and parse data
+    # 3. Drop old column
+    # 4. Rename new column
+
+    alter_table(:content_items) do
+      add_column :occurred_at_dt, DateTime
+      add_column :ingested_at_dt, DateTime
+    end
+
+    # Batch convert strings to DateTime
+    self[:content_items].all.each do |row|
+      self[:content_items].where(id: row[:id]).update(
+        occurred_at_dt: Time.parse(row[:occurred_at]),
+        ingested_at_dt: Time.parse(row[:ingested_at])
+      )
+    end
+
+    alter_table(:content_items) do
+      drop_column :occurred_at
+      drop_column :ingested_at
+      rename_column :occurred_at_dt, :occurred_at
+      rename_column :ingested_at_dt, :ingested_at
     end
   end
 
   down do
-    drop_table(:entities)
+    # Reverse conversion
   end
 end
 
-# In sqlite_store.rb
-def run_migrations!
-  Sequel::Migrator.run(@db, "db/migrations", target: SCHEMA_VERSION)
-end
-```
-
-#### 🔴 String Timestamps Instead of DateTime (sqlite_store.rb:127, 211, 362)
-
-**Problem:**
-```ruby
-# Schema definition
-String :created_at, null: false         # Line 127
-String :valid_from, null: false         # Line 362
-
-# Usage
-now = Time.now.utc.iso8601              # Line 211
-valid_from: valid_from || now           # Line 373
-```
-
-**Issues:**
-- String comparison for dates is fragile (`"2026-01-10" > "2026-01-09"` works, but requires specific format)
-- No timezone enforcement at database level
-- Manual ISO8601 conversion everywhere
-- Harder to do date arithmetic
-- Can't use Sequel's date operations
-- More storage space than integer timestamps
-
-**Recommended Fix:**
-```ruby
-# Use DateTime columns
-DateTime :created_at, null: false
-DateTime :valid_from, null: false
-
-# Use Sequel's automatic timestamp handling
+# Then use Sequel's automatic timestamp handling
 plugin :timestamps, update_on_create: true
 
-# Or use Unix timestamps
-Integer :created_at, null: false
-Integer :valid_from, null: false
-
-# Then use Sequel's extensions
-Sequel.extension :date_arithmetic
+# And use Sequel's date operations
+.where { occurred_at > Time.now - 86400 }
 ```
 
-#### 🟡 Operation Tracker Uses JSON Functions (infrastructure/operation_tracker.rb:114-139)
+**Estimated Effort:** 1-2 days (migration + testing)
 
-**Problem:** Mixing Sequel with raw SQL functions:
+#### 🟡 WAL Mode Enabled (Good!) but Missing Checkpoint Management
+
+**Positive Observation:**
 ```ruby
-# operation_tracker.rb:114
-@db[:in_progress_operations]
-  .where(operation_id: operation_id)
-  .update(
-    status: "completed",
-    end_time: now,
-    result: Sequel.function(:json_set,
-      Sequel.function(:coalesce, :result, "{}"),
-      "$.status",
-      "success"
-    )
-  )
+# sqlite_store.rb:22-28
+@db.run("PRAGMA journal_mode = WAL")
+@db.run("PRAGMA synchronous = NORMAL")
+@db.run("PRAGMA busy_timeout = 5000")
 ```
 
-**Issues:**
-- Raw SQL function calls break Sequel's abstraction
-- Hard to test
-- SQLite-specific (not portable)
-- Complex to read
-
-**Recommended Fix:**
+**Recommendation:** Add periodic WAL checkpoint to prevent unlimited WAL growth:
 ```ruby
-# Option 1: Use Sequel's json extension
-Sequel.extension :pg_json  # or sqlite_json_ops
-
-@db[:in_progress_operations]
-  .where(operation_id: operation_id)
-  .update(
-    status: "completed",
-    end_time: now,
-    result: Sequel.pg_json({status: "success"}.merge(existing_result))
-  )
-
-# Option 2: Handle JSON in Ruby
-operation = @db[:in_progress_operations]
-  .where(operation_id: operation_id)
-  .first
-
-result = JSON.parse(operation[:result] || "{}")
-result["status"] = "success"
-
-@db[:in_progress_operations]
-  .where(operation_id: operation_id)
-  .update(
-    status: "completed",
-    end_time: now,
-    result: JSON.generate(result)
-  )
-```
-
-#### 🟡 Inconsistent Visibility (sqlite_store.rb:357)
-
-**Problem:** `public` keyword appears mid-class:
-```ruby
-# sqlite_store.rb:59
-private
-
-def create_schema
-  # ...
+# Add method to SQLiteStore
+def checkpoint_wal
+  @db.run("PRAGMA wal_checkpoint(TRUNCATE)")
 end
 
-# ... many private methods ...
-
-# sqlite_store.rb:357
-public
-
-def upsert_content_item(...)
-  # ...
-end
+# Call periodically in sweep or maintenance
 ```
 
-**Issue:** Makes code flow hard to follow. Reader must track visibility state.
-
-**Recommended:** Keep all public methods at top, all private at bottom:
-```ruby
-class SQLiteStore
-  # Public interface
-  def upsert_content_item(...)
-  end
-
-  def insert_fact(...)
-  end
-
-  # Private implementation
-  private
-
-  def create_schema
-  end
-
-  def migrate_to_v6!
-  end
-end
-```
+**Estimated Effort:** 0.25 days
 
 ---
 
 ## 3. Kent Beck Perspective (TDD, XP, Simple Design)
 
-### What's Been Fixed ✅
+### What's Been Fixed Since Last Review ✅
 
-- ✅ Commands now testable in isolation
-- ✅ Dependency injection for stores
-- ✅ Clearer test boundaries
+- ✅ **DoctorCommand simplified** - 174 → 31 lines, clear delegation
+- ✅ **Check classes extracted** - Each with single responsibility
+- ✅ **FactRanker extracted** - Pure testable logic
 
-### Critical Issues
-
-#### 🔴 Complex Boolean Logic (cli.rb:124-125) - STILL EXISTS IN COMMANDS
-
-**Problem:** Still seeing double-negative logic in option parsing:
+**Evidence:**
 ```ruby
-opts[:global] = true if !opts[:global] && !opts[:project]
-opts[:project] = true if !opts[:global] && !opts[:project]
-```
+# commands/doctor_command.rb:8-27 (Beautiful simplicity!)
+def call(_args)
+  manager = ClaudeMemory::Store::StoreManager.new
 
-**Bug:** After these lines, BOTH will be true (if neither was set)!
+  checks = [
+    Checks::DatabaseCheck.new(manager.global_db_path, "global"),
+    Checks::DatabaseCheck.new(manager.project_db_path, "project"),
+    Checks::SnapshotCheck.new,
+    Checks::ClaudeMdCheck.new,
+    Checks::HooksCheck.new
+  ]
 
-**Kent Beck Would Say:** "Make the intent explicit."
+  results = checks.map(&:call)
 
-**Recommended Fix:**
-```ruby
-# Set both to true if neither specified
-if opts[:global].nil? && opts[:project].nil?
-  opts[:global] = true
-  opts[:project] = true
-end
+  manager.close
 
-# Or better, use a default scope
-opts[:scope] ||= :both
+  reporter = Checks::Reporter.new(stdout, stderr)
+  success = reporter.report(results)
 
-case opts[:scope]
-when :global
-  query_global_only
-when :project
-  query_project_only
-when :both
-  query_both
+  success ? 0 : 1
 end
 ```
 
-#### 🟡 Side Effects in Constructor (index/lexical_fts.rb:6-10)
+**Kent Beck Would Say:** "This is what simple design looks like."
 
-**Problem:**
+### Issues Remaining
+
+#### 🔴 Complex Conditional Logic Still Present (recall.rb:42-106)
+
+**Problem:** Every public method starts with mode-based routing:
+
 ```ruby
+# recall.rb:42-48
+def query(query_text, limit: 10, scope: SCOPE_ALL)
+  if @legacy_mode
+    query_legacy(query_text, limit: limit, scope: scope)
+  else
+    query_dual(query_text, limit: limit, scope: scope)
+  end
+end
+
+# This repeats for 10+ methods
+```
+
+**Kent Beck Would Say:** "Conditionals are not polymorphism. Use polymorphism to eliminate conditionals."
+
+**Recommended Fix:** Strategy pattern (see Sandi Metz section)
+
+**Estimated Effort:** 2-3 days
+
+#### 🟡 Side Effects in Constructor Still Present (index/lexical_fts.rb:6-10)
+
+**Problem:** Constructor has database side effect:
+
+```ruby
+# index/lexical_fts.rb:6-10
 def initialize(store)
   @store = store
   @db = store.db
@@ -577,13 +534,7 @@ def initialize(store)
 end
 ```
 
-**Issues:**
-- Constructor has side effect (creates table)
-- Violates Command-Query Separation
-- Can't instantiate without modifying database
-- Hard to test
-
-**Kent Beck Would Say:** "Constructors should just construct."
+**Kent Beck Would Say:** "Constructors should just construct. Move side effects to explicit methods."
 
 **Recommended Fix:**
 ```ruby
@@ -592,186 +543,370 @@ def initialize(store)
   @db = store.db
 end
 
+# Lazy initialization
 def index_content_item(content_item_id, text)
-  ensure_fts_table!  # Lazy initialization
+  ensure_fts_table!  # Create on first use
   # ... indexing logic
 end
 
-# Or better: separate schema setup
+# Or better: Separate schema setup
 def self.setup_schema(db)
   db.create_table?(:fts_index) do
     # ...
   end
 end
+
+# Then in migrations or setup:
+LexicalFTS.setup_schema(db)
 ```
 
-#### 🟡 No Clear Test Coverage for Failure Modes
+**Estimated Effort:** 0.5 days
 
-**Observation:** Tests focus on happy paths. Need more tests for:
-- Network failures in MCP server
-- Database corruption scenarios
-- Interrupted ingestion (power loss simulation)
-- Concurrent access issues
-- Migration failure recovery
+#### 🟡 Reveal Intent Through Naming (Throughout codebase)
 
-**Recommended:** Add test cases for:
+**Good Examples Found:**
 ```ruby
-RSpec.describe Ingester do
-  context "when database connection lost mid-ingestion" do
-    it "rolls back partial changes" do
-      # Test rollback behavior
-    end
-  end
-
-  context "when duplicate content item inserted" do
-    it "handles constraint violation gracefully" do
-      # Test duplicate handling
-    end
-  end
-end
+# Good: Clear intent
+def batch_find_facts(store, fact_ids)
+def dedupe_by_fact_id(results, limit)
+def facts_by_branch(branch_name, limit: 20, scope: SCOPE_ALL)
 ```
+
+**Needs Improvement:**
+```ruby
+# Unclear: What does "apply" do?
+def apply(extraction, content_item_id: nil, occurred_at: nil, project_path: nil, scope: "project")
+
+# Better:
+def resolve_and_store_extraction(extraction, content_item_id: nil, occurred_at: nil, project_path: nil, scope: "project")
+
+# Unclear: What is "call"?
+def call(args)
+
+# Better: Name after what it does
+def perform_health_check(args)
+def recall_matching_facts(params)
+```
+
+**Estimated Effort:** 0.5 days
 
 ---
 
 ## 4. Avdi Grimm Perspective (Confident Ruby)
 
-### What's Been Fixed ✅
+### What's Been Fixed Since Last Review ✅
 
-- ✅ Null object pattern implemented (NullFact, NullExplanation)
-- ✅ Result objects exist for success/failure
-- ✅ Better separation of concerns
+- ✅ **Null objects exist** - NullFact, NullExplanation
+- ✅ **Result objects used** - Core::Result for success/failure
+- ✅ **FactRanker extracted** - Pure value transformations
 
 ### Issues Remaining
 
-#### 🔴 Inconsistent Return Values (Still Present)
+#### 🔴 Inconsistent Return Values (Throughout codebase)
 
-**Problem:** Methods return different types:
+**Problem:** Methods return different types on success vs failure:
+
 ```ruby
-# Commands return integers (exit codes)
-def call(args)
-  # ...
-  0  # Success
-end
-
-# Store methods return IDs or nil
-def insert_fact(...)
-  # ...
-  @db[:facts].insert(...)  # Returns ID
-end
-
-def promote_fact(fact_id)
-  # ...
-  global_fact_id  # Returns ID or raises
-end
-
-# Recall methods return arrays or nil
+# Returns array or nil
 def explain(fact_id, scope: nil)
   # ...
-  return nil unless fact  # Returns nil on not found
+  return nil unless fact  # Nil on not found
+  {
+    fact: fact,
+    receipts: receipts
+  }
+end
+
+# Returns integer ID or raises
+def insert_fact(...)
+  facts.insert(...)  # Returns ID on success, raises on error
+end
+
+# Returns boolean
+def update_fact(fact_id, ...)
+  # ...
+  return false if updates.empty?
+  facts.where(id: fact_id).update(updates)
+  true
 end
 ```
 
-**Avdi Grimm Would Say:** "Return objects that understand their role in the conversation."
+**Avdi Grimm Would Say:** "Return objects that understand their role. Use Result objects consistently."
 
 **Recommended Fix:**
 ```ruby
-# Use Result objects consistently
-class StoreResult
-  def self.success(id)
-    Success.new(id)
-  end
+# Use Result consistently
+module ClaudeMemory
+  module Domain
+    class StoreResult
+      def self.success(value)
+        Success.new(value)
+      end
 
-  def self.not_found
-    NotFound.new
-  end
+      def self.not_found(message = "Not found")
+        NotFound.new(message)
+      end
 
-  def self.error(message)
-    Error.new(message)
+      def self.error(message)
+        Error.new(message)
+      end
+    end
+
+    class Success < StoreResult
+      attr_reader :value
+
+      def initialize(value)
+        @value = value
+      end
+
+      def success? = true
+      def error? = false
+      def not_found? = false
+    end
+
+    class Error < StoreResult
+      attr_reader :message
+
+      def initialize(message)
+        @message = message
+      end
+
+      def success? = false
+      def error? = true
+      def not_found? = false
+    end
+
+    class NotFound < StoreResult
+      attr_reader :message
+
+      def initialize(message)
+        @message = message
+      end
+
+      def success? = false
+      def error? = false
+      def not_found? = true
+    end
   end
 end
 
+# Usage
 def insert_fact(...)
-  id = @db[:facts].insert(...)
+  id = facts.insert(...)
   StoreResult.success(id)
 rescue Sequel::UniqueConstraintViolation => e
   StoreResult.error("Duplicate fact: #{e.message}")
 end
 
-# Usage
+def explain(fact_id, scope: nil)
+  fact = find_fact(fact_id, scope)
+  return StoreResult.not_found("Fact #{fact_id} not found") unless fact
+
+  receipts = provenance_for_fact(fact_id)
+  StoreResult.success({fact: fact, receipts: receipts})
+end
+
+# Client code
 result = store.insert_fact(...)
 
-if result.success?
+case result
+when StoreResult::Success
   puts "Inserted fact ##{result.value}"
-elsif result.error?
-  puts "Error: #{result.message}"
+when StoreResult::Error
+  stderr.puts "Error: #{result.message}"
 end
 ```
 
-#### 🟡 Primitive Obsession (Improved but Still Present)
+**Estimated Effort:** 1-2 days
 
-**Problem:** Some domain concepts still represented as hashes:
+#### 🟡 Primitive Obsession - Hashes Still Used (recall.rb)
+
+**Problem:** Domain concepts returned as hashes:
+
 ```ruby
-# recall.rb returns hashes
+# recall.rb returns raw hashes
 {
-  fact: fact_hash,
-  receipts: receipt_hashes,
+  fact: {
+    id: 123,
+    subject_entity_id: 456,
+    predicate: "uses_database",
+    object_literal: "PostgreSQL",
+    confidence: 0.95
+  },
+  receipts: [
+    {fact_id: 123, quote: "We use PostgreSQL", strength: "stated"}
+  ],
+  source: :project,
   score: 0.85
 }
 ```
 
-**Recommended:** Use domain objects:
+**Avdi Grimm Would Say:** "Give your data behavior. Turn hashes into objects."
+
+**Recommended Fix:**
 ```ruby
-class RecallResult
-  attr_reader :fact, :receipts, :score
+module ClaudeMemory
+  module Domain
+    class RecallResult
+      attr_reader :fact, :receipts, :source, :score
 
-  def initialize(fact:, receipts:, score:)
-    @fact = Domain::Fact.from_hash(fact)
-    @receipts = receipts.map { |r| Domain::Provenance.from_hash(r) }
-    @score = score
+      def initialize(fact:, receipts:, source:, score: nil)
+        @fact = Fact.from_hash(fact)
+        @receipts = receipts.map { |r| Provenance.from_hash(r) }
+        @source = source
+        @score = score
+      end
+
+      def relevant?
+        score && score > 0.7
+      end
+
+      def high_confidence?
+        fact.high_confidence?
+      end
+
+      def from_project?
+        source == :project
+      end
+
+      def from_global?
+        source == :global
+      end
+
+      def to_hash
+        {
+          fact: fact.to_hash,
+          receipts: receipts.map(&:to_hash),
+          source: source,
+          score: score
+        }
+      end
+    end
   end
+end
 
-  def relevant?
-    score > 0.7
-  end
+# Usage
+results = recall.query("PostgreSQL").map { |r| Domain::RecallResult.new(**r) }
 
-  def high_confidence?
-    fact.confidence > 0.8
+results.select(&:relevant?).each do |result|
+  if result.high_confidence?
+    puts "✓ #{result.fact.summary}"
   end
 end
 ```
+
+**Estimated Effort:** 1 day
+
+#### 🟡 Tell, Don't Ask Violations (Various files)
+
+**Examples Found:**
+```ruby
+# Asking about state then acting
+if fact[:status] == "active"
+  process_fact(fact)
+end
+
+# Better: Tell the object what to do
+if fact.active?
+  fact.process
+end
+
+# Asking then modifying
+if result[:source] == :project
+  priority = 0
+else
+  priority = 1
+end
+
+# Better: Ask the object
+priority = result.source_priority
+```
+
+**Recommended:** Move logic into domain objects where possible.
+
+**Estimated Effort:** 0.5 days
 
 ---
 
 ## 5. Gary Bernhardt Perspective (Boundaries, Fast Tests)
 
-### What's Been Fixed ✅
+### What's Been Fixed Since Last Review ✅
 
-- ✅ FileSystem abstraction exists
-- ✅ InMemoryFileSystem for testing
-- ✅ Better separation of I/O
+- ✅ **FactRanker extracted** - Pure logic with no I/O (Perfect functional core!)
+- ✅ **Check classes** - Good separation of concerns
+- ✅ **FileSystem abstraction** - InMemoryFileSystem for testing
 
-### Critical Issues
-
-#### 🔴 Recall Mixes I/O with Logic (recall.rb:702-718)
-
-**Problem:** Semantic search mixes database queries (I/O) with merging logic:
+**Evidence:**
 ```ruby
-# recall.rb:702
-def query_semantic_single(query, limit)
-  # I/O: Get embeddings from database
-  embeddings = @db[:embeddings].all
+# core/fact_ranker.rb:1-90
+# Pure business logic - no database, no I/O
+class FactRanker
+  def self.dedupe_and_sort_index(results, limit)
+    seen_signatures = Set.new
+    unique_results = []
 
-  # Logic: Calculate similarity
-  scores = embeddings.map do |emb|
-    similarity = cosine_similarity(query_vector, emb[:vector])
-    {id: emb[:fact_id], score: similarity}
+    results.each do |result|
+      sig = "#{result[:subject]}:#{result[:predicate]}:#{result[:object_preview]}"
+      next if seen_signatures.include?(sig)
+
+      seen_signatures.add(sig)
+      unique_results << result
+    end
+
+    unique_results.sort_by { |item|
+      source_priority = (item[:source] == :project) ? 0 : 1
+      [source_priority]
+    }.first(limit)
+  end
+end
+```
+
+**Gary Bernhardt Would Say:** "This is perfect. Pure logic, no I/O, fast tests."
+
+### Issues Remaining
+
+#### 🔴 Recall Mixes I/O with Logic (recall.rb:701-748)
+
+**Problem:** Semantic search mixes database queries with ranking logic:
+
+```ruby
+# recall.rb:701-748
+def query_concepts_single(store, concepts, limit:, source:)
+  # I/O: Search each concept independently
+  concept_results = concepts.map do |concept|
+    search_by_vector(store, concept, limit * 5, source)  # Database I/O
   end
 
-  # Logic: Sort and filter
-  top_ids = scores.sort_by { |s| -s[:score] }.take(limit).map { |s| s[:id] }
+  # Logic: Build fact map
+  fact_map = Hash.new { |h, k| h[k] = [] }
 
-  # I/O: Fetch facts
-  @db[:facts].where(id: top_ids).all
+  concept_results.each_with_index do |results, concept_idx|
+    results.each do |result|
+      fact_id = result[:fact][:id]
+      fact_map[fact_id] << {
+        result: result,
+        concept_idx: concept_idx,
+        similarity: result[:similarity] || 0.0
+      }
+    end
+  end
+
+  # Logic: Filter to facts matching ALL concepts
+  multi_concept_facts = fact_map.select do |_fact_id, matches|
+    represented_concepts = matches.map { |m| m[:concept_idx] }.uniq
+    represented_concepts.size == concepts.size
+  end
+
+  return [] if multi_concept_facts.empty?
+
+  # Logic: Rank by average similarity
+  ranked = multi_concept_facts.map do |fact_id, matches|
+    similarities = matches.map { |m| m[:similarity] }
+    avg_similarity = similarities.sum / similarities.size.to_f
+    # ... more logic
+  end
+
+  ranked.sort_by { |r| -r[:similarity] }.take(limit)
 end
 ```
 
@@ -779,85 +914,128 @@ end
 
 **Recommended Fix:**
 ```ruby
-# Core - Pure logic (lib/claude_memory/core/semantic_scorer.rb)
-module ClaudeMemory::Core
-  class SemanticScorer
-    def self.rank(query_vector, embeddings)
-      embeddings.map do |emb|
-        score = cosine_similarity(query_vector, emb.vector)
-        ScoredFact.new(emb.fact_id, score)
-      end
-      .sort_by(&:score)
-      .reverse
-    end
+# Core - Pure logic (lib/claude_memory/core/concept_ranker.rb)
+module ClaudeMemory
+  module Core
+    class ConceptRanker
+      # Pure function: no I/O, just transformations
+      def self.rank_by_concepts(concept_results, concepts, limit)
+        fact_map = build_fact_map(concept_results)
+        multi_concept_facts = filter_by_all_concepts(fact_map, concepts.size)
+        return [] if multi_concept_facts.empty?
 
-    def self.cosine_similarity(vec_a, vec_b)
-      # Pure calculation
+        rank_by_average_similarity(multi_concept_facts, limit)
+      end
+
+      private
+
+      def self.build_fact_map(concept_results)
+        fact_map = Hash.new { |h, k| h[k] = [] }
+
+        concept_results.each_with_index do |results, concept_idx|
+          results.each do |result|
+            fact_id = result[:fact][:id]
+            fact_map[fact_id] << {
+              result: result,
+              concept_idx: concept_idx,
+              similarity: result[:similarity] || 0.0
+            }
+          end
+        end
+
+        fact_map
+      end
+
+      def self.filter_by_all_concepts(fact_map, expected_concept_count)
+        fact_map.select do |_fact_id, matches|
+          represented_concepts = matches.map { |m| m[:concept_idx] }.uniq
+          represented_concepts.size == expected_concept_count
+        end
+      end
+
+      def self.rank_by_average_similarity(multi_concept_facts, limit)
+        ranked = multi_concept_facts.map do |fact_id, matches|
+          similarities = matches.map { |m| m[:similarity] }
+          avg_similarity = similarities.sum / similarities.size.to_f
+
+          first_match = matches.first[:result]
+
+          {
+            fact: first_match[:fact],
+            receipts: first_match[:receipts],
+            similarity: avg_similarity,
+            concept_similarities: similarities
+          }
+        end
+
+        ranked.sort_by { |r| -r[:similarity] }.take(limit)
+      end
     end
   end
 end
 
-# Shell - Handles I/O (lib/claude_memory/recall/semantic_search.rb)
-module ClaudeMemory::Recall
-  class SemanticSearch
-    def initialize(db)
-      @db = db
-    end
+# Shell - Handles I/O (lib/claude_memory/recall/concept_search.rb)
+module ClaudeMemory
+  module Recall
+    class ConceptSearch
+      def initialize(store)
+        @store = store
+      end
 
-    def call(query, limit)
-      # I/O: Fetch embeddings
-      embeddings = fetch_embeddings
+      def call(concepts, limit:, source:)
+        # I/O: Fetch all concept results
+        concept_results = concepts.map do |concept|
+          search_by_vector(@store, concept, limit * 5, source)
+        end
 
-      # Pure: Calculate scores
-      query_vector = vectorize(query)
-      ranked = Core::SemanticScorer.rank(query_vector, embeddings)
+        # Pure: Rank results
+        Core::ConceptRanker.rank_by_concepts(concept_results, concepts, limit)
+      end
 
-      # I/O: Fetch facts
-      top_ids = ranked.take(limit).map(&:fact_id)
-      fetch_facts(top_ids)
-    end
+      private
 
-    private
-
-    def fetch_embeddings
-      @db[:embeddings].all.map { |row| Embedding.new(row) }
-    end
-
-    def fetch_facts(ids)
-      @db[:facts].where(id: ids).all
+      def search_by_vector(store, concept, limit, source)
+        # Database query
+      end
     end
   end
 end
 ```
 
 **Benefits:**
-- `SemanticScorer` can be tested without database (fast!)
+- `ConceptRanker` tests run in < 1ms (no database)
+- Easy to test edge cases (empty results, identical similarities, etc.)
 - Logic can be reused in different contexts
-- Easy to test edge cases (empty embeddings, identical vectors, etc.)
+- Clear separation of concerns
 
-#### 🟡 State Stored in Instance Variables (resolver.rb:10-13)
+**Estimated Effort:** 1 day
 
-**Problem:** Still using mutable instance variables:
+#### 🟡 Mutable Instance Variables (resolver.rb, recall.rb)
+
+**Problem:** State stored in instance variables:
+
 ```ruby
+# resolver.rb (resolved in previous review, but pattern remains elsewhere)
 def apply(extraction, content_item_id: nil, occurred_at: nil, project_path: nil, scope: "project")
-  occurred_at ||= Time.now.utc.iso8601
-  @current_project_path = project_path  # Mutable state!
-  @current_scope = scope                # Mutable state!
-
-  # Used in private methods
+  @current_project_path = project_path  # Mutable state
+  @current_scope = scope                # Mutable state
+  # ...
 end
 ```
 
-**Recommended:** Pass as parameters via context object:
+**Gary Bernhardt Would Say:** "Prefer immutable data. Pass context explicitly."
+
+**Recommended Fix:**
 ```ruby
 class ResolutionContext
-  attr_reader :project_path, :scope, :occurred_at
+  attr_reader :project_path, :scope, :occurred_at, :content_item_id
 
-  def initialize(project_path:, scope:, occurred_at:)
+  def initialize(project_path:, scope:, occurred_at:, content_item_id:)
     @project_path = project_path
     @scope = scope
     @occurred_at = occurred_at
-    freeze  # Make immutable
+    @content_item_id = content_item_id
+    freeze  # Immutable
   end
 end
 
@@ -865,156 +1043,95 @@ def apply(extraction, content_item_id: nil, occurred_at: nil, project_path: nil,
   context = ResolutionContext.new(
     project_path: project_path,
     scope: scope,
-    occurred_at: occurred_at || Time.now.utc.iso8601
+    occurred_at: occurred_at || Time.now.utc.iso8601,
+    content_item_id: content_item_id
   )
 
-  result = build_result
+  resolve_with_context(extraction, context)
+end
 
-  extraction.facts.each do |fact_data|
-    outcome = resolve_fact(fact_data, entity_ids, content_item_id, context)
-    merge_outcome!(result, outcome)
-  end
+private
 
-  result
+def resolve_with_context(extraction, context)
+  # Pass context instead of reading instance variables
 end
 ```
+
+**Estimated Effort:** 0.5 days
 
 ---
 
 ## 6. General Ruby Idioms and Style
 
-### 🟡 Batch Query Logic Duplicated
+### ✅ What's Working Well
 
-**Problem:** `batch_find_facts` and `batch_find_receipts` follow identical patterns:
+1. **Frozen string literals** - Consistent across all files
+2. **Module namespacing** - Clean organization
+3. **Sequel usage** - Generally good dataset methods
+4. **Standard Ruby** - Consistent code style
+5. **Documentation** - Good inline comments where needed
+
+### 🟡 Minor Issues
+
+#### Method Visibility (sqlite_store.rb)
+
+**Good News:** No more mid-class `public` keyword! Visibility is clean.
+
 ```ruby
-# recall.rb:249-268
-def batch_find_facts(store, fact_ids)
-  return {} if fact_ids.empty?
+# All public methods at top
+def initialize(db_path)
+def close
+def upsert_content_item(...)
+# ... more public methods ...
 
-  facts = store.facts
-    .where(id: fact_ids)
-    .to_a
+# All private at bottom
+private
 
-  facts.each_with_object({}) do |fact, hash|
-    hash[fact[:id]] = fact
-  end
-end
-
-# recall.rb:270-284
-def batch_find_receipts(store, fact_ids)
-  return {} if fact_ids.empty?
-
-  receipts = store.provenance
-    .where(fact_id: fact_ids)
-    .to_a
-
-  receipts.group_by { |r| r[:fact_id] }
-end
+def ensure_schema!
+def migrate_from_legacy_pragma!
+# ... more private methods ...
 ```
 
-**Recommended Fix:**
+**Status:** ✅ Fixed
+
+#### ENV Access Centralized (Throughout)
+
+**Observation:** Configuration class exists and is being used:
+
 ```ruby
-class BatchQueryBuilder
-  def self.call(dataset, ids, group_by: :id)
-    return {} if ids.empty?
-
-    results = dataset.where(id: ids).to_a
-
-    if group_by == :single
-      results.each_with_object({}) { |row, hash| hash[row[:id]] = row }
-    else
-      results.group_by { |row| row[group_by] }
-    end
-  end
-end
-
-# Usage
-def batch_find_facts(store, fact_ids)
-  BatchQueryBuilder.call(store.facts, fact_ids, group_by: :single)
-end
-
-def batch_find_receipts(store, fact_ids)
-  BatchQueryBuilder.call(store.provenance, fact_ids, group_by: :fact_id)
-end
+# recall.rb:28
+config = Configuration.new(env)
+@project_path = project_path || config.project_dir
 ```
 
-### 🟡 ENV Access Still Scattered
-
-**Problem:** Environment variable access throughout codebase:
-```ruby
-# configuration.rb
-home = env["HOME"] || File.expand_path("~")
-
-# store_manager.rb
-@project_path = project_path || env["CLAUDE_PROJECT_DIR"] || Dir.pwd
-
-# hook/handler.rb
-session_id = payload["session_id"] || @env["CLAUDE_SESSION_ID"]
-```
-
-**Good News:** Configuration class exists! But it's not used consistently.
-
-**Recommended:** Use Configuration everywhere:
-```ruby
-# lib/claude_memory/configuration.rb (already exists - expand it)
-module ClaudeMemory
-  class Configuration
-    def initialize(env = ENV)
-      @env = env
-    end
-
-    def home_dir
-      @env["HOME"] || File.expand_path("~")
-    end
-
-    def project_dir
-      @env["CLAUDE_PROJECT_DIR"] || Dir.pwd
-    end
-
-    def session_id
-      @env["CLAUDE_SESSION_ID"]
-    end
-
-    def global_db_path
-      File.join(home_dir, ".claude", "memory.sqlite3")
-    end
-
-    def project_db_path
-      File.join(project_dir, ".claude", "memory.sqlite3")
-    end
-  end
-end
-
-# Usage throughout
-config = Configuration.new
-store = SQLiteStore.new(config.global_db_path)
-```
+**Status:** ✅ Improving - Good use of Configuration class
 
 ---
 
 ## 7. Positive Observations
 
-### ✅ Major Improvements Since Last Review
+### ✅ Major Architectural Wins
 
-1. **Command Pattern Implementation** - CLI reduced from 867 to 41 lines
-2. **16 Focused Command Classes** - Each with single responsibility
-3. **Transaction Safety** - Added to critical operations
-4. **Domain Objects Created** - Fact, Entity, Provenance, Conflict
-5. **Value Objects** - SessionId, TranscriptPath, FactId, Result
-6. **Null Objects** - NullFact, NullExplanation eliminate nil checks
-7. **Infrastructure Abstraction** - FileSystem/InMemoryFileSystem for testability
-8. **Better Test Structure** - Commands are now easily testable
+1. **Command Pattern** - CLI remains at 41 lines, command classes work well
+2. **Domain Objects** - Fact, Entity, Provenance, Conflict properly implemented
+3. **Value Objects** - SessionId, TranscriptPath, FactId, Result classes
+4. **Null Objects** - NullFact, NullExplanation eliminate nil checks
+5. **Infrastructure Abstraction** - FileSystem/InMemoryFileSystem
+6. **FactRanker** - Perfect example of functional core (Gary Bernhardt)
+7. **DoctorCommand** - Now exemplar of simplicity (31 lines)
+8. **Migrations** - Proper Sequel migration system with rollback support
+9. **Check Classes** - Good separation in DoctorCommand refactoring
+10. **WAL Mode** - Good concurrency setup
 
-### ✅ Continued Strengths
+### ✅ Code Quality Improvements
 
-1. **Frozen String Literals** - Consistent across all files
-2. **Sequel Usage** - Generally good dataset usage
-3. **Module Namespacing** - Clean module structure
-4. **Test Coverage** - Tests exist for most modules
-5. **Documentation** - Excellent README and CLAUDE.md
-6. **Schema Versioning** - Database version tracking
-7. **FTS Integration** - Good use of SQLite FTS5
-8. **Dual-Database Design** - Thoughtful separation of global/project
+- Transaction safety in critical operations
+- Good test coverage (64+ spec files)
+- Excellent README and documentation
+- Consistent code style with Standard Ruby
+- Good use of Sequel's dataset methods
+- FTS integration working well
+- Dual-database design is sound
 
 ---
 
@@ -1022,135 +1139,312 @@ store = SQLiteStore.new(config.global_db_path)
 
 ### High Priority (This Week)
 
-1. **Split Recall.rb God Object** ⚠️ CRITICAL
-   - Target: Reduce from 914 lines to < 200 per class
-   - Extract DualStoreStrategy and LegacyStoreStrategy
-   - Extract search strategies (FTS, Semantic, Concept)
-   - Estimated: 2-3 days
+#### 1. Split Recall.rb God Object 🔴 CRITICAL
 
-2. **Extract DRY Violations in Recall**
-   - Create DualStoreQueryExecutor to eliminate `_dual`, `_legacy` duplication
-   - Consolidate batch query logic
-   - Estimated: 1 day
+**Target:** Reduce from 754 lines to < 150 lines for main coordinator
 
-3. **Refactor MCP Tools.rb**
-   - Split into individual tool files
-   - Extract formatter class
-   - Create tool registry
-   - Estimated: 1-2 days
+**Actions:**
+- Extract `Recall::DualStoreStrategy` (~300 lines)
+- Extract `Recall::LegacyStoreStrategy` (~300 lines)
+- Extract `Recall::FtsSearch` (~100 lines)
+- Extract `Recall::SemanticSearch` (~150 lines)
+- Extract `Recall::ConceptSearch` (~100 lines)
+- Extract `Recall::ResultFormatter` (~100 lines)
+
+**Estimated Effort:** 2-3 days
+
+**Priority:** 🔴 Critical - This is the largest god object
+
+#### 2. Refactor MCP Tools.rb 🔴 CRITICAL
+
+**Target:** Reduce from 1,039 lines to < 100 lines for registry
+
+**Actions:**
+- Split into individual tool files (17 files × ~60 lines each)
+- Extract `MCP::Tools::BaseTool` for shared behavior
+- Extract `MCP::Tools::Formatter` for result formatting
+- Create tool registry in `MCP::Server`
+
+**Estimated Effort:** 2 days
+
+**Priority:** 🔴 Critical - File is growing, needs immediate attention
+
+#### 3. Fix JSON Functions in OperationTracker 🔴
+
+**Target:** Remove raw SQL JSON functions
+
+**Actions:**
+- Replace `Sequel.function(:json_set, ...)` with Ruby JSON handling
+- Fetch checkpoint data, modify in Ruby, save back
+- Add tests for checkpoint error handling
+
+**Estimated Effort:** 0.5 days
+
+**Priority:** 🔴 Critical - Breaks Sequel abstraction
 
 ### Medium Priority (Next Week)
 
-4. **Refactor Doctor Command**
-   - Extract check objects (DatabaseCheck, SchemaCheck, etc.)
-   - Create Reporter class for output
-   - Estimated: 1 day
+#### 4. Extract ConceptRanker to Core 🟡
 
-5. **Fix Database Issues**
-   - Migrate to Sequel migration framework
-   - Convert string timestamps to DateTime/Integer
-   - Fix JSON function usage in OperationTracker
-   - Estimated: 2 days
+**Target:** Separate I/O from logic in concept search
 
-6. **Consolidate ENV Access**
-   - Use Configuration class throughout
-   - Remove direct ENV access
-   - Estimated: 0.5 days
+**Actions:**
+- Create `Core::ConceptRanker` with pure logic
+- Create `Recall::ConceptSearch` for I/O shell
+- Add fast tests for ConceptRanker (no database)
+
+**Estimated Effort:** 1 day
+
+**Priority:** 🟡 Medium - Improves testability
+
+#### 5. Implement Result Objects Consistently 🟡
+
+**Target:** Replace nil returns with Result objects
+
+**Actions:**
+- Create `Domain::StoreResult` hierarchy
+- Update all store methods to return Result
+- Update all recall methods to return Result
+- Update tests
+
+**Estimated Effort:** 1-2 days
+
+**Priority:** 🟡 Medium - Improves error handling
+
+#### 6. Convert String Timestamps to DateTime 🟡
+
+**Target:** Use proper DateTime columns throughout
+
+**Actions:**
+- Write migration to convert all timestamp columns
+- Update code to use Sequel's automatic timestamp handling
+- Remove manual `Time.now.utc.iso8601` calls
+- Enable `timestamps` plugin
+
+**Estimated Effort:** 1-2 days
+
+**Priority:** 🟡 Medium - Database best practice
 
 ### Low Priority (Later)
 
-7. **Extract Semantic Search Logic**
-   - Pure SemanticScorer in Core
-   - I/O wrapper in infrastructure
-   - Estimated: 1 day
+#### 7. Create RecallResult Domain Object 🔵
 
-8. **Add Failure Mode Tests**
-   - Database connection failures
-   - Constraint violations
-   - Concurrent access issues
-   - Estimated: 2 days
+**Target:** Replace result hashes with domain objects
 
-9. **Create Domain Result Objects**
-   - RecallResult, PromoteResult, etc.
-   - Consistent return value handling
-   - Estimated: 1 day
+**Actions:**
+- Create `Domain::RecallResult` class
+- Add behavior methods (relevant?, high_confidence?)
+- Update formatters to use domain object
+
+**Estimated Effort:** 1 day
+
+**Priority:** 🔵 Low - Nice to have
+
+#### 8. Add WAL Checkpoint Management 🔵
+
+**Target:** Prevent unlimited WAL growth
+
+**Actions:**
+- Add `checkpoint_wal` method to SQLiteStore
+- Call during sweep/maintenance
+- Add tests
+
+**Estimated Effort:** 0.25 days
+
+**Priority:** 🔵 Low - Operational improvement
+
+#### 9. Fix Constructor Side Effects 🔵
+
+**Target:** Remove side effects from LexicalFTS constructor
+
+**Actions:**
+- Move `ensure_fts_table!` to lazy initialization
+- Or create class method for schema setup
+- Update tests
+
+**Estimated Effort:** 0.5 days
+
+**Priority:** 🔵 Low - Small improvement
 
 ---
 
 ## 9. Conclusion
 
-**Excellent progress!** The team has successfully addressed the most critical issues from the January 21st review. The CLI refactoring is exemplary.
+**Outstanding progress continues!** The team has successfully addressed major architectural debt:
 
-However, the codebase has entered a new phase: **Recall.rb has become the new god object** at 914 lines. This is a common pattern in refactoring - solving one problem sometimes shifts complexity elsewhere.
+### Key Achievements Since Jan 26
 
-### Key Takeaways
+1. ✅ **Migrations refactored** - Now using proper Sequel migration files
+2. ✅ **DoctorCommand refactored** - 174 → 31 lines with check classes
+3. ✅ **FactRanker extracted** - Perfect functional core example
+4. ✅ **Recall reduced** - 914 → 754 lines (17% improvement)
+5. ✅ **SQLiteStore reduced** - 542 → 383 lines (29% improvement)
 
-1. ✅ **CLI refactoring successful** - Command pattern works well
-2. 🔴 **New god object emerged** - Recall.rb needs same treatment
-3. 🟡 **Database practices need attention** - Migrate to proper migrations, DateTime columns
-4. 🟡 **Code duplication** - DRY violations in dual-database patterns
-5. ✅ **Architecture improving** - Domain objects, value objects, null objects in place
+### Critical Next Steps
 
-### Estimated Refactoring Effort
+**Recall.rb remains the primary god object** at 754 lines with 58 methods. Despite improvement, it still handles 10+ responsibilities. The same refactoring strategy that worked for CLI and DoctorCommand should be applied here.
 
-- **High priority:** 4-6 days (1 developer)
-- **Medium priority:** 3-4 days (1 developer)
-- **Low priority:** 4 days (1 developer)
-- **Total:** 11-14 days for comprehensive refactoring
+**MCP Tools.rb is growing** and needs immediate attention before it becomes harder to refactor.
+
+### Summary by Expert
+
+| Expert | Status | Key Issues |
+|--------|--------|------------|
+| **Sandi Metz** | 🟡 Good | Recall still god object, MCP Tools growing |
+| **Jeremy Evans** | ✅ Excellent | Migrations fixed! Minor JSON function issue remains |
+| **Kent Beck** | ✅ Good | DoctorCommand exemplar, Recall needs polymorphism |
+| **Avdi Grimm** | 🟡 Good | Need Result objects, eliminate primitive obsession |
+| **Gary Bernhardt** | ✅ Excellent | FactRanker perfect! Extract more pure logic |
 
 ### Risk Assessment
 
-**Low risk.** The refactorings are incremental and well-understood patterns. The existing test suite and recent successful refactoring provide confidence.
+**Low risk.** The refactoring pattern is proven (CLI → DoctorCommand → Recall). The test suite provides safety. The team has demonstrated capability.
 
-### Recommended Next Steps
+### Estimated Total Effort
 
-1. Start with Recall.rb refactoring (highest impact)
+- **High priority:** 5-6 days (1 developer)
+- **Medium priority:** 4-5 days (1 developer)
+- **Low priority:** 2 days (1 developer)
+- **Total:** 11-13 days for comprehensive refactoring
+
+### Recommendation
+
+**Start with Recall.rb refactoring immediately.** Use the same strategy that worked for DoctorCommand:
+
+1. Extract strategy classes
 2. Run tests after each extraction
-3. Document architectural decisions
-4. Consider pair programming for complex extractions
+3. Celebrate small wins
+4. Measure progress (lines of code, method count)
+
+The codebase is in excellent shape with a clear path forward.
 
 ---
 
 ## Appendix A: Metrics Comparison
 
-| Metric | Jan 21, 2026 | Jan 26, 2026 | Change |
+| Metric | Jan 26, 2026 | Jan 27, 2026 | Change |
 |--------|--------------|--------------|--------|
-| CLI lines | 867 | 41 | ✅ -95% |
-| Command classes | 0 | 16 | ✅ +16 |
-| Recall lines | ~400 | 914 | 🔴 +129% |
-| Domain objects | 0 | 4 | ✅ +4 |
-| Value objects | 0 | 4 | ✅ +4 |
-| Null objects | 0 | 2 | ✅ +2 |
-| God objects | 1 (CLI) | 2 (Recall, MCP Tools) | 🔴 +1 |
+| CLI lines | 41 | 41 | ✅ Stable |
+| Command classes | 16 | 16 | ✅ Stable |
+| Recall lines | 914 | 754 | ✅ -17% |
+| Recall methods | 57 | 58 | 🟡 +1 |
+| MCP Tools lines | 901 | 1,039 | 🔴 +15% |
+| SQLiteStore lines | 542 | 383 | ✅ -29% |
+| DoctorCommand lines | 174 | 31 | ✅ -82% |
+| Check classes | 0 | 5 | ✅ +5 |
+| Migration files | 0 | 7 | ✅ +7 |
+| Domain objects | 4 | 4 | ✅ Stable |
+| Value objects | 4 | 4 | ✅ Stable |
+| Null objects | 2 | 2 | ✅ Stable |
+| God objects | 2 | 2 | 🟡 Same (Recall, MCP Tools) |
+| Pure logic classes | 0 | 1 (FactRanker) | ✅ +1 |
+
+**Key Insights:**
+- ✅ **Excellent:** SQLiteStore (-29%), DoctorCommand (-82%), Migrations system
+- ✅ **Good:** Recall reduced 17%, FactRanker extracted
+- 🔴 **Concern:** MCP Tools growing +15%
+- 🟡 **Watch:** Recall still too large despite improvement
 
 ---
 
 ## Appendix B: Quick Wins (Can Do Today)
 
-1. Fix `public` keyword placement in SQLiteStore (2 minutes)
-2. Consolidate ENV access via Configuration (30 minutes)
-3. Extract BatchQueryBuilder from Recall (1 hour)
-4. Fix boolean logic in option parsing (15 minutes)
-5. Extract Formatter from MCP Tools (30 minutes)
+1. **Fix JSON functions in OperationTracker** (2 hours)
+   - Replace `Sequel.function(:json_set)` with Ruby JSON handling
+   - Two locations: lines 114-117 and 136-139
+
+2. **Add WAL checkpoint management** (1 hour)
+   - Add `checkpoint_wal` method to SQLiteStore
+   - Call during sweep operations
+
+3. **Extract ResultFormatter from Recall** (2 hours)
+   - Create `Recall::ResultFormatter` class
+   - Move all formatting logic
+
+4. **Create BaseTool for MCP** (2 hours)
+   - Extract shared behavior from tool implementations
+   - Reduce duplication in tool classes
+
+5. **Add ConceptRanker to Core** (3 hours)
+   - Extract pure logic from `query_concepts_single`
+   - Add fast tests
+
+**Total quick wins:** ~10 hours, significant impact
 
 ---
 
 ## Appendix C: File Size Report
 
 **Largest Files (> 500 lines):**
-- `lib/claude_memory/recall.rb` - 914 lines ⚠️
-- `lib/claude_memory/mcp/tools.rb` - 901 lines ⚠️
-- `lib/claude_memory/store/sqlite_store.rb` - 542 lines 🟡
+- `lib/claude_memory/mcp/tools.rb` - **1,039 lines** 🔴 (up 15%)
+- `lib/claude_memory/recall.rb` - **754 lines** 🔴 (down 17%)
+
+**Medium Files (200-500 lines):**
+- `lib/claude_memory/store/sqlite_store.rb` - 383 lines ✅ (down 29%)
 
 **Well-Sized Files (< 200 lines):**
 - `lib/claude_memory/cli.rb` - 41 lines ✅
-- Most command files - 50-174 lines ✅
+- `lib/claude_memory/commands/doctor_command.rb` - 31 lines ✅
+- `lib/claude_memory/core/fact_ranker.rb` - 90 lines ✅
+- Most command files - 30-115 lines ✅
+- Check classes - 30-115 lines each ✅
 - Domain objects - 30-80 lines ✅
 - Value objects - 20-40 lines ✅
 
+**Migration Files:**
+- `db/migrations/*.rb` - 7 files (596-3,617 bytes each) ✅
+
 ---
 
-**Review completed:** 2026-01-26
+## Appendix D: Test Coverage Analysis
+
+**Test Files:** 64+ spec files
+
+**Well-Tested Areas:**
+- ✅ Commands (all 16 commands have tests)
+- ✅ Domain objects (Fact, Entity, Provenance, Conflict)
+- ✅ Value objects (SessionId, TranscriptPath, FactId)
+- ✅ Store operations (SQLiteStore)
+- ✅ FactRanker (pure logic, fast tests)
+
+**Needs More Tests:**
+- 🟡 Failure modes (database failures, constraint violations)
+- 🟡 Concurrent access scenarios
+- 🟡 Migration rollback testing
+- 🟡 Edge cases in semantic search
+- 🟡 MCP tool error handling
+
+**Test Performance:**
+- ✅ Most tests run fast (< 100ms)
+- ✅ Good use of InMemoryFileSystem for speed
+- ✅ FactRanker tests are pure (< 1ms each)
+- 🟡 Some integration tests could be faster
+
+---
+
+## Appendix E: Debt Tracking
+
+**Technical Debt Paid Off:**
+- ✅ CLI god object (867 → 41 lines)
+- ✅ Manual migrations (replaced with Sequel::Migrator)
+- ✅ DoctorCommand (174 → 31 lines)
+- ✅ No FactRanker extraction (now extracted)
+
+**Technical Debt Incurred:**
+- 🔴 MCP Tools.rb growing (901 → 1,039 lines)
+
+**Technical Debt Remaining:**
+- 🔴 Recall.rb god object (754 lines, 58 methods)
+- 🔴 JSON functions in OperationTracker
+- 🟡 String timestamps throughout
+- 🟡 Inconsistent return values
+- 🟡 Primitive obsession (hashes vs objects)
+
+**Debt Trend:** ✅ **Positive** - More debt paid off than incurred
+
+---
+
+**Review completed:** 2026-01-27
 **Reviewed by:** Claude Code (via critical analysis through expert perspectives)
-**Next review:** Recommend after Recall.rb refactoring
+**Next review:** Recommend after Recall.rb and MCP Tools refactoring (estimated 1-2 weeks)
 

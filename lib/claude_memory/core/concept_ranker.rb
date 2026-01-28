@@ -18,8 +18,6 @@ module ClaudeMemory
         rank_by_average_similarity(multi_concept_facts, limit)
       end
 
-      private
-
       # Build a map of fact_id => array of result matches from each concept
       def self.build_fact_map(concept_results)
         fact_map = Hash.new { |h, k| h[k] = [] }
@@ -37,6 +35,7 @@ module ClaudeMemory
 
         fact_map
       end
+      private_class_method :build_fact_map
 
       # Filter to only facts that appear in ALL concept result sets
       def self.filter_by_all_concepts(fact_map, expected_concept_count)
@@ -45,6 +44,7 @@ module ClaudeMemory
           represented_concepts.size == expected_concept_count
         end
       end
+      private_class_method :filter_by_all_concepts
 
       # Rank multi-concept facts by average similarity score
       def self.rank_by_average_similarity(multi_concept_facts, limit)
@@ -67,6 +67,7 @@ module ClaudeMemory
         # Sort by average similarity (highest first)
         ranked.sort_by { |r| -r[:similarity] }.take(limit)
       end
+      private_class_method :rank_by_average_similarity
     end
   end
 end
