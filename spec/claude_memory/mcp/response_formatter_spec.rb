@@ -263,4 +263,143 @@ RSpec.describe ClaudeMemory::MCP::ResponseFormatter do
       expect(formatted[:occurred_at]).to eq("2024-01-15T14:30:00Z")
     end
   end
+
+  describe ".format_changes" do
+    it "formats changes list with since timestamp" do
+      changes = [
+        {id: 1, predicate: "uses", object_literal: "Ruby", status: "active",
+         created_at: "2024-01-01T10:00:00Z", source: :project},
+        {id: 2, predicate: "prefers", object_literal: "TDD", status: "active",
+         created_at: "2024-01-02T11:00:00Z", source: :global}
+      ]
+
+      formatted = described_class.format_changes("2024-01-01T00:00:00Z", changes)
+
+      expect(formatted[:since]).to eq("2024-01-01T00:00:00Z")
+      expect(formatted[:changes].length).to eq(2)
+      expect(formatted[:changes][0][:id]).to eq(1)
+      expect(formatted[:changes][1][:source]).to eq(:global)
+    end
+
+    it "handles empty changes" do
+      formatted = described_class.format_changes("2024-01-01", [])
+
+      expect(formatted[:since]).to eq("2024-01-01")
+      expect(formatted[:changes]).to eq([])
+    end
+  end
+
+  describe ".format_change" do
+    it "formats single change with all fields" do
+      change = {
+        id: 42,
+        predicate: "uses_database",
+        object_literal: "PostgreSQL",
+        status: "active",
+        created_at: "2024-01-15T14:30:00Z",
+        source: :project
+      }
+
+      formatted = described_class.format_change(change)
+
+      expect(formatted[:id]).to eq(42)
+      expect(formatted[:predicate]).to eq("uses_database")
+      expect(formatted[:object]).to eq("PostgreSQL")
+      expect(formatted[:status]).to eq("active")
+      expect(formatted[:created_at]).to eq("2024-01-15T14:30:00Z")
+      expect(formatted[:source]).to eq(:project)
+    end
+  end
+
+  describe ".format_conflicts" do
+    it "formats conflicts list with count" do
+      conflicts = [
+        {id: 1, fact_a_id: 10, fact_b_id: 11, status: "open", source: :project},
+        {id: 2, fact_a_id: 20, fact_b_id: 21, status: "resolved", source: :global}
+      ]
+
+      formatted = described_class.format_conflicts(conflicts)
+
+      expect(formatted[:count]).to eq(2)
+      expect(formatted[:conflicts].length).to eq(2)
+      expect(formatted[:conflicts][0][:id]).to eq(1)
+      expect(formatted[:conflicts][1][:status]).to eq("resolved")
+    end
+
+    it "handles empty conflicts" do
+      formatted = described_class.format_conflicts([])
+
+      expect(formatted[:count]).to eq(0)
+      expect(formatted[:conflicts]).to eq([])
+    end
+  end
+
+  describe ".format_conflict" do
+    it "formats single conflict with all fields" do
+      conflict = {
+        id: 15,
+        fact_a_id: 100,
+        fact_b_id: 101,
+        status: "open",
+        source: :project
+      }
+
+      formatted = described_class.format_conflict(conflict)
+
+      expect(formatted[:id]).to eq(15)
+      expect(formatted[:fact_a]).to eq(100)
+      expect(formatted[:fact_b]).to eq(101)
+      expect(formatted[:status]).to eq("open")
+      expect(formatted[:source]).to eq(:project)
+    end
+  end
+
+  describe ".format_sweep_stats" do
+    it "formats sweep statistics with all fields" do
+      stats = {
+        proposed_facts_expired: 5,
+        disputed_facts_expired: 2,
+        orphaned_provenance_deleted: 10,
+        old_content_pruned: 3,
+        elapsed_seconds: 2.5678
+      }
+
+      formatted = described_class.format_sweep_stats("project", stats)
+
+      expect(formatted[:scope]).to eq("project")
+      expect(formatted[:proposed_expired]).to eq(5)
+      expect(formatted[:disputed_expired]).to eq(2)
+      expect(formatted[:orphaned_deleted]).to eq(10)
+      expect(formatted[:content_pruned]).to eq(3)
+      expect(formatted[:elapsed_seconds]).to eq(2.568)
+    end
+
+    it "rounds elapsed_seconds to 3 decimal places" do
+      stats = {
+        proposed_facts_expired: 0,
+        disputed_facts_expired: 0,
+        orphaned_provenance_deleted: 0,
+        old_content_pruned: 0,
+        elapsed_seconds: 1.23456789
+      }
+
+      formatted = described_class.format_sweep_stats("global", stats)
+
+      expect(formatted[:elapsed_seconds]).to eq(1.235)
+    end
+
+    it "handles zero elapsed seconds" do
+      stats = {
+        proposed_facts_expired: 0,
+        disputed_facts_expired: 0,
+        orphaned_provenance_deleted: 0,
+        old_content_pruned: 0,
+        elapsed_seconds: 0.0
+      }
+
+      formatted = described_class.format_sweep_stats("project", stats)
+
+      expect(formatted[:elapsed_seconds]).to eq(0.0)
+    end
+  end
 end

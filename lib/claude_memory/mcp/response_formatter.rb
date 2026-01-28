@@ -129,6 +129,69 @@ module ClaudeMemory
           occurred_at: receipt[:occurred_at]
         }
       end
+
+      # Format changes list into MCP response
+      # @param since [String] ISO timestamp
+      # @param changes [Array<Hash>] Change records
+      # @return [Hash] MCP response with since and formatted changes
+      def self.format_changes(since, changes)
+        {
+          since: since,
+          changes: changes.map { |c| format_change(c) }
+        }
+      end
+
+      # Format single change record
+      # @param change [Hash] Change with fact fields
+      # @return [Hash] Formatted change
+      def self.format_change(change)
+        {
+          id: change[:id],
+          predicate: change[:predicate],
+          object: change[:object_literal],
+          status: change[:status],
+          created_at: change[:created_at],
+          source: change[:source]
+        }
+      end
+
+      # Format conflicts list into MCP response
+      # @param conflicts [Array<Hash>] Conflict records
+      # @return [Hash] MCP response with count and formatted conflicts
+      def self.format_conflicts(conflicts)
+        {
+          count: conflicts.size,
+          conflicts: conflicts.map { |c| format_conflict(c) }
+        }
+      end
+
+      # Format single conflict record
+      # @param conflict [Hash] Conflict with fact IDs
+      # @return [Hash] Formatted conflict
+      def self.format_conflict(conflict)
+        {
+          id: conflict[:id],
+          fact_a: conflict[:fact_a_id],
+          fact_b: conflict[:fact_b_id],
+          status: conflict[:status],
+          source: conflict[:source]
+        }
+      end
+
+      # Format sweep statistics into MCP response
+      # @param scope [String] Database scope swept
+      # @param stats [Hash] Sweeper stats
+      # @return [Hash] Formatted sweep response
+      def self.format_sweep_stats(scope, stats)
+        {
+          scope: scope,
+          proposed_expired: stats[:proposed_facts_expired],
+          disputed_expired: stats[:disputed_facts_expired],
+          orphaned_deleted: stats[:orphaned_provenance_deleted],
+          content_pruned: stats[:old_content_pruned],
+          elapsed_seconds: stats[:elapsed_seconds].round(3)
+        }
+      end
     end
   end
 end

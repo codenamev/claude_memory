@@ -384,36 +384,13 @@ module ClaudeMemory
         since = args["since"] || (Time.now - 86400 * 7).utc.iso8601
         scope = args["scope"] || "all"
         list = @recall.changes(since: since, limit: args["limit"] || 20, scope: scope)
-        {
-          since: since,
-          changes: list.map do |c|
-            {
-              id: c[:id],
-              predicate: c[:predicate],
-              object: c[:object_literal],
-              status: c[:status],
-              created_at: c[:created_at],
-              source: c[:source]
-            }
-          end
-        }
+        ResponseFormatter.format_changes(since, list)
       end
 
       def conflicts(args)
         scope = args["scope"] || "all"
         list = @recall.conflicts(scope: scope)
-        {
-          count: list.size,
-          conflicts: list.map do |c|
-            {
-              id: c[:id],
-              fact_a: c[:fact_a_id],
-              fact_b: c[:fact_b_id],
-              status: c[:status],
-              source: c[:source]
-            }
-          end
-        }
+        ResponseFormatter.format_conflicts(list)
       end
 
       def sweep_now(args)
@@ -423,14 +400,7 @@ module ClaudeMemory
 
         sweeper = Sweep::Sweeper.new(store)
         stats = sweeper.run!(budget_seconds: args["budget_seconds"] || 5)
-        {
-          scope: scope,
-          proposed_expired: stats[:proposed_facts_expired],
-          disputed_expired: stats[:disputed_facts_expired],
-          orphaned_deleted: stats[:orphaned_provenance_deleted],
-          content_pruned: stats[:old_content_pruned],
-          elapsed_seconds: stats[:elapsed_seconds].round(3)
-        }
+        ResponseFormatter.format_sweep_stats(scope, stats)
       end
 
       def status
