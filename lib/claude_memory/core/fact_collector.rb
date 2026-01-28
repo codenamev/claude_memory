@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
-
 module ClaudeMemory
   module Core
     # Pure logic for collecting and ordering fact IDs from provenance records

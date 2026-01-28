@@ -335,6 +335,9 @@ module ClaudeMemory
       private
 
       def recall(args)
+        # Check if databases exist before querying
+        return database_not_found_error(StandardError.new("Database not initialized")) unless databases_exist?
+
         scope = extract_scope(args)
         limit = extract_limit(args)
         results = @recall.query(args["query"], limit: limit, scope: scope)
@@ -788,6 +791,21 @@ module ClaudeMemory
             }
           end
         }
+      end
+
+      def databases_exist?
+        if @manager
+          # For dual-database mode, at least global database should exist
+          config = Configuration.new
+          File.exist?(config.global_db_path)
+        elsif @legacy_store
+          # For legacy mode, check if the database file exists
+          # Extract the database path from the store's connection
+          db_path = @legacy_store.db.opts[:database]
+          db_path && File.exist?(db_path)
+        else
+          false
+        end
       end
 
       def database_not_found_error(error)
