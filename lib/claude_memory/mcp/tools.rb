@@ -3,6 +3,7 @@
 require "json"
 require "digest"
 require_relative "tool_helpers"
+require_relative "response_formatter"
 
 module ClaudeMemory
   module MCP
@@ -341,19 +342,7 @@ module ClaudeMemory
         scope = extract_scope(args)
         limit = extract_limit(args)
         results = @recall.query(args["query"], limit: limit, scope: scope)
-        {
-          facts: results.map do |r|
-            {
-              id: r[:fact][:id],
-              subject: r[:fact][:subject_name],
-              predicate: r[:fact][:predicate],
-              object: r[:fact][:object_literal],
-              status: r[:fact][:status],
-              source: r[:source],
-              receipts: r[:receipts].map { |p| {quote: p[:quote], strength: p[:strength]} }
-            }
-          end
-        }
+        ResponseFormatter.format_recall_results(results)
       rescue Sequel::DatabaseError, Sequel::DatabaseConnectionError, SQLite3::CantOpenException, Errno::ENOENT => e
         database_not_found_error(e)
       end
@@ -362,28 +351,7 @@ module ClaudeMemory
         scope = extract_scope(args)
         limit = extract_limit(args, default: 20)
         results = @recall.query_index(args["query"], limit: limit, scope: scope)
-
-        total_tokens = results.sum { |r| r[:token_estimate] }
-
-        {
-          query: args["query"],
-          scope: scope,
-          result_count: results.size,
-          total_estimated_tokens: total_tokens,
-          facts: results.map do |r|
-            {
-              id: r[:id],
-              subject: r[:subject],
-              predicate: r[:predicate],
-              object_preview: r[:object_preview],
-              status: r[:status],
-              scope: r[:scope],
-              confidence: r[:confidence],
-              tokens: r[:token_estimate],
-              source: r[:source]
-            }
-          end
-        }
+        ResponseFormatter.format_index_results(args["query"], scope, results)
       end
 
       def recall_details(args)
@@ -395,32 +363,7 @@ module ClaudeMemory
           explanation = @recall.explain(fact_id, scope: scope)
           next nil if explanation.is_a?(Core::NullExplanation)
 
-          {
-            fact: {
-              id: explanation[:fact][:id],
-              subject: explanation[:fact][:subject_name],
-              predicate: explanation[:fact][:predicate],
-              object: explanation[:fact][:object_literal],
-              status: explanation[:fact][:status],
-              confidence: explanation[:fact][:confidence],
-              scope: explanation[:fact][:scope],
-              valid_from: explanation[:fact][:valid_from],
-              valid_to: explanation[:fact][:valid_to]
-            },
-            receipts: explanation[:receipts].map { |r|
-              {
-                quote: r[:quote],
-                strength: r[:strength],
-                session_id: r[:session_id],
-                occurred_at: r[:occurred_at]
-              }
-            },
-            relationships: {
-              supersedes: explanation[:supersedes],
-              superseded_by: explanation[:superseded_by],
-              conflicts: explanation[:conflicts].map { |c| {id: c[:id], status: c[:status]} }
-            }
-          }
+          ResponseFormatter.format_detailed_explanation(explanation)
         end.compact
 
         {
@@ -434,22 +377,7 @@ module ClaudeMemory
         explanation = @recall.explain(args["fact_id"], scope: scope)
         return {error: "Fact not found in #{scope} database"} if explanation.is_a?(Core::NullExplanation)
 
-        {
-          fact: {
-            id: explanation[:fact][:id],
-            subject: explanation[:fact][:subject_name],
-            predicate: explanation[:fact][:predicate],
-            object: explanation[:fact][:object_literal],
-            status: explanation[:fact][:status],
-            valid_from: explanation[:fact][:valid_from],
-            valid_to: explanation[:fact][:valid_to]
-          },
-          source: scope,
-          receipts: explanation[:receipts].map { |p| {quote: p[:quote], strength: p[:strength]} },
-          supersedes: explanation[:supersedes],
-          superseded_by: explanation[:superseded_by],
-          conflicts: explanation[:conflicts].map { |c| c[:id] }
-        }
+        ResponseFormatter.format_explanation(explanation, scope)
       end
 
       def changes(args)
