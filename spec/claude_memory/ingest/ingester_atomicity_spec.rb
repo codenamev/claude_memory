@@ -71,8 +71,12 @@ RSpec.describe ClaudeMemory::Ingest::Ingester, "atomicity" do
       cursor = store.get_delta_cursor(session_id, transcript_path)
       expect(cursor).to be_nil
 
-      # Verify FTS index was NOT created
-      indexed_count = store.db[:content_fts].count
+      # Verify FTS index was NOT created (table may not exist due to lazy initialization)
+      indexed_count = begin
+        store.db[:content_fts].count
+      rescue Sequel::DatabaseError
+        0  # Table doesn't exist, which means 0 entries
+      end
       expect(indexed_count).to eq(0)
     end
 
@@ -93,8 +97,12 @@ RSpec.describe ClaudeMemory::Ingest::Ingester, "atomicity" do
       content = store.content_items.where(session_id: session_id).first
       expect(content).to be_nil
 
-      # Verify FTS index was NOT created
-      indexed_count = store.db[:content_fts].count
+      # Verify FTS index was NOT created (table may not exist due to lazy initialization)
+      indexed_count = begin
+        store.db[:content_fts].count
+      rescue Sequel::DatabaseError
+        0  # Table doesn't exist, which means 0 entries
+      end
       expect(indexed_count).to eq(0)
     end
 
