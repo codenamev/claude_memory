@@ -238,10 +238,10 @@ module ClaudeMemory
       template = Recall::DualQueryTemplate.new(@manager)
       results = template.execute(scope: scope, limit: limit) do |store, source|
         changes = fetch_changes(store, since, limit)
-        changes.each { |c| c[:source] = source }
+        Core::ResultSorter.annotate_source(changes, source)
         changes
       end
-      results.sort_by { |c| c[:created_at] }.reverse.first(limit)
+      Core::ResultSorter.sort_by_timestamp(results, limit)
     end
 
     def fetch_changes(store, since, limit)
@@ -257,7 +257,7 @@ module ClaudeMemory
       template = Recall::DualQueryTemplate.new(@manager)
       template.execute(scope: scope) do |store, source|
         conflicts = store.open_conflicts
-        conflicts.each { |c| c[:source] = source }
+        Core::ResultSorter.annotate_source(conflicts, source)
         conflicts
       end
     end
