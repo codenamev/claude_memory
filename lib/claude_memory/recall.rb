@@ -556,19 +556,7 @@ module ClaudeMemory
       return [] if facts_data.empty?
 
       # Parse embeddings and prepare candidates
-      candidates = facts_data.map do |row|
-        embedding = JSON.parse(row[:embedding_json])
-        {
-          fact_id: row[:id],
-          embedding: embedding,
-          subject_entity_id: row[:subject_entity_id],
-          predicate: row[:predicate],
-          object_literal: row[:object_literal],
-          scope: row[:scope]
-        }
-      rescue JSON::ParserError
-        nil
-      end.compact
+      candidates = Core::EmbeddingCandidateBuilder.build_candidates(facts_data)
 
       return [] if candidates.empty?
 
