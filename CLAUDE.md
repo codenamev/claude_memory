@@ -316,3 +316,41 @@ Runs a comprehensive quality review of the entire codebase.
 ```
 
 **Output:** Updated `docs/quality_review.md` with dated review and actionable refactoring recommendations.
+
+### `/review-commit`
+
+Quick quality review of staged changes for pre-commit validation through expert perspectives.
+
+**What it does:**
+1. Reviews only staged Ruby files (fast, < 30 seconds)
+2. Applies Ruby best practices from 5 experts:
+   - **Sandi Metz**: SRP, small methods (<15 lines), DRY, frozen_string_literal
+   - **Jeremy Evans**: Sequel datasets over raw SQL, transaction safety, no N+1 queries
+   - **Kent Beck**: Simple design, revealing names, Command-Query Separation
+   - **Avdi Grimm**: Null objects, explicit returns, Law of Demeter, tell-don't-ask
+   - **Gary Bernhardt**: Functional core/imperative shell, immutable values, fast tests
+3. Returns clear BLOCK / WARNING / PASS verdict with expert attributions
+4. Designed for headless mode (runs in git pre-commit hook)
+
+**Critical checks (BLOCK):**
+- Missing frozen_string_literal, methods >15 lines, classes >200 lines
+- Raw SQL, DB writes without transactions, N+1 queries
+- Nested conditionals >3 levels, Command-Query violations
+- Implicit nil returns, defensive nil checks, bare rescue
+- I/O mixed with logic, mutable value objects, I/O in tests
+- New public methods without tests
+
+**Warning checks:**
+- Methods 10-15 lines, classes 100-200 lines, >3 parameters
+- Poor naming, methods doing multiple things
+- Law of Demeter violations, ask-don't-tell patterns
+- Missing value objects, business logic in imperative shell
+
+**Usage:**
+```
+/review-commit
+```
+
+**Output:** Console output with file:line references, expert attributions, and concrete fixes.
+
+**Hook Integration:** Automatically runs via lefthook pre-commit hook when Ruby files are staged.

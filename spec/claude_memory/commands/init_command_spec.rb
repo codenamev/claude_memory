@@ -7,7 +7,8 @@ require "fileutils"
 RSpec.describe ClaudeMemory::Commands::InitCommand do
   let(:stdout) { StringIO.new }
   let(:stderr) { StringIO.new }
-  let(:command) { described_class.new(stdout: stdout, stderr: stderr) }
+  let(:stdin) { StringIO.new }
+  let(:command) { described_class.new(stdout: stdout, stderr: stderr, stdin: stdin) }
 
   around do |example|
     Dir.mktmpdir do |tmpdir|
@@ -294,6 +295,9 @@ RSpec.describe ClaudeMemory::Commands::InitCommand do
       expect(File.exist?(".claude/memory.sqlite3")).to be true
 
       # Second run should not fail
+      # Provide stdin input to choose "update" (option 1) when prompted about existing hooks
+      stdin.string = "1\n"
+      stdin.rewind
       expect { command.call([]) }.not_to raise_error
     end
 
@@ -307,6 +311,9 @@ RSpec.describe ClaudeMemory::Commands::InitCommand do
       File.write(".claude.json", JSON.pretty_generate(config))
 
       # Second run should fix it
+      # Provide stdin input to choose "update" (option 1) when prompted about existing hooks
+      stdin.string = "1\n"
+      stdin.rewind
       command.call([])
 
       final_config = JSON.parse(File.read(".claude.json"))

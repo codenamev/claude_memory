@@ -8,3 +8,16 @@ pre-commit:
       stage_fixed: true
     tests:
       run: bundle exec rspec
+    quality-review:
+      run: |
+        staged_ruby=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rb$' || true)
+        if [ -n "$staged_ruby" ]; then
+          echo "Running quality review on staged changes..."
+          claude -p "/review-commit" \
+            --no-session-persistence \
+            --model haiku \
+            --allowedTools "Bash Read Grep Glob" \
+            --no-chrome
+        else
+          echo "No Ruby files staged, skipping quality review"
+        fi
