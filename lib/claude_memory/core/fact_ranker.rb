@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
-
 module ClaudeMemory
   module Core
     # Pure business logic for ranking, sorting, and deduplicating facts
@@ -83,6 +81,32 @@ module ClaudeMemory
         end
 
         seen.values.sort_by { |r| -r[:similarity] }.take(limit)
+      end
+
+      # Merge vector and text search results, preferring vector similarity scores
+      # @param vector_results [Array<Hash>] Results from vector search with :fact and :similarity
+      # @param text_results [Array<Hash>] Results from text search with :fact and :similarity
+      # @param limit [Integer] Maximum results to return
+      # @return [Array<Hash>] Merged results sorted by similarity descending
+      def self.merge_search_results(vector_results, text_results, limit)
+        # Combine results, preferring vector similarity scores
+        combined = {}
+
+        vector_results.each do |result|
+          fact_id = result[:fact][:id]
+          combined[fact_id] = result
+        end
+
+        text_results.each do |result|
+          fact_id = result[:fact][:id]
+          # Only add if not already present from vector search
+          combined[fact_id] ||= result
+        end
+
+        # Sort by similarity score (highest first)
+        combined.values
+          .sort_by { |r| -(r[:similarity] || 0) }
+          .take(limit)
       end
     end
   end

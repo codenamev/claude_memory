@@ -644,24 +644,7 @@ module ClaudeMemory
     end
 
     def merge_search_results(vector_results, text_results, limit)
-      # Combine results, preferring vector similarity scores
-      combined = {}
-
-      vector_results.each do |result|
-        fact_id = result[:fact][:id]
-        combined[fact_id] = result
-      end
-
-      text_results.each do |result|
-        fact_id = result[:fact][:id]
-        # Only add if not already present from vector search
-        combined[fact_id] ||= result
-      end
-
-      # Sort by similarity score (highest first)
-      combined.values
-        .sort_by { |r| -(r[:similarity] || 0) }
-        .take(limit)
+      Core::FactRanker.merge_search_results(vector_results, text_results, limit)
     end
 
     # Multi-concept search helpers

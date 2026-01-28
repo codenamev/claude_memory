@@ -203,4 +203,96 @@ RSpec.describe ClaudeMemory::Core::FactRanker do
       expect(result).to eq([])
     end
   end
+
+  describe ".merge_search_results" do
+    it "combines vector and text results by fact_id" do
+      vector_results = [
+        {fact: {id: 1}, similarity: 0.9},
+        {fact: {id: 2}, similarity: 0.8}
+      ]
+      text_results = [
+        {fact: {id: 3}, similarity: 0.7}
+      ]
+
+      merged = described_class.merge_search_results(vector_results, text_results, 10)
+
+      expect(merged.length).to eq(3)
+      expect(merged.map { |r| r[:fact][:id] }).to eq([1, 2, 3])
+    end
+
+    it "prefers vector results over text results for same fact" do
+      vector_results = [
+        {fact: {id: 1, name: "Fact 1"}, similarity: 0.9, source: :vector}
+      ]
+      text_results = [
+        {fact: {id: 1, name: "Fact 1 different"}, similarity: 0.6, source: :text}
+      ]
+
+      merged = described_class.merge_search_results(vector_results, text_results, 10)
+
+      expect(merged.length).to eq(1)
+      expect(merged.first[:similarity]).to eq(0.9)
+      expect(merged.first[:source]).to eq(:vector)
+    end
+
+    it "sorts by similarity descending" do
+      vector_results = [
+        {fact: {id: 1}, similarity: 0.5}
+      ]
+      text_results = [
+        {fact: {id: 2}, similarity: 0.9},
+        {fact: {id: 3}, similarity: 0.7}
+      ]
+
+      merged = described_class.merge_search_results(vector_results, text_results, 10)
+
+      expect(merged.map { |r| r[:similarity] }).to eq([0.9, 0.7, 0.5])
+    end
+
+    it "respects limit parameter" do
+      vector_results = [
+        {fact: {id: 1}, similarity: 0.9},
+        {fact: {id: 2}, similarity: 0.8}
+      ]
+      text_results = [
+        {fact: {id: 3}, similarity: 0.7},
+        {fact: {id: 4}, similarity: 0.6}
+      ]
+
+      merged = described_class.merge_search_results(vector_results, text_results, 2)
+
+      expect(merged.length).to eq(2)
+      expect(merged.map { |r| r[:fact][:id] }).to eq([1, 2])
+    end
+
+    it "handles nil similarity scores" do
+      vector_results = [
+        {fact: {id: 1}, similarity: 0.9}
+      ]
+      text_results = [
+        {fact: {id: 2}}  # No similarity score
+      ]
+
+      merged = described_class.merge_search_results(vector_results, text_results, 10)
+
+      expect(merged.length).to eq(2)
+      expect(merged.first[:fact][:id]).to eq(1)  # Higher similarity first
+      expect(merged.last[:fact][:id]).to eq(2)   # Nil treated as 0
+    end
+
+    it "handles empty vector results" do
+      merged = described_class.merge_search_results([], [{fact: {id: 1}, similarity: 0.5}], 10)
+      expect(merged.length).to eq(1)
+    end
+
+    it "handles empty text results" do
+      merged = described_class.merge_search_results([{fact: {id: 1}, similarity: 0.5}], [], 10)
+      expect(merged.length).to eq(1)
+    end
+
+    it "handles both empty" do
+      merged = described_class.merge_search_results([], [], 10)
+      expect(merged).to eq([])
+    end
+  end
 end
