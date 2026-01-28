@@ -162,26 +162,21 @@ module ClaudeMemory
       content_ids = fts.search(query_text, limit: limit * 3)
       return [] if content_ids.empty?
 
-      # Collect all fact_ids first
-      seen_fact_ids = Set.new
-      ordered_fact_ids = []
-
+      # Build provenance map for ordered collection
+      provenance_by_content = {}
       content_ids.each do |content_id|
-        provenance_records = store.provenance
+        provenance_by_content[content_id] = store.provenance
           .select(:fact_id)
           .where(content_item_id: content_id)
           .all
-
-        provenance_records.each do |prov|
-          fact_id = prov[:fact_id]
-          next if seen_fact_ids.include?(fact_id)
-
-          seen_fact_ids.add(fact_id)
-          ordered_fact_ids << fact_id
-          break if ordered_fact_ids.size >= limit
-        end
-        break if ordered_fact_ids.size >= limit
       end
+
+      # Collect fact IDs in content order, deduplicated
+      ordered_fact_ids = Core::FactCollector.collect_ordered_fact_ids(
+        provenance_by_content,
+        content_ids,
+        limit
+      )
 
       return [] if ordered_fact_ids.empty?
 
@@ -192,16 +187,12 @@ module ClaudeMemory
       receipts_by_fact_id = batch_find_receipts(store, ordered_fact_ids)
 
       # Build results maintaining order
-      ordered_fact_ids.map do |fact_id|
-        fact = facts_by_id[fact_id]
-        next unless fact
-
-        {
-          fact: fact,
-          receipts: receipts_by_fact_id[fact_id] || [],
-          source: source
-        }
-      end.compact
+      Core::ResultBuilder.build_results(
+        ordered_fact_ids,
+        facts_by_id: facts_by_id,
+        receipts_by_fact_id: receipts_by_fact_id,
+        source: source
+      )
     end
 
     def batch_find_facts(store, fact_ids)
