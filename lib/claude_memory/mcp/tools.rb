@@ -620,11 +620,7 @@ module ClaudeMemory
       end
 
       def build_searchable_text(entities, facts, decisions)
-        parts = []
-        entities.each { |e| parts << "#{e[:type]}: #{e[:name]}" }
-        facts.each { |f| parts << "#{f[:subject]} #{f[:predicate]} #{f[:object]} #{f[:quote]}" }
-        decisions.each { |d| parts << "#{d[:title]} #{d[:summary]}" }
-        parts.join(" ").strip
+        Core::TextBuilder.build_searchable_text(entities, facts, decisions)
       end
 
       def create_synthetic_content_item(store, text, project_path, occurred_at)
@@ -647,7 +643,7 @@ module ClaudeMemory
       end
 
       def symbolize_keys(hash)
-        hash.transform_keys(&:to_sym)
+        Core::TextBuilder.symbolize_keys(hash)
       end
 
       def get_store_for_scope(scope)
