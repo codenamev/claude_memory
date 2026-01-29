@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 
 ### Internal
 
-## [0.4.0] - 2026-01-29
+## [0.3.0] - 2026-01-29
 
 ### Added
 
@@ -30,63 +30,6 @@ All notable changes to this project will be documented in this file.
   - Comprehensive troubleshooting documentation
   - Step-by-step setup instructions
   - Links to diagnostic tools
-
-**Repository Analysis**
-- `/study-repo` skill for deep analysis of external repositories
-  - Systematic exploration through 6 phases (context, architecture, patterns, quality, comparison, adoption)
-  - Generates comprehensive influence documents in `docs/influence/`
-  - Updates `docs/improvements.md` with prioritized recommendations
-  - Focus mode support for targeted analysis (testing, MCP, database, CLI, performance)
-  - Integration with `/improve` workflow
-
-**Error Handling**
-- Graceful error messages when databases are missing or not accessible
-- Structured error responses with recommendations
-- Directs users to `memory.check_setup` for diagnosis
-
-### Changed
-- **IMPORTANT**: Switched from sqlite3 to extralite as required dependency
-  - Extralite provides better concurrency and performance
-  - Fixes database lock contention between MCP server and hooks
-  - Extralite (~> 2.14) is now the only SQLite adapter
-- MCP tool descriptions now emphasize memory-first workflow
-- Tool descriptions are more directive ("Check FIRST", "Use BEFORE")
-- Init command now adds version markers to generated CLAUDE.md files
-
-### Fixed
-- **Critical**: Database lock contention between MCP server and hooks
-  - Switched to extralite adapter for better concurrent access
-  - Improved busy timeout handling
-- Database busy error handling for both SQLite adapters
-- Concurrent access test for extralite adapter
-
-### Documentation
-- Updated all documentation to reflect current codebase metrics
-  - 20 commands (was documented as 16)
-  - 18 MCP tools (was documented as 7-8)
-  - 985 test examples (was documented as 583/426)
-- Auto-initialization and upgrade design document (docs/auto_init_design.md)
-- Multi-phase upgrade strategy documentation
-
-### Internal
-- Major code quality improvements with component extraction:
-  - `Core::FactQueryBuilder` - Query construction logic from Recall
-  - `Core::SetupStatusAnalyzer` - Setup status analysis from MCP Tools
-  - `MCP::ToolDefinitions` - Tool definitions separated from server logic
-  - `MCP::ResponseFormatter` - Response formatting with multiple query types
-  - `Core::TextBuilder` - Text building utilities
-  - `Core::ResultSorter` - Result sorting logic
-  - `Core::EmbeddingCandidateBuilder` - Embedding candidate construction
-  - `Core::FactCollector` - Fact collection logic
-  - `Core::ResultBuilder` - Result building logic
-- Init command test suite (19 examples)
-- Setup detection test suite (25 examples)
-- Error handling test suite (4 examples)
-- Comprehensive test coverage (53 new tests)
-
-## [0.3.0] - 2026-01-26
-
-### Added
 
 **Database & Infrastructure**
 - Schema version 6 with new tables:
@@ -128,27 +71,71 @@ All notable changes to this project will be documented in this file.
 - Infrastructure abstractions (FileSystem, InMemoryFileSystem) for testability
 - Domain model enhancements with immutable, self-validating objects
 
+**Repository Analysis**
+- `/study-repo` skill for deep analysis of external repositories
+  - Systematic exploration through 6 phases (context, architecture, patterns, quality, comparison, adoption)
+  - Generates comprehensive influence documents in `docs/influence/`
+  - Updates `docs/improvements.md` with prioritized recommendations
+  - Focus mode support for targeted analysis (testing, MCP, database, CLI, performance)
+  - Integration with `/improve` workflow
+
+**Error Handling**
+- Graceful error messages when databases are missing or not accessible
+- Structured error responses with recommendations
+- Directs users to `memory.check_setup` for diagnosis
+
 ### Changed
+- **IMPORTANT**: Switched from sqlite3 to extralite as required dependency
+  - Extralite provides better concurrency and performance
+  - Fixes database lock contention between MCP server and hooks
+  - Extralite (~> 2.14) is now the only SQLite adapter
 - Ingestion now tracks file modification time to skip unchanged content
 - Migration process now uses per-migration transactions for atomicity
 - Doctor command now includes schema validation and recovery guidance
 - Index operations can resume from checkpoints after interruption
+- MCP tool descriptions now emphasize memory-first workflow
+- Tool descriptions are more directive ("Check FIRST", "Use BEFORE")
+- Init command now adds version markers to generated CLAUDE.md files
 
 ### Fixed
+- **Critical**: Database lock contention between MCP server and hooks
+  - Switched to extralite adapter for better concurrent access
+  - Improved busy timeout handling
+- Database busy error handling for both SQLite adapters
+- Concurrent access test for extralite adapter
 - Public keyword placement in SQLiteStore (Ruby style conformance)
 - Transaction safety for multi-step database operations
-- Database locking issues during concurrent hook execution (added 5-second busy timeout)
 
 ### Documentation
 - Complete getting started guide (GETTING_STARTED.md)
 - Enhanced plugin documentation with setup workflows
 - Comprehensive examples for all features
 - Architecture documentation updates
+- Updated all documentation to reflect current codebase metrics
+  - 20 commands (was documented as 16)
+  - 18 MCP tools (was documented as 7-8)
+  - 985 test examples (was documented as 583/426)
+- Auto-initialization and upgrade design document (docs/auto_init_design.md)
+- Multi-phase upgrade strategy documentation
 
 ### Internal
 - Consolidated ENV access via Configuration class
 - Registered new infrastructure modules in main loader
 - Improved test coverage for new features
+- Major code quality improvements with component extraction:
+  - `Core::FactQueryBuilder` - Query construction logic from Recall
+  - `Core::SetupStatusAnalyzer` - Setup status analysis from MCP Tools
+  - `MCP::ToolDefinitions` - Tool definitions separated from server logic
+  - `MCP::ResponseFormatter` - Response formatting with multiple query types
+  - `Core::TextBuilder` - Text building utilities
+  - `Core::ResultSorter` - Result sorting logic
+  - `Core::EmbeddingCandidateBuilder` - Embedding candidate construction
+  - `Core::FactCollector` - Fact collection logic
+  - `Core::ResultBuilder` - Result building logic
+- Init command test suite (19 examples)
+- Setup detection test suite (25 examples)
+- Error handling test suite (4 examples)
+- Comprehensive test coverage (53 new tests)
 
 ## [0.2.0] - 2026-01-22
 
