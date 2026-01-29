@@ -532,4 +532,97 @@ RSpec.describe ClaudeMemory::MCP::ResponseFormatter do
       expect(formatted).not_to have_key(:receipts)
     end
   end
+
+  describe ".format_tool_facts" do
+    it "formats facts_by_tool query results" do
+      results = [
+        {
+          fact: {id: 1, subject_name: "repo", predicate: "uses", object_literal: "Ruby", scope: "project"},
+          source: :project,
+          receipts: [{quote: "Used Read tool", strength: "stated"}]
+        }
+      ]
+
+      formatted = described_class.format_tool_facts("Read", "all", results)
+
+      expect(formatted[:tool_name]).to eq("Read")
+      expect(formatted[:scope]).to eq("all")
+      expect(formatted[:count]).to eq(1)
+      expect(formatted[:facts][0][:id]).to eq(1)
+      expect(formatted[:facts][0][:receipts].length).to eq(1)
+    end
+
+    it "handles empty results" do
+      formatted = described_class.format_tool_facts("Grep", "project", [])
+
+      expect(formatted[:count]).to eq(0)
+      expect(formatted[:facts]).to eq([])
+    end
+  end
+
+  describe ".format_context_facts" do
+    it "formats facts_by_context query results" do
+      results = [
+        {
+          fact: {id: 5, subject_name: "app", predicate: "convention", object_literal: "Use TDD", scope: "global"},
+          source: :global,
+          receipts: []
+        }
+      ]
+
+      formatted = described_class.format_context_facts("git_branch", "main", "all", results)
+
+      expect(formatted[:context_type]).to eq("git_branch")
+      expect(formatted[:context_value]).to eq("main")
+      expect(formatted[:scope]).to eq("all")
+      expect(formatted[:count]).to eq(1)
+      expect(formatted[:facts][0][:id]).to eq(5)
+    end
+
+    it "handles cwd context type" do
+      results = []
+
+      formatted = described_class.format_context_facts("cwd", "/home/user/project", "project", results)
+
+      expect(formatted[:context_type]).to eq("cwd")
+      expect(formatted[:context_value]).to eq("/home/user/project")
+      expect(formatted[:count]).to eq(0)
+    end
+  end
+
+  describe ".format_generic_fact" do
+    it "formats fact with scope and receipts" do
+      result = {
+        fact: {id: 10, subject_name: "repo", predicate: "uses_framework", object_literal: "Rails", scope: "project"},
+        source: :project,
+        receipts: [
+          {quote: "Using Rails", strength: "stated"},
+          {quote: "Rails app", strength: "inferred"}
+        ]
+      }
+
+      formatted = described_class.format_generic_fact(result)
+
+      expect(formatted[:id]).to eq(10)
+      expect(formatted[:subject]).to eq("repo")
+      expect(formatted[:predicate]).to eq("uses_framework")
+      expect(formatted[:object]).to eq("Rails")
+      expect(formatted[:scope]).to eq("project")
+      expect(formatted[:source]).to eq(:project)
+      expect(formatted[:receipts].length).to eq(2)
+      expect(formatted[:receipts][0][:quote]).to eq("Using Rails")
+    end
+
+    it "handles empty receipts" do
+      result = {
+        fact: {id: 1, subject_name: "repo", predicate: "uses", object_literal: "Ruby", scope: "global"},
+        source: :global,
+        receipts: []
+      }
+
+      formatted = described_class.format_generic_fact(result)
+
+      expect(formatted[:receipts]).to eq([])
+    end
+  end
 end

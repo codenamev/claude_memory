@@ -281,6 +281,51 @@ module ClaudeMemory
           source: result[:source]
         }
       end
+
+      # Format facts_by_tool query results
+      # @param tool_name [String] Tool name
+      # @param scope [String] Scope
+      # @param results [Array<Hash>] Query results
+      # @return [Hash] Formatted tool facts response
+      def self.format_tool_facts(tool_name, scope, results)
+        {
+          tool_name: tool_name,
+          scope: scope,
+          count: results.size,
+          facts: results.map { |r| format_generic_fact(r) }
+        }
+      end
+
+      # Format facts_by_context query results
+      # @param context_type [String] Type (git_branch, cwd)
+      # @param context_value [String] Value
+      # @param scope [String] Scope
+      # @param results [Array<Hash>] Query results
+      # @return [Hash] Formatted context facts response
+      def self.format_context_facts(context_type, context_value, scope, results)
+        {
+          context_type: context_type,
+          context_value: context_value,
+          scope: scope,
+          count: results.size,
+          facts: results.map { |r| format_generic_fact(r) }
+        }
+      end
+
+      # Format generic fact with scope and receipts
+      # @param result [Hash] Result with fact and receipts
+      # @return [Hash] Formatted fact
+      def self.format_generic_fact(result)
+        {
+          id: result[:fact][:id],
+          subject: result[:fact][:subject_name],
+          predicate: result[:fact][:predicate],
+          object: result[:fact][:object_literal],
+          scope: result[:fact][:scope],
+          source: result[:source],
+          receipts: result[:receipts].map { |r| format_receipt(r) }
+        }
+      end
     end
   end
 end

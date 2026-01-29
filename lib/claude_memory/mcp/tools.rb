@@ -583,13 +583,7 @@ module ClaudeMemory
         limit = extract_limit(args, default: 20)
 
         results = @recall.facts_by_tool(tool_name, limit: limit, scope: scope)
-
-        {
-          tool_name: tool_name,
-          scope: scope,
-          count: results.size,
-          facts: results.map { |r| format_result(r) }
-        }
+        ResponseFormatter.format_tool_facts(tool_name, scope, results)
       end
 
       def facts_by_context(args)
@@ -608,13 +602,7 @@ module ClaudeMemory
           return {error: "Must provide either git_branch or cwd parameter"}
         end
 
-        {
-          context_type: context_type,
-          context_value: context_value,
-          scope: scope,
-          count: results.size,
-          facts: results.map { |r| format_result(r) }
-        }
+        ResponseFormatter.format_context_facts(context_type, context_value, scope, results)
       end
 
       def recall_semantic(args)
