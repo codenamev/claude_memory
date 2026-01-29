@@ -218,14 +218,26 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
     end
 
     context "retry logic" do
-      it "retries on SQLite3::BusyException with exponential backoff" do
+      # Helper to raise the appropriate busy exception based on the adapter
+      def busy_exception
+        if defined?(Extralite::BusyError)
+          Extralite::BusyError.new("database is locked")
+        elsif defined?(SQLite3::BusyException)
+          SQLite3::BusyException.new("database is locked")
+        else
+          # Fallback to a generic Sequel error
+          Sequel::DatabaseError.new("database is busy")
+        end
+      end
+
+      it "retries on database busy errors with exponential backoff" do
         File.write(transcript_path, "test content\n")
 
         attempt_count = 0
         allow(store.db).to receive(:transaction).and_wrap_original do |method, *args, &block|
           attempt_count += 1
           if attempt_count < 3
-            raise SQLite3::BusyException.new("database is locked")
+            raise busy_exception
           end
           method.call(*args, &block)
         end
@@ -243,9 +255,7 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
       it "raises after max retry attempts" do
         File.write(transcript_path, "test content\n")
 
-        allow(store.db).to receive(:transaction).and_raise(
-          SQLite3::BusyException.new("database is locked")
-        )
+        allow(store.db).to receive(:transaction).and_raise(busy_exception)
 
         expect {
           ingester.ingest(

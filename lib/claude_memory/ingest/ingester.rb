@@ -72,12 +72,14 @@ module ClaudeMemory
               content_id
             end
           end
-        rescue SQLite3::BusyException => e
-          # Re-raise BusyException with context after all retries exhausted
-          raise StandardError, "Ingestion failed for session #{session_id} after retries: #{e.message}"
         rescue => e
-          # Re-raise other errors with context for better error messages
-          raise StandardError, "Ingestion failed for session #{session_id}: #{e.message}"
+          # Check if it's a busy error after all retries exhausted
+          if busy_error?(e)
+            raise StandardError, "Ingestion failed for session #{session_id} after retries: #{e.message}"
+          else
+            # Re-raise other errors with context for better error messages
+            raise StandardError, "Ingestion failed for session #{session_id}: #{e.message}"
+          end
         end
 
         {status: :ingested, content_id: content_id, bytes_read: delta.bytesize, project_path: resolved_project}
@@ -94,18 +96,34 @@ module ClaudeMemory
         begin
           attempt += 1
           yield
-        rescue SQLite3::BusyException
-          if attempt < max_attempts
+        rescue => e
+          # Handle busy errors from both adapters (extralite and sqlite3)
+          is_busy = busy_error?(e)
+          if is_busy && attempt < max_attempts
             # Exponential backoff with jitter to avoid thundering herd
             exponential_delay = [base_delay * (2**(attempt - 1)), max_delay].min
             jitter = rand * exponential_delay * 0.5
             total_delay = exponential_delay + jitter
             sleep(total_delay)
             retry
+          elsif is_busy
+            raise
           else
+            # Not a busy error, re-raise immediately
             raise
           end
         end
+      end
+
+      # Check if error is a database busy error from either adapter
+      def busy_error?(error)
+        # Extralite adapter
+        return true if defined?(Extralite::BusyError) && error.is_a?(Extralite::BusyError)
+        # SQLite3 adapter
+        return true if defined?(SQLite3::BusyException) && error.is_a?(SQLite3::BusyException)
+        # Sequel may wrap the error
+        return true if error.is_a?(Sequel::DatabaseError) && error.message.include?("busy")
+        false
       end
 
       def should_ingest?(transcript_path)
