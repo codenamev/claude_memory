@@ -354,3 +354,53 @@ Quick quality review of staged changes for pre-commit validation through expert 
 **Output:** Console output with file:line references, expert attributions, and concrete fixes.
 
 **Hook Integration:** Automatically runs via lefthook pre-commit hook when Ruby files are staged.
+
+### `/study-repo`
+
+Deep analysis of an external repository's architecture, patterns, and design decisions.
+
+**What it does:**
+1. Requires user to manually clone the target repository first
+2. Performs systematic exploration through 6 phases:
+   - Repository Context (metadata, dependencies, purpose)
+   - Architecture Mapping (structure, modules, components)
+   - Pattern Recognition (design patterns, conventions)
+   - Code Quality Assessment (testing, docs, performance)
+   - Comparative Analysis (vs ClaudeMemory's approach)
+   - Adoption Opportunities (prioritized recommendations)
+3. Creates comprehensive influence document in `docs/influence/<project>.md`
+4. Updates `docs/improvements.md` with high-priority recommendations
+5. Follows QMD analysis format with priority markers
+
+**Usage:**
+```bash
+# Step 1: Clone repository to study
+git clone --depth 1 https://github.com/user/project /tmp/study-repos/project
+
+# Step 2: Run analysis
+/study-repo /tmp/study-repos/project
+
+# Optional: Focus on specific aspect
+/study-repo /tmp/study-repos/project --focus="MCP implementation"
+
+# Step 3: Review generated documents
+# - docs/influence/project.md (detailed analysis)
+# - docs/improvements.md (updated with recommendations)
+
+# Step 4: Implement selected improvements
+/improve
+```
+
+**Output:**
+- `docs/influence/<project_name>.md` - Comprehensive analysis with code examples
+- `docs/improvements.md` - Updated with dated section of recommendations
+- Console summary of key findings and priorities
+
+**Integration with `/improve`:**
+The recommendations added to `docs/improvements.md` can be implemented using the `/improve` skill, creating a complete workflow:
+```
+/study-repo → adds recommendations → /improve → implements features
+```
+
+**Focus Mode:**
+Use `--focus` to narrow analysis to specific aspects (testing, MCP, database, CLI, performance). See `.claude/skills/study-repo/focus-examples.md` for examples.

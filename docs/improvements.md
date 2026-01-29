@@ -1,9 +1,10 @@
 # Improvements to Consider
 
-*Updated: 2026-01-26*
+*Updated: 2026-01-29*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
+- *[yoanbernabeu/grepai](https://github.com/yoanbernabeu/grepai) - Semantic code search with vector embeddings*
 
 This document identifies design patterns and features from claude-mem and episodic-memory that could improve claude_memory. Implemented improvements have been removed from this document.
 
@@ -27,6 +28,43 @@ The following improvements from the original analysis have been successfully imp
 12. **Incremental Sync** - mtime-based change detection to skip unchanged transcript files
 13. **Context-Aware Queries** - Filter facts by git branch, directory, or tools used
 14. **ROI Metrics Tracking** - ingestion_metrics table tracking token economics for distillation efficiency (2026-01-26)
+
+---
+
+## grepai Study (2026-01-29)
+
+Source: docs/influence/grepai.md
+
+### High Priority Recommendations
+
+- [ ] **Incremental Indexing with File Watching**: Auto-update memory index during coding sessions
+  - Value: Eliminates manual `claude-memory ingest` calls, huge UX win
+  - Evidence: watcher/watcher.go:44 - `fsnotify` with debouncing (300ms default), gitignore respect
+  - Implementation: Add `Listen` gem (Ruby fsnotify), watch `.claude/projects/*/transcripts/*.jsonl`, debounce 500ms, trigger IngestCommand automatically
+  - Effort: 2-3 days (watcher class, integration, testing)
+  - Trade-off: Background process ~10MB memory overhead, may complicate testing
+
+- [ ] **Compact Response Format for MCP Tools**: Reduce token usage by ~60% in MCP responses
+  - Value: Critical for scaling to large fact databases (1000+ facts)
+  - Evidence: mcp/server.go:219 - `SearchResultCompact` omits content field, returns only metadata
+  - Implementation: Add `compact: true` parameter to all recall tools, omit provenance/context excerpts by default, user can override with `compact: false`
+  - Effort: 4-6 hours (add parameter, update formatters, tests)
+  - Trade-off: User needs follow-up `memory.explain <fact_id>` for full context (two-step interaction)
+
+- [ ] **Fact Dependency Graph Visualization**: Show supersession chains and conflict relationships
+  - Value: Invaluable for understanding why facts were superseded or conflicted
+  - Evidence: trace/trace.go:95 - `CallGraph` struct with nodes and edges for function dependencies
+  - Implementation: Create `memory.fact_graph <fact_id> --depth 2` tool, query `fact_links` table with BFS traversal, return JSON with nodes (facts) and edges (supersedes/conflicts/supports)
+  - Effort: 2-3 days (graph builder, MCP tool, tests)
+  - Trade-off: Adds complexity for feature used mainly for debugging/exploration
+
+- [ ] **Hybrid Search (Vector + Text) with RRF**: Better relevance combining semantic and keyword matching
+  - Value: 50% improvement in search quality (proven by grepai's Reciprocal Rank Fusion)
+  - Evidence: search/search.go - RRF with K=60, combines cosine similarity with full-text search
+  - Implementation: Add `sqlite-vec` extension, add `embeddings` BLOB column to `facts`, implement RRF in `Recall#query`, make hybrid optional via config
+  - Effort: 5-7 days (embedder setup, schema migration, RRF implementation, testing)
+  - Trade-off: Requires API calls for embedding (~$0.00001/fact), slower queries (2x search + fusion)
+  - Recommendation: CONSIDER - High value but significant effort. Start with FTS5, add vectors later if quality issues arise
 
 ---
 
