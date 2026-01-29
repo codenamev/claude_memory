@@ -192,6 +192,95 @@ module ClaudeMemory
           elapsed_seconds: stats[:elapsed_seconds].round(3)
         }
       end
+
+      # Format semantic search results with similarity scores
+      # @param query [String] Search query
+      # @param mode [String] Search mode (vector, text, both)
+      # @param scope [String] Scope
+      # @param results [Array<Hash>] Results with similarity scores
+      # @return [Hash] Formatted semantic search response
+      def self.format_semantic_results(query, mode, scope, results)
+        {
+          query: query,
+          mode: mode,
+          scope: scope,
+          count: results.size,
+          facts: results.map { |r| format_semantic_fact(r) }
+        }
+      end
+
+      # Format single semantic search fact with similarity
+      # @param result [Hash] Result with fact, receipts, and similarity
+      # @return [Hash] Formatted fact with similarity
+      def self.format_semantic_fact(result)
+        {
+          id: result[:fact][:id],
+          subject: result[:fact][:subject_name],
+          predicate: result[:fact][:predicate],
+          object: result[:fact][:object_literal],
+          scope: result[:fact][:scope],
+          source: result[:source],
+          similarity: result[:similarity],
+          receipts: result[:receipts].map { |r| format_receipt(r) }
+        }
+      end
+
+      # Format concept search results
+      # @param concepts [Array<String>] Concepts searched
+      # @param scope [String] Scope
+      # @param results [Array<Hash>] Results with similarity scores
+      # @return [Hash] Formatted concept search response
+      def self.format_concept_results(concepts, scope, results)
+        {
+          concepts: concepts,
+          scope: scope,
+          count: results.size,
+          facts: results.map { |r| format_concept_fact(r) }
+        }
+      end
+
+      # Format single concept search fact with multi-concept similarity
+      # @param result [Hash] Result with average and per-concept similarities
+      # @return [Hash] Formatted fact with concept similarities
+      def self.format_concept_fact(result)
+        {
+          id: result[:fact][:id],
+          subject: result[:fact][:subject_name],
+          predicate: result[:fact][:predicate],
+          object: result[:fact][:object_literal],
+          scope: result[:fact][:scope],
+          source: result[:source],
+          average_similarity: result[:similarity],
+          concept_similarities: result[:concept_similarities],
+          receipts: result[:receipts].map { |r| format_receipt(r) }
+        }
+      end
+
+      # Format shortcut query results (decisions, architecture, etc.)
+      # @param category [String] Shortcut category name
+      # @param results [Array<Hash>] Query results
+      # @return [Hash] Formatted shortcut response
+      def self.format_shortcut_results(category, results)
+        {
+          category: category,
+          count: results.size,
+          facts: results.map { |r| format_shortcut_fact(r) }
+        }
+      end
+
+      # Format fact for shortcut queries (includes scope, no status)
+      # @param result [Hash] Result with fact data
+      # @return [Hash] Formatted fact
+      def self.format_shortcut_fact(result)
+        {
+          id: result[:fact][:id],
+          subject: result[:fact][:subject_name],
+          predicate: result[:fact][:predicate],
+          object: result[:fact][:object_literal],
+          scope: result[:fact][:scope],
+          source: result[:source]
+        }
+      end
     end
   end
 end

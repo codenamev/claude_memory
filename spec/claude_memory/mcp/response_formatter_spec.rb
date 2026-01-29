@@ -402,4 +402,134 @@ RSpec.describe ClaudeMemory::MCP::ResponseFormatter do
       expect(formatted[:elapsed_seconds]).to eq(0.0)
     end
   end
+
+  describe ".format_semantic_results" do
+    it "formats semantic search results with similarity" do
+      results = [
+        {
+          fact: {id: 1, subject_name: "repo", predicate: "uses", object_literal: "Ruby", scope: "project"},
+          source: :project,
+          similarity: 0.95,
+          receipts: [{quote: "We use Ruby", strength: "stated"}]
+        }
+      ]
+
+      formatted = described_class.format_semantic_results("Ruby programming", "both", "all", results)
+
+      expect(formatted[:query]).to eq("Ruby programming")
+      expect(formatted[:mode]).to eq("both")
+      expect(formatted[:scope]).to eq("all")
+      expect(formatted[:count]).to eq(1)
+      expect(formatted[:facts][0][:similarity]).to eq(0.95)
+    end
+
+    it "handles empty results" do
+      formatted = described_class.format_semantic_results("query", "vector", "project", [])
+
+      expect(formatted[:count]).to eq(0)
+      expect(formatted[:facts]).to eq([])
+    end
+  end
+
+  describe ".format_semantic_fact" do
+    it "formats fact with similarity score" do
+      result = {
+        fact: {id: 10, subject_name: "app", predicate: "uses", object_literal: "Rails", scope: "project"},
+        source: :project,
+        similarity: 0.87,
+        receipts: [{quote: "Built with Rails", strength: "stated"}]
+      }
+
+      formatted = described_class.format_semantic_fact(result)
+
+      expect(formatted[:id]).to eq(10)
+      expect(formatted[:subject]).to eq("app")
+      expect(formatted[:predicate]).to eq("uses")
+      expect(formatted[:object]).to eq("Rails")
+      expect(formatted[:scope]).to eq("project")
+      expect(formatted[:source]).to eq(:project)
+      expect(formatted[:similarity]).to eq(0.87)
+      expect(formatted[:receipts].length).to eq(1)
+    end
+  end
+
+  describe ".format_concept_results" do
+    it "formats multi-concept search results" do
+      results = [
+        {
+          fact: {id: 1, subject_name: "repo", predicate: "uses", object_literal: "PostgreSQL", scope: "project"},
+          source: :project,
+          similarity: 0.9,
+          concept_similarities: {"database" => 0.95, "PostgreSQL" => 0.85},
+          receipts: []
+        }
+      ]
+
+      formatted = described_class.format_concept_results(["database", "PostgreSQL"], "all", results)
+
+      expect(formatted[:concepts]).to eq(["database", "PostgreSQL"])
+      expect(formatted[:scope]).to eq("all")
+      expect(formatted[:count]).to eq(1)
+      expect(formatted[:facts][0][:id]).to eq(1)
+      expect(formatted[:facts][0][:average_similarity]).to eq(0.9)
+      expect(formatted[:facts][0][:concept_similarities]).to eq({"database" => 0.95, "PostgreSQL" => 0.85})
+    end
+  end
+
+  describe ".format_concept_fact" do
+    it "formats fact with per-concept similarities" do
+      result = {
+        fact: {id: 5, subject_name: "app", predicate: "uses", object_literal: "Rails + Postgres", scope: "project"},
+        source: :project,
+        similarity: 0.88,
+        concept_similarities: {"Rails" => 0.9, "Postgres" => 0.86},
+        receipts: [{quote: "Using Rails with Postgres", strength: "stated"}]
+      }
+
+      formatted = described_class.format_concept_fact(result)
+
+      expect(formatted[:id]).to eq(5)
+      expect(formatted[:subject]).to eq("app")
+      expect(formatted[:average_similarity]).to eq(0.88)
+      expect(formatted[:concept_similarities]).to eq({"Rails" => 0.9, "Postgres" => 0.86})
+      expect(formatted[:receipts].length).to eq(1)
+    end
+  end
+
+  describe ".format_shortcut_results" do
+    it "formats shortcut query results" do
+      results = [
+        {
+          fact: {id: 5, subject_name: "app", predicate: "convention", object_literal: "Use TDD", scope: "global"},
+          source: :global
+        }
+      ]
+
+      formatted = described_class.format_shortcut_results("conventions", results)
+
+      expect(formatted[:category]).to eq("conventions")
+      expect(formatted[:count]).to eq(1)
+      expect(formatted[:facts][0][:id]).to eq(5)
+    end
+  end
+
+  describe ".format_shortcut_fact" do
+    it "formats fact for shortcut queries without status" do
+      result = {
+        fact: {id: 20, subject_name: "repo", predicate: "decision", object_literal: "Use Postgres", scope: "project"},
+        source: :project
+      }
+
+      formatted = described_class.format_shortcut_fact(result)
+
+      expect(formatted[:id]).to eq(20)
+      expect(formatted[:subject]).to eq("repo")
+      expect(formatted[:predicate]).to eq("decision")
+      expect(formatted[:object]).to eq("Use Postgres")
+      expect(formatted[:scope]).to eq("project")
+      expect(formatted[:source]).to eq(:project)
+      expect(formatted).not_to have_key(:status)
+      expect(formatted).not_to have_key(:receipts)
+    end
+  end
 end

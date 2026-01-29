@@ -574,20 +574,7 @@ module ClaudeMemory
       end
 
       def format_shortcut_results(results, category)
-        {
-          category: category,
-          count: results.size,
-          facts: results.map do |r|
-            {
-              id: r[:fact][:id],
-              subject: r[:fact][:subject_name],
-              predicate: r[:fact][:predicate],
-              object: r[:fact][:object_literal],
-              scope: r[:fact][:scope],
-              source: r[:source]
-            }
-          end
-        }
+        ResponseFormatter.format_shortcut_results(category, results)
       end
 
       def facts_by_tool(args)
@@ -637,25 +624,7 @@ module ClaudeMemory
         limit = extract_limit(args)
 
         results = @recall.query_semantic(query, limit: limit, scope: scope, mode: mode)
-
-        {
-          query: query,
-          mode: mode.to_s,
-          scope: scope,
-          count: results.size,
-          facts: results.map do |r|
-            {
-              id: r[:fact][:id],
-              subject: r[:fact][:subject_name],
-              predicate: r[:fact][:predicate],
-              object: r[:fact][:object_literal],
-              scope: r[:fact][:scope],
-              source: r[:source],
-              similarity: r[:similarity],
-              receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
-            }
-          end
-        }
+        ResponseFormatter.format_semantic_results(query, mode.to_s, scope, results)
       end
 
       def search_concepts(args)
@@ -666,25 +635,7 @@ module ClaudeMemory
         return {error: "Must provide 2-5 concepts"} unless (2..5).cover?(concepts.size)
 
         results = @recall.query_concepts(concepts, limit: limit, scope: scope)
-
-        {
-          concepts: concepts,
-          scope: scope,
-          count: results.size,
-          facts: results.map do |r|
-            {
-              id: r[:fact][:id],
-              subject: r[:fact][:subject_name],
-              predicate: r[:fact][:predicate],
-              object: r[:fact][:object_literal],
-              scope: r[:fact][:scope],
-              source: r[:source],
-              average_similarity: r[:similarity],
-              concept_similarities: r[:concept_similarities],
-              receipts: r[:receipts].map { |receipt| {quote: receipt[:quote], strength: receipt[:strength]} }
-            }
-          end
-        }
+        ResponseFormatter.format_concept_results(concepts, scope, results)
       end
 
       def databases_exist?
