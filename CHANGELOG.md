@@ -31,15 +31,34 @@ All notable changes to this project will be documented in this file.
   - Step-by-step setup instructions
   - Links to diagnostic tools
 
+**Repository Analysis**
+- `/study-repo` skill for deep analysis of external repositories
+  - Systematic exploration through 6 phases (context, architecture, patterns, quality, comparison, adoption)
+  - Generates comprehensive influence documents in `docs/influence/`
+  - Updates `docs/improvements.md` with prioritized recommendations
+  - Focus mode support for targeted analysis (testing, MCP, database, CLI, performance)
+  - Integration with `/improve` workflow
+
 **Error Handling**
 - Graceful error messages when databases are missing or not accessible
 - Structured error responses with recommendations
 - Directs users to `memory.check_setup` for diagnosis
 
 ### Changed
+- **IMPORTANT**: Switched from sqlite3 to extralite as required dependency
+  - Extralite provides better concurrency and performance
+  - Fixes database lock contention between MCP server and hooks
+  - Extralite (~> 2.14) is now the only SQLite adapter
 - MCP tool descriptions now emphasize memory-first workflow
 - Tool descriptions are more directive ("Check FIRST", "Use BEFORE")
 - Init command now adds version markers to generated CLAUDE.md files
+
+### Fixed
+- **Critical**: Database lock contention between MCP server and hooks
+  - Switched to extralite adapter for better concurrent access
+  - Improved busy timeout handling
+- Database busy error handling for both SQLite adapters
+- Concurrent access test for extralite adapter
 
 ### Documentation
 - Updated all documentation to reflect current codebase metrics
@@ -50,6 +69,16 @@ All notable changes to this project will be documented in this file.
 - Multi-phase upgrade strategy documentation
 
 ### Internal
+- Major code quality improvements with component extraction:
+  - `Core::FactQueryBuilder` - Query construction logic from Recall
+  - `Core::SetupStatusAnalyzer` - Setup status analysis from MCP Tools
+  - `MCP::ToolDefinitions` - Tool definitions separated from server logic
+  - `MCP::ResponseFormatter` - Response formatting with multiple query types
+  - `Core::TextBuilder` - Text building utilities
+  - `Core::ResultSorter` - Result sorting logic
+  - `Core::EmbeddingCandidateBuilder` - Embedding candidate construction
+  - `Core::FactCollector` - Fact collection logic
+  - `Core::ResultBuilder` - Result building logic
 - Init command test suite (19 examples)
 - Setup detection test suite (25 examples)
 - Error handling test suite (4 examples)
