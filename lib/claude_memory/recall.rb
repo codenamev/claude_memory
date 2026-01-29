@@ -196,38 +196,11 @@ module ClaudeMemory
     end
 
     def batch_find_facts(store, fact_ids)
-      dataset = store.facts
-        .left_join(:entities, id: :subject_entity_id)
-        .select(
-          Sequel[:facts][:id],
-          Sequel[:facts][:predicate],
-          Sequel[:facts][:object_literal],
-          Sequel[:facts][:status],
-          Sequel[:facts][:confidence],
-          Sequel[:facts][:valid_from],
-          Sequel[:facts][:valid_to],
-          Sequel[:facts][:created_at],
-          Sequel[:entities][:canonical_name].as(:subject_name),
-          Sequel[:facts][:scope],
-          Sequel[:facts][:project_path]
-        )
-
-      Core::BatchLoader.load_many(dataset, fact_ids, group_by: :single)
+      Core::FactQueryBuilder.batch_find_facts(store, fact_ids)
     end
 
     def batch_find_receipts(store, fact_ids)
-      dataset = store.provenance
-        .left_join(:content_items, id: :content_item_id)
-        .select(
-          Sequel[:provenance][:id],
-          Sequel[:provenance][:fact_id],
-          Sequel[:provenance][:quote],
-          Sequel[:provenance][:strength],
-          Sequel[:content_items][:session_id],
-          Sequel[:content_items][:occurred_at]
-        )
-
-      Core::BatchLoader.load_many(dataset, fact_ids, group_by: :fact_id)
+      Core::FactQueryBuilder.batch_find_receipts(store, fact_ids)
     end
 
     def dedupe_and_sort(results, limit)
@@ -245,12 +218,7 @@ module ClaudeMemory
     end
 
     def fetch_changes(store, since, limit)
-      store.facts
-        .select(:id, :subject_entity_id, :predicate, :object_literal, :status, :created_at, :scope, :project_path)
-        .where { created_at >= since }
-        .order(Sequel.desc(:created_at))
-        .limit(limit)
-        .all
+      Core::FactQueryBuilder.fetch_changes(store, since, limit)
     end
 
     def conflicts_dual(scope:)
@@ -276,56 +244,23 @@ module ClaudeMemory
     end
 
     def find_fact_from_store(store, fact_id)
-      store.facts
-        .left_join(:entities, id: :subject_entity_id)
-        .select(
-          Sequel[:facts][:id],
-          Sequel[:facts][:predicate],
-          Sequel[:facts][:object_literal],
-          Sequel[:facts][:status],
-          Sequel[:facts][:confidence],
-          Sequel[:facts][:valid_from],
-          Sequel[:facts][:valid_to],
-          Sequel[:facts][:created_at],
-          Sequel[:entities][:canonical_name].as(:subject_name),
-          Sequel[:facts][:scope],
-          Sequel[:facts][:project_path]
-        )
-        .where(Sequel[:facts][:id] => fact_id)
-        .first
+      Core::FactQueryBuilder.find_fact(store, fact_id)
     end
 
     def find_receipts_from_store(store, fact_id)
-      store.provenance
-        .left_join(:content_items, id: :content_item_id)
-        .select(
-          Sequel[:provenance][:id],
-          Sequel[:provenance][:quote],
-          Sequel[:provenance][:strength],
-          Sequel[:content_items][:session_id],
-          Sequel[:content_items][:occurred_at]
-        )
-        .where(Sequel[:provenance][:fact_id] => fact_id)
-        .all
+      Core::FactQueryBuilder.find_receipts(store, fact_id)
     end
 
     def find_superseded_by_from_store(store, fact_id)
-      store.fact_links
-        .where(to_fact_id: fact_id, link_type: "supersedes")
-        .select_map(:from_fact_id)
+      Core::FactQueryBuilder.find_superseded_by(store, fact_id)
     end
 
     def find_supersedes_from_store(store, fact_id)
-      store.fact_links
-        .where(from_fact_id: fact_id, link_type: "supersedes")
-        .select_map(:to_fact_id)
+      Core::FactQueryBuilder.find_supersedes(store, fact_id)
     end
 
     def find_conflicts_from_store(store, fact_id)
-      store.conflicts
-        .select(:id, :fact_a_id, :fact_b_id, :status)
-        .where(Sequel.or(fact_a_id: fact_id, fact_b_id: fact_id))
-        .all
+      Core::FactQueryBuilder.find_conflicts(store, fact_id)
     end
 
     def query_legacy(query_text, limit:, scope:)
@@ -412,10 +347,7 @@ module ClaudeMemory
     end
 
     def find_provenance_by_content(content_id)
-      @legacy_store.provenance
-        .select(:id, :fact_id, :content_item_id, :quote, :strength)
-        .where(content_item_id: content_id)
-        .all
+      Core::FactQueryBuilder.find_provenance_by_content(@legacy_store, content_id)
     end
 
     def find_fact(fact_id)
