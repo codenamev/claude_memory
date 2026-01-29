@@ -42,34 +42,41 @@ module ClaudeMemory
         # If any step fails, cursor position is not updated, allowing retry
         content_id = nil
         begin
-          @store.db.transaction do
-            content_id = @store.upsert_content_item(
-              source: source,
-              session_id: session_id,
-              transcript_path: transcript_path,
-              project_path: resolved_project,
-              text_hash: text_hash,
-              byte_len: delta.bytesize,
-              raw_text: delta,
-              git_branch: metadata[:git_branch],
-              cwd: metadata[:cwd],
-              claude_version: metadata[:claude_version],
-              thinking_level: metadata[:thinking_level],
-              source_mtime: source_mtime
-            )
+          content_id = with_retry do
+            @store.db.transaction do
+              content_id = @store.upsert_content_item(
+                source: source,
+                session_id: session_id,
+                transcript_path: transcript_path,
+                project_path: resolved_project,
+                text_hash: text_hash,
+                byte_len: delta.bytesize,
+                raw_text: delta,
+                git_branch: metadata[:git_branch],
+                cwd: metadata[:cwd],
+                claude_version: metadata[:claude_version],
+                thinking_level: metadata[:thinking_level],
+                source_mtime: source_mtime
+              )
 
-            # Store tool calls if any were extracted
-            @store.insert_tool_calls(content_id, tool_calls) unless tool_calls.empty?
+              # Store tool calls if any were extracted
+              @store.insert_tool_calls(content_id, tool_calls) unless tool_calls.empty?
 
-            # FTS indexing (FTS5 supports transactions)
-            @fts.index_content_item(content_id, delta)
+              # FTS indexing (FTS5 supports transactions)
+              @fts.index_content_item(content_id, delta)
 
-            # Update cursor LAST - only after all other operations succeed
-            # This ensures that if any step fails, we can retry from the same offset
-            @store.update_delta_cursor(session_id, transcript_path, new_offset)
+              # Update cursor LAST - only after all other operations succeed
+              # This ensures that if any step fails, we can retry from the same offset
+              @store.update_delta_cursor(session_id, transcript_path, new_offset)
+
+              content_id
+            end
           end
+        rescue SQLite3::BusyException => e
+          # Re-raise BusyException with context after all retries exhausted
+          raise StandardError, "Ingestion failed for session #{session_id} after retries: #{e.message}"
         rescue => e
-          # Re-raise with context for better error messages
+          # Re-raise other errors with context for better error messages
           raise StandardError, "Ingestion failed for session #{session_id}: #{e.message}"
         end
 
@@ -77,6 +84,29 @@ module ClaudeMemory
       end
 
       private
+
+      # Retry database operations with exponential backoff + jitter
+      # This handles concurrent access when MCP server and hooks both write simultaneously
+      # With busy_timeout=30000ms, each attempt waits up to 30s before raising BusyException
+      # Total potential wait time: 30s * 10 attempts + backoff delays = ~5 minutes max
+      def with_retry(max_attempts: 10, base_delay: 0.2, max_delay: 5.0)
+        attempt = 0
+        begin
+          attempt += 1
+          yield
+        rescue SQLite3::BusyException
+          if attempt < max_attempts
+            # Exponential backoff with jitter to avoid thundering herd
+            exponential_delay = [base_delay * (2**(attempt - 1)), max_delay].min
+            jitter = rand * exponential_delay * 0.5
+            total_delay = exponential_delay + jitter
+            sleep(total_delay)
+            retry
+          else
+            raise
+          end
+        end
+      end
 
       def should_ingest?(transcript_path)
         return true unless File.exist?(transcript_path)

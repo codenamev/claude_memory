@@ -22,10 +22,11 @@ module ClaudeMemory
         @db.run("PRAGMA journal_mode = WAL")
         @db.run("PRAGMA synchronous = NORMAL")
 
-        # Set busy timeout to 5 seconds
-        # - Allows retries instead of immediate failure
-        # - Critical for concurrent hook execution
-        @db.run("PRAGMA busy_timeout = 5000")
+        # Set busy timeout to 30 seconds (increased from 5s)
+        # - Allows much longer wait times before raising BusyException
+        # - Critical for concurrent hook execution with MCP server
+        # - Combined with ingester retry logic, provides ~5 minutes total wait
+        @db.run("PRAGMA busy_timeout = 30000")
 
         ensure_schema!
       end

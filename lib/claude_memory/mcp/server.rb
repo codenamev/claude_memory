@@ -99,6 +99,11 @@ module ClaudeMemory
 
         result = @tools.call(name, arguments)
 
+        # Release database connections after each tool call
+        # This prevents lock contention with hook commands
+        # Connections are automatically reopened on next use
+        release_connections
+
         {
           jsonrpc: "2.0",
           id: id,
@@ -108,6 +113,20 @@ module ClaudeMemory
             ]
           }
         }
+      end
+
+      def release_connections
+        if @store_or_manager.is_a?(Store::StoreManager)
+          # Release both global and project store connections
+          @store_or_manager.global_store&.db&.disconnect
+          @store_or_manager.project_store&.db&.disconnect
+        elsif @store_or_manager.respond_to?(:db)
+          # Release single store connection (legacy)
+          @store_or_manager.db.disconnect
+        end
+      rescue
+        # Silently ignore disconnect errors
+        # Connection will be reopened automatically on next use
       end
 
       def send_response(response)
