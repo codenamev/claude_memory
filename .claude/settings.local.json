@@ -24,7 +24,8 @@
       "Bash(ag:*)",
       "Bash(git log:*)",
       "Bash(find:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "mcp__plugin_claude-memory_memory__memory_architecture"
     ]
   },
   "enableAllProjectMcpServers": true
