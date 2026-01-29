@@ -22,12 +22,13 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 Business Logic Layer                         │
 │  Recall → Resolve → Distill → Ingest → Publish             │
-│  Sweep → MCP → Hook                                         │
+│  Sweep → Embeddings → MCP → Hook                           │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 Infrastructure Layer                         │
-│  Store (SQLite via Sequel) → FileSystem → Index (FTS5)     │
+│  Store (SQLite v6 + WAL) → FileSystem → Index (FTS5+TF-IDF)│
+│  Templates                                                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -94,6 +95,9 @@ end
 - **SessionId**: Type-safe session identifiers
 - **TranscriptPath**: Type-safe file paths
 - **FactId**: Type-safe positive integer IDs
+- **TextBuilder**: Searchable text construction from entities/facts/decisions
+- **ResultSorter**: Result ranking and sorting logic
+- **FactQueryBuilder**: SQL query construction for fact retrieval
 - All are immutable (frozen) and self-validating
 
 #### Null Objects (`core/`)
@@ -115,13 +119,14 @@ end
 
 **Components:**
 
-#### Recall (`recall.rb`)
+#### Recall (`recall.rb` + `recall/`)
 - Queries facts from global and project databases
 - **Optimization**: Batch queries to eliminate N+1 issues
   - Before: 2N+1 queries for N facts
   - After: 3 queries total (FTS + batch facts + batch receipts)
 - Supports scope filtering (project, global, all)
 - Returns facts with provenance receipts
+- `DualQueryTemplate`: Query template handling for dual-database queries
 
 #### Resolve (`resolve/`)
 - Truth maintenance and conflict resolution
@@ -149,9 +154,17 @@ end
 - Time-bounded execution
 - Cleans up old content and expired facts
 
+#### Embeddings (`embeddings/`)
+- Lightweight TF-IDF embedding generation
+- 384-dimensional normalized vectors
+- Semantic similarity calculations
+- No heavy ML dependencies required
+
 #### MCP (`mcp/`)
 - Model Context Protocol server
-- Exposes 18 tools including: recall, explain, promote, status, decisions, conventions, architecture, semantic search, and more
+- Exposes 19 tools including: recall, explain, promote, status, decisions, conventions, architecture, semantic search, check_setup, and more
+- `ResponseFormatter`: Consistent MCP response formatting
+- `SetupStatusAnalyzer`: Initialization and version status analysis
 
 #### Hook (`hook/`)
 - Reads JSON from stdin
@@ -164,10 +177,11 @@ end
 **Components:**
 
 #### Store (`store/`)
-- **SQLiteStore**: Direct database access via Sequel
+- **SQLiteStore**: Direct database access via Sequel (schema v6)
 - **StoreManager**: Manages dual databases (global + project)
 - **Transaction safety**: Atomic multi-step operations
-- Schema migrations
+- **WAL mode**: Write-Ahead Logging for better concurrency
+- Schema migrations with per-migration transactions
 
 #### FileSystem (`infrastructure/`)
 - **FileSystem**: Real filesystem wrapper
@@ -176,8 +190,14 @@ end
 - Enables testing without tempdir cleanup
 
 #### Index (`index/`)
-- SQLite FTS5 full-text search
-- No embeddings required
+- SQLite FTS5 for lexical full-text search
+- TF-IDF embeddings for semantic similarity (384-dimensional vectors)
+- Hybrid search modes: text-only, semantic-only, or both
+
+#### Templates (`templates/`)
+- Hook configuration examples (`hooks.example.json`)
+- Output style templates (`output-styles/memory-aware.md`)
+- Setup and configuration scaffolding
 
 **Key Principles:**
 - Ports and Adapters: Clear interfaces for external systems
@@ -276,6 +296,16 @@ FileSystem (write)
 **Solution:** Wrap in database transactions
 **Impact:** Data integrity guaranteed
 
+### 4. WAL Mode for Concurrency
+**Problem:** Database locks prevented concurrent reads during writes
+**Solution:** Enable Write-Ahead Logging (WAL) mode in SQLite
+**Impact:** MCP server and hooks can operate concurrently without blocking
+
+### 5. Lightweight Semantic Search
+**Problem:** Traditional semantic search requires heavy ML models and API calls
+**Solution:** TF-IDF embeddings with 384-dimensional vectors (no external dependencies)
+**Impact:** Fast semantic search without external API costs
+
 ## Testing Strategy
 
 ### Unit Tests
@@ -307,15 +337,17 @@ FileSystem (write)
 - Scattered ENV access
 
 ### After Refactoring
-- CLI: Thin router (95% reduction from original)
-- Tests: 985 examples (255% increase)
+- CLI: 41 lines (thin router, 95% reduction from original)
+- Tests: 988 examples (257% increase)
 - Batch queries (3 total)
 - FileSystem abstraction
-- Value objects
+- Value objects (SessionId, TranscriptPath, FactId)
 - Centralized Configuration
 - 4 domain models with business logic
 - 20 command classes
-- 18 MCP tools
+- 19 MCP tools
+- Semantic search with TF-IDF embeddings
+- Schema v6 with WAL mode
 
 ## Future Improvements
 
@@ -351,11 +383,12 @@ FileSystem (write)
 
 The refactored architecture provides:
 - ✅ Clear separation of concerns
-- ✅ High testability (985 tests)
+- ✅ High testability (988 tests)
 - ✅ Type safety (value objects)
 - ✅ Null safety (null objects)
-- ✅ Performance (batch queries, in-memory FS)
+- ✅ Performance (batch queries, in-memory FS, WAL mode)
 - ✅ Maintainability (small, focused classes)
 - ✅ Extensibility (easy to add commands/tools)
+- ✅ Semantic search (lightweight TF-IDF embeddings)
 
 The codebase now follows best practices for Ruby applications and is well-positioned for future growth.
