@@ -5,6 +5,7 @@ require "digest"
 require_relative "tool_helpers"
 require_relative "response_formatter"
 require_relative "tool_definitions"
+require_relative "setup_status_analyzer"
 
 module ClaudeMemory
   module MCP
@@ -417,13 +418,10 @@ module ClaudeMemory
         if claude_md_exists
           content = File.read(claude_md_path)
           if content.include?("ClaudeMemory")
-            # Extract version from HTML comment
-            if content =~ /<!-- ClaudeMemory v([\d.]+) -->/
-              current_version = $1
-              if current_version == ClaudeMemory::VERSION
-                version_status = "up_to_date"
-              else
-                version_status = "outdated"
+            current_version = SetupStatusAnalyzer.extract_version(content)
+            if current_version
+              version_status = SetupStatusAnalyzer.determine_version_status(current_version, ClaudeMemory::VERSION)
+              if version_status == "outdated"
                 warnings << "Configuration version (v#{current_version}) is older than ClaudeMemory (v#{ClaudeMemory::VERSION}). Consider running upgrade."
               end
             else
@@ -458,30 +456,12 @@ module ClaudeMemory
           warnings << "No hooks configured for automatic ingestion"
         end
 
-        # Determine overall status
+        # Determine overall status using analyzer
         initialized = global_db_exists && claude_md_exists
-        status = if initialized && version_status == "up_to_date"
-          "healthy"
-        elsif initialized && version_status == "outdated"
-          "needs_upgrade"
-        elsif global_db_exists && !claude_md_exists
-          "partially_initialized"
-        else
-          "not_initialized"
-        end
+        status = SetupStatusAnalyzer.determine_status(global_db_exists, claude_md_exists, version_status)
 
-        # Generate recommendations
-        recommendations = []
-        if !initialized
-          recommendations << "Run: claude-memory init"
-          recommendations << "This will create databases, configure hooks, and set up CLAUDE.md"
-        elsif version_status == "outdated"
-          recommendations << "Run: claude-memory upgrade (when available)"
-          recommendations << "Or manually run: claude-memory init to update CLAUDE.md"
-        elsif warnings.any?
-          recommendations << "Run: claude-memory doctor --fix (when available)"
-          recommendations << "Or check individual issues and fix manually"
-        end
+        # Generate recommendations using analyzer
+        recommendations = SetupStatusAnalyzer.generate_recommendations(initialized, version_status, warnings.any?)
 
         {
           status: status,
