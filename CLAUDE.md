@@ -85,7 +85,7 @@ Transcripts → Ingest → Index (FTS5)
   - Each command is a separate class (HelpCommand, DoctorCommand, etc.)
   - All commands inherit from BaseCommand
   - Dependency injection for I/O (stdout, stderr, stdin)
-  - 16 commands total, each focused on single responsibility
+  - 20 commands total, each focused on single responsibility
 
 - **`Configuration`**: Centralized ENV access (`configuration.rb`)
   - Single source of truth for paths and environment variables
@@ -236,7 +236,7 @@ Single-value predicates (like "uses_database") supersede old values. Multi-value
 
 - `lib/claude_memory.rb`: Main module, requires, database path helpers
 - `lib/claude_memory/cli.rb`: Thin command router (41 lines)
-- `lib/claude_memory/commands/`: Individual command classes (16 commands)
+- `lib/claude_memory/commands/`: Individual command classes (20 commands)
 - `lib/claude_memory/configuration.rb`: Centralized configuration and ENV access
 - `lib/claude_memory/domain/`: Domain models (Fact, Entity, Provenance, Conflict)
 - `lib/claude_memory/core/`: Value objects and null objects
@@ -251,15 +251,15 @@ Single-value predicates (like "uses_database") supersede old values. Multi-value
 
 The gem includes an MCP server (`claude-memory serve-mcp`) that exposes memory operations as tools. Configuration should be in `.mcp.json` at project root.
 
-Available MCP tools:
-- `memory.recall` - Search for relevant facts (scope filtering supported)
-- `memory.check_setup` - Check initialization status and version (diagnostics)
-- `memory.explain` - Get detailed fact provenance
-- `memory.promote` - Promote project fact to global
-- `memory.status` - Health check for both databases
-- `memory.changes` - Recent fact updates
-- `memory.conflicts` - Open contradictions
-- `memory.sweep_now` - Run maintenance
+Available MCP tools (18 total):
+- **Query & Recall**: `memory.recall`, `memory.recall_index`, `memory.recall_details`, `memory.recall_semantic`, `memory.search_concepts`
+- **Provenance**: `memory.explain`
+- **Shortcuts**: `memory.decisions`, `memory.conventions`, `memory.architecture`
+- **Context**: `memory.facts_by_tool`, `memory.facts_by_context`
+- **Management**: `memory.promote`, `memory.store_extraction`
+- **Monitoring**: `memory.status`, `memory.stats`, `memory.changes`, `memory.conflicts`
+- **Maintenance**: `memory.sweep_now`
+- **Setup**: `memory.check_setup`
 
 ## Hook Integration
 

@@ -91,6 +91,7 @@ module ClaudeMemory
           details = result[:details] || {}
           return if details.empty?
 
+          @stdout.puts "  Adapter: #{details[:adapter]}" if details[:adapter]
           @stdout.puts "  Schema version: #{details[:schema_version]}" if details[:schema_version]
           @stdout.puts "  Facts: #{details[:fact_count]}" if details[:fact_count]
           @stdout.puts "  Content items: #{details[:content_count]}" if details[:content_count]

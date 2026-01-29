@@ -20,15 +20,19 @@ module ClaudeMemory
           provenance_created: 0
         }
 
-        entity_ids = resolve_entities(extraction.entities)
-        result[:entities_created] = entity_ids.size
+        # Wrap entire extraction in a single transaction for better concurrency
+        # This reduces database lock time compared to per-fact transactions
+        @store.db.transaction do
+          entity_ids = resolve_entities(extraction.entities)
+          result[:entities_created] = entity_ids.size
 
-        extraction.facts.each do |fact_data|
-          outcome = resolve_fact(fact_data, entity_ids, content_item_id, occurred_at)
-          result[:facts_created] += outcome[:created]
-          result[:facts_superseded] += outcome[:superseded]
-          result[:conflicts_created] += outcome[:conflicts]
-          result[:provenance_created] += outcome[:provenance]
+          extraction.facts.each do |fact_data|
+            outcome = resolve_fact(fact_data, entity_ids, content_item_id, occurred_at)
+            result[:facts_created] += outcome[:created]
+            result[:facts_superseded] += outcome[:superseded]
+            result[:conflicts_created] += outcome[:conflicts]
+            result[:provenance_created] += outcome[:provenance]
+          end
         end
 
         result
@@ -57,51 +61,50 @@ module ClaudeMemory
 
         existing_facts = @store.facts_for_slot(subject_id, predicate)
 
-        # Wrap all database operations in a transaction for atomicity
-        @store.db.transaction do
-          if PredicatePolicy.single?(predicate) && existing_facts.any?
-            matching = existing_facts.find { |f| values_match?(f, object_val, object_entity_id) }
-            if matching
-              add_provenance(matching[:id], content_item_id, fact_data)
-              outcome[:provenance] = 1
-              return outcome
-            elsif supersession_signal?(fact_data)
-              supersede_facts(existing_facts, occurred_at)
-              outcome[:superseded] = existing_facts.size
-            else
-              create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at)
-              outcome[:conflicts] = 1
-              return outcome
-            end
+        # No transaction wrapper needed - handled by apply method
+        # This allows all facts to be processed in a single transaction
+        if PredicatePolicy.single?(predicate) && existing_facts.any?
+          matching = existing_facts.find { |f| values_match?(f, object_val, object_entity_id) }
+          if matching
+            add_provenance(matching[:id], content_item_id, fact_data)
+            outcome[:provenance] = 1
+            return outcome
+          elsif supersession_signal?(fact_data)
+            supersede_facts(existing_facts, occurred_at)
+            outcome[:superseded] = existing_facts.size
+          else
+            create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at)
+            outcome[:conflicts] = 1
+            return outcome
           end
-
-          fact_scope = fact_data[:scope_hint] || @current_scope
-          fact_project = (fact_scope == "global") ? nil : @current_project_path
-
-          fact_id = @store.insert_fact(
-            subject_entity_id: subject_id,
-            predicate: predicate,
-            object_entity_id: object_entity_id,
-            object_literal: object_val,
-            polarity: fact_data[:polarity] || "positive",
-            confidence: fact_data[:confidence] || 1.0,
-            valid_from: occurred_at,
-            scope: fact_scope,
-            project_path: fact_project
-          )
-          outcome[:created] = 1
-
-          if existing_facts.any? && outcome[:superseded] > 0
-            existing_facts.each do |old_fact|
-              @store.insert_fact_link(from_fact_id: fact_id, to_fact_id: old_fact[:id], link_type: "supersedes")
-            end
-          end
-
-          add_provenance(fact_id, content_item_id, fact_data)
-          outcome[:provenance] = 1
-
-          outcome
         end
+
+        fact_scope = fact_data[:scope_hint] || @current_scope
+        fact_project = (fact_scope == "global") ? nil : @current_project_path
+
+        fact_id = @store.insert_fact(
+          subject_entity_id: subject_id,
+          predicate: predicate,
+          object_entity_id: object_entity_id,
+          object_literal: object_val,
+          polarity: fact_data[:polarity] || "positive",
+          confidence: fact_data[:confidence] || 1.0,
+          valid_from: occurred_at,
+          scope: fact_scope,
+          project_path: fact_project
+        )
+        outcome[:created] = 1
+
+        if existing_facts.any? && outcome[:superseded] > 0
+          existing_facts.each do |old_fact|
+            @store.insert_fact_link(from_fact_id: fact_id, to_fact_id: old_fact[:id], link_type: "supersedes")
+          end
+        end
+
+        add_provenance(fact_id, content_item_id, fact_data)
+        outcome[:provenance] = 1
+
+        outcome
       end
 
       def supersession_signal?(fact_data)

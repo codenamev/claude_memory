@@ -23,7 +23,8 @@
       "Bash(gem list:*)",
       "Bash(ag:*)",
       "Bash(git log:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(wc:*)"
     ]
   },
   "enableAllProjectMcpServers": true

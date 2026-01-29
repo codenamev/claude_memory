@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Documentation
+
+### Internal
+
+## [0.4.0] - 2026-01-29
+
+### Added
+
 **Setup & Initialization**
 - Version markers in CLAUDE.md files for upgrade detection
   - HTML comment format: `<!-- ClaudeMemory vX.Y.Z -->`
@@ -24,20 +36,24 @@ All notable changes to this project will be documented in this file.
 - Structured error responses with recommendations
 - Directs users to `memory.check_setup` for diagnosis
 
-**Documentation**
-- Auto-initialization and upgrade design document (docs/auto_init_design.md)
-- Multi-phase upgrade strategy documentation
-- Comprehensive test coverage (53 new tests)
-
 ### Changed
 - MCP tool descriptions now emphasize memory-first workflow
 - Tool descriptions are more directive ("Check FIRST", "Use BEFORE")
 - Init command now adds version markers to generated CLAUDE.md files
 
+### Documentation
+- Updated all documentation to reflect current codebase metrics
+  - 20 commands (was documented as 16)
+  - 18 MCP tools (was documented as 7-8)
+  - 985 test examples (was documented as 583/426)
+- Auto-initialization and upgrade design document (docs/auto_init_design.md)
+- Multi-phase upgrade strategy documentation
+
 ### Internal
 - Init command test suite (19 examples)
 - Setup detection test suite (25 examples)
 - Error handling test suite (4 examples)
+- Comprehensive test coverage (53 new tests)
 
 ## [0.3.0] - 2026-01-26
 

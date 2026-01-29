@@ -4,6 +4,16 @@ require "sequel"
 require "sequel/extensions/migration"
 require "json"
 
+# Try to load extralite for better performance and concurrency
+# Falls back to sqlite3 if not available
+begin
+  require "extralite"
+  require "sequel/adapters/extralite"
+  EXTRALITE_AVAILABLE = true
+rescue LoadError
+  EXTRALITE_AVAILABLE = false
+end
+
 module ClaudeMemory
   module Store
     class SQLiteStore
@@ -11,10 +21,48 @@ module ClaudeMemory
 
       attr_reader :db
 
-      def initialize(db_path)
+      def initialize(db_path, adapter: nil)
         @db_path = db_path
-        @db = Sequel.sqlite(db_path)
+        @adapter = adapter || self.class.default_adapter
+        @db = connect_database(db_path)
 
+        configure_pragmas
+
+        ensure_schema!
+      end
+
+      # Class method to get the default adapter
+      # Prefers extralite if available, falls back to sqlite3
+      def self.default_adapter
+        EXTRALITE_AVAILABLE ? :extralite : :sqlite3
+      end
+
+      # Class method to check if extralite is being used
+      def self.using_extralite?
+        default_adapter == :extralite
+      end
+
+      # Instance method to check adapter
+      def using_extralite?
+        @adapter == :extralite
+      end
+
+      private
+
+      def connect_database(db_path)
+        case @adapter
+        when :extralite
+          # Extralite adapter: Better performance and GVL release
+          Sequel.connect("extralite:#{db_path}")
+        when :sqlite3
+          # Standard sqlite3 adapter
+          Sequel.sqlite(db_path)
+        else
+          raise ArgumentError, "Unknown adapter: #{@adapter}. Use :extralite or :sqlite3"
+        end
+      end
+
+      def configure_pragmas
         # Enable WAL mode for better concurrency
         # - Multiple readers don't block each other
         # - Writers don't block readers
@@ -26,10 +74,11 @@ module ClaudeMemory
         # - Allows much longer wait times before raising BusyException
         # - Critical for concurrent hook execution with MCP server
         # - Combined with ingester retry logic, provides ~5 minutes total wait
+        # Note: With extralite, this may be less necessary due to GVL release
         @db.run("PRAGMA busy_timeout = 30000")
-
-        ensure_schema!
       end
+
+      public
 
       def close
         @db.disconnect

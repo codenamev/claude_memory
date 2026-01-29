@@ -216,5 +216,45 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
         expect(result[:project_path]).to eq(Dir.pwd)
       end
     end
+
+    context "retry logic" do
+      it "retries on SQLite3::BusyException with exponential backoff" do
+        File.write(transcript_path, "test content\n")
+
+        attempt_count = 0
+        allow(store.db).to receive(:transaction).and_wrap_original do |method, *args, &block|
+          attempt_count += 1
+          if attempt_count < 3
+            raise SQLite3::BusyException.new("database is locked")
+          end
+          method.call(*args, &block)
+        end
+
+        result = ingester.ingest(
+          source: "claude_code",
+          session_id: "sess-1",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:status]).to eq(:ingested)
+        expect(attempt_count).to eq(3)
+      end
+
+      it "raises after max retry attempts" do
+        File.write(transcript_path, "test content\n")
+
+        allow(store.db).to receive(:transaction).and_raise(
+          SQLite3::BusyException.new("database is locked")
+        )
+
+        expect {
+          ingester.ingest(
+            source: "claude_code",
+            session_id: "sess-1",
+            transcript_path: transcript_path
+          )
+        }.to raise_error(StandardError, /Ingestion failed/)
+      end
+    end
   end
 end

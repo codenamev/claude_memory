@@ -94,6 +94,10 @@ RSpec.describe "Recall Failure Modes" do
           project_path: test_dir
         )
 
+        # Ensure FTS table is created before concurrent access
+        # (avoids concurrent DDL operations which can fail with extralite)
+        recall.query("warmup", scope: "project", limit: 1)
+
         # Execute concurrent queries
         threads = 5.times.map do
           Thread.new do

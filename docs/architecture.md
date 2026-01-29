@@ -9,7 +9,7 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Layer                         │
-│  CLI (Router) → Commands (16 classes) → Configuration       │
+│  CLI (Router) → Commands (20 classes) → Configuration       │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
@@ -38,8 +38,8 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
 **Purpose:** Handle user interaction and command routing
 
 **Components:**
-- **CLI** (`cli.rb`): Thin router (41 lines) that dispatches to command classes
-- **Commands** (`commands/`): 16 command classes, each handling one CLI command
+- **CLI** (`cli.rb`): Thin router that dispatches to command classes
+- **Commands** (`commands/`): 20 command classes, each handling one CLI command
 - **Configuration** (`configuration.rb`): Centralized ENV access and path calculation
 
 **Key Principles:**
@@ -151,7 +151,7 @@ end
 
 #### MCP (`mcp/`)
 - Model Context Protocol server
-- Exposes tools: recall, explain, promote, status, conflicts, changes, sweep_now
+- Exposes 18 tools including: recall, explain, promote, status, decisions, conventions, architecture, semantic search, and more
 
 #### Hook (`hook/`)
 - Reads JSON from stdin
@@ -307,14 +307,15 @@ FileSystem (write)
 - Scattered ENV access
 
 ### After Refactoring
-- CLI: 41 lines (95% reduction)
-- Tests: 426 examples (149 added)
+- CLI: Thin router (95% reduction from original)
+- Tests: 985 examples (255% increase)
 - Batch queries (3 total)
 - FileSystem abstraction
 - Value objects
 - Centralized Configuration
 - 4 domain models with business logic
-- 16 command classes
+- 20 command classes
+- 18 MCP tools
 
 ## Future Improvements
 
@@ -350,7 +351,7 @@ FileSystem (write)
 
 The refactored architecture provides:
 - ✅ Clear separation of concerns
-- ✅ High testability (426 tests)
+- ✅ High testability (985 tests)
 - ✅ Type safety (value objects)
 - ✅ Null safety (null objects)
 - ✅ Performance (batch queries, in-memory FS)

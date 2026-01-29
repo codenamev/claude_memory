@@ -1,59 +1,92 @@
 ---
 name: setup-memory
-description: Guide user through ClaudeMemory installation and setup
-disable-model-invocation: true
+description: Automatically install, configure, or upgrade ClaudeMemory
 ---
 
-# ClaudeMemory Setup Guide
+# ClaudeMemory Setup & Upgrade
 
-This skill helps you install and configure ClaudeMemory when it's not initialized.
+This skill automatically sets up or upgrades ClaudeMemory based on your current state.
 
-## Quick Setup
+## What This Skill Does
 
-If you see errors about databases not found or ClaudeMemory not being initialized, run:
+When invoked, it will:
+
+1. **Check current installation status**
+   - Detect installed gem version
+   - Check database existence and health
+   - Verify configuration files
+
+2. **Determine required action**
+   - Fresh install (no databases)
+   - Upgrade (version mismatch)
+   - Verification (already up to date)
+
+3. **Execute setup/upgrade automatically**
+   - Run `claude-memory doctor` for health check
+   - Add version markers to `.claude/CLAUDE.md`
+   - Run smoke tests
+   - Report results
+
+4. **Provide next steps**
+   - Restart recommendations if needed
+   - Usage guidance
+
+## Instructions
+
+**IMPORTANT**: This skill should take action, not just provide instructions.
+
+### Step 1: Check Installation Status
 
 ```bash
-claude-memory init
+claude-memory --version
+claude-memory doctor
 ```
 
-This will:
-- ✓ Create global database (~/.claude/memory.sqlite3)
-- ✓ Create project database (.claude/memory.sqlite3)
-- ✓ Configure hooks for automatic transcript ingestion
-- ✓ Add workflow instructions to CLAUDE.md
-- ✓ Set up MCP server configuration
+Analyze the output to determine current state.
 
-## Installation Modes
+### Step 2: Determine Action Required
 
-### Project Setup (Recommended)
+- **Not installed**: Databases don't exist
+  - Action: Run `claude-memory init` (ask user for --global flag preference)
+- **Installed but outdated**: Version marker missing or old
+  - Action: Run upgrade steps (doctor, add version marker, verify)
+- **Up to date**: All healthy
+  - Action: Report status only
 
-For project-specific memory alongside global knowledge:
+### Step 3: Execute Required Actions
 
-```bash
-claude-memory init
-```
+**For Fresh Install:**
+1. Ask user: "Install globally only or with project memory? [project/global]"
+2. Run `claude-memory init` (with --global if selected)
+3. Run `claude-memory doctor` to verify
+4. Add version marker to `.claude/CLAUDE.md`
+5. Report success
 
-This creates both project and global databases.
+**For Upgrade:**
+1. Run `claude-memory doctor` (auto-runs migrations)
+2. Add/update version marker in `.claude/CLAUDE.md`
+3. Run `claude-memory stats` for smoke test
+4. Report upgrade complete
 
-### Global Setup Only
+**For Verification:**
+1. Run `claude-memory doctor`
+2. Confirm version in `.claude/CLAUDE.md`
+3. Report all healthy
 
-For user-wide memory without project-specific storage:
+### Step 4: Report Results
 
-```bash
-claude-memory init --global
-```
+Provide a clear summary:
+- ✅ What was done
+- 📊 Current status (facts, schema version, etc.)
+- 🔄 Next steps (if any)
 
-Note: Run `claude-memory init` in each project later for project memory.
+## After Setup/Upgrade
 
-## After Installation
+Always remind the user:
 
-1. **Restart Claude Code** to load the new configuration
-2. **Verify setup** by running:
-   ```bash
-   claude-memory doctor
-   ```
-3. **Test memory** by asking me a question - transcripts will be ingested automatically
-4. **Check status** anytime with the `memory.status` tool
+1. **Restart Claude Code** if configuration files were modified
+2. **Test memory tools**: Try `memory.status` or `memory.recall "<topic>"`
+3. **Use memory-first workflow**: Check memory before reading files
 
 ## What Gets Created
 
@@ -74,108 +107,62 @@ ClaudeMemory automatically ingests transcripts on these events:
 - SessionEnd - Final ingestion before closing
 - PreCompact - Before context summarization
 
-## Troubleshooting
+## Common Scenarios
 
-### Permission Denied
+### Fresh Install
+User has never installed ClaudeMemory:
+1. Ask installation preference (project vs global)
+2. Run `claude-memory init` with appropriate flags
+3. Verify with `doctor`
+4. Add version marker
+5. Report success and next steps
 
-If you get permission errors:
+### Upgrade After Gem Update
+User updated gem but not configuration:
+1. Run `claude-memory doctor` (auto-migrates schema)
+2. Update version marker in `.claude/CLAUDE.md`
+3. Verify with smoke tests
+4. Report upgrade complete
+
+### Verification
+User wants to check current status:
+1. Run `claude-memory doctor`
+2. Run `claude-memory stats`
+3. Check version marker in `.claude/CLAUDE.md`
+4. Report all findings
+
+## Troubleshooting Guide
+
+If automatic setup fails, provide these solutions:
+
+**Permission Denied**
 ```bash
 chmod +x $(which claude-memory)
 ```
 
-### Database Locked
-
-If you see "database is locked" errors:
+**Database Locked**
 - Close other Claude sessions
-- Run `claude-memory doctor` to check for stuck operations
-- If needed: `claude-memory recover` to reset stuck operations
+- Run `claude-memory recover`
 
-### Missing Dependencies
-
-ClaudeMemory requires Ruby 3.2.0+. Check your version:
+**Missing Ruby**
+ClaudeMemory requires Ruby 3.2.0+. Check with:
 ```bash
 ruby --version
 ```
 
-If you need to install or upgrade Ruby, see: https://www.ruby-lang.org/en/downloads/
-
-### Hooks Not Firing
-
-If transcripts aren't being ingested:
-
-1. Check hooks are configured:
-   ```bash
-   cat .claude/settings.json | grep -A5 hooks
-   ```
-
-2. Manually test ingestion:
-   ```bash
-   claude-memory ingest --session-id test --transcript-path ~/.claude/sessions/latest.transcript
-   ```
-
-3. Re-run init to fix configuration:
-   ```bash
-   claude-memory init
-   ```
-
-### Check Setup Status
-
-Run this MCP tool to diagnose issues:
-```
-memory.check_setup
-```
-
-This returns:
-- Initialization status
-- Version information
-- Missing components
-- Actionable recommendations
-
-## Upgrading
-
-If you have an old version of ClaudeMemory installed:
-
+**Hooks Not Working**
+Re-run setup:
 ```bash
-claude-memory doctor
+claude-memory init
 ```
-
-This will detect version mismatches and recommend:
-- Re-running `claude-memory init` to update CLAUDE.md
-- Running `claude-memory upgrade` (when available)
-
-## Getting Help
-
-- **Check health**: `claude-memory doctor`
-- **View all commands**: `claude-memory help`
-- **Get command help**: `claude-memory <command> --help`
-- **Report issues**: https://github.com/anthropics/claude-memory/issues
-
-## What's Next?
-
-Once installed:
-
-1. **Use memory tools proactively**:
-   - `memory.recall` - Search for facts
-   - `memory.decisions` - View architectural decisions
-   - `memory.conventions` - Check coding preferences
-
-2. **Let the system learn**:
-   - Keep using Claude normally
-   - Transcripts are ingested automatically
-   - Facts are distilled and stored
-
-3. **Manage your knowledge**:
-   - `memory.conflicts` - Resolve contradictions
-   - `memory.promote <fact_id>` - Move facts to global scope
-   - `claude-memory publish` - Update published snapshot
 
 ## Memory-First Workflow
 
-After setup, remember to check memory BEFORE reading files:
+After successful setup, always remind users:
 
 1. **Query memory first**: `memory.recall "<topic>"`
-2. **Review results**: Understand existing knowledge
-3. **Explore if needed**: Use Read/Grep only if memory is insufficient
-4. **Combine context**: Merge recalled facts with code exploration
+2. **Use semantic shortcuts**: `memory.decisions`, `memory.conventions`, `memory.architecture`
+3. **Check before exploring**: Memory saves time vs reading files
+4. **Combine knowledge**: Merge recalled facts with code exploration
 
-This saves time and provides better answers by leveraging distilled knowledge from previous sessions.
+This workflow leverages distilled knowledge from previous sessions.

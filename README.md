@@ -210,7 +210,7 @@ The uninstall command removes:
 
 - **Language:** Ruby 3.2+
 - **Storage:** SQLite3 (no external services)
-- **Testing:** 583 examples, 100% core coverage
+- **Testing:** 985 examples, 100% core coverage
 - **Code Style:** Standard Ruby
 
 ```bash
