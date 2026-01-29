@@ -72,14 +72,12 @@ module ClaudeMemory
               content_id
             end
           end
+        rescue Extralite::BusyError => e
+          # Re-raise BusyError with context after all retries exhausted
+          raise StandardError, "Ingestion failed for session #{session_id} after retries: #{e.message}"
         rescue => e
-          # Check if it's a busy error after all retries exhausted
-          if busy_error?(e)
-            raise StandardError, "Ingestion failed for session #{session_id} after retries: #{e.message}"
-          else
-            # Re-raise other errors with context for better error messages
-            raise StandardError, "Ingestion failed for session #{session_id}: #{e.message}"
-          end
+          # Re-raise other errors with context for better error messages
+          raise StandardError, "Ingestion failed for session #{session_id}: #{e.message}"
         end
 
         {status: :ingested, content_id: content_id, bytes_read: delta.bytesize, project_path: resolved_project}
@@ -89,16 +87,16 @@ module ClaudeMemory
 
       # Retry database operations with exponential backoff + jitter
       # This handles concurrent access when MCP server and hooks both write simultaneously
-      # With busy_timeout=30000ms, each attempt waits up to 30s before raising BusyException
+      # With busy_timeout=30000ms, each attempt waits up to 30s before raising BusyError
       # Total potential wait time: 30s * 10 attempts + backoff delays = ~5 minutes max
       def with_retry(max_attempts: 10, base_delay: 0.2, max_delay: 5.0)
         attempt = 0
         begin
           attempt += 1
           yield
-        rescue => e
-          # Handle busy errors from both adapters (extralite and sqlite3)
-          is_busy = busy_error?(e)
+        rescue Extralite::BusyError, Sequel::DatabaseError => e
+          # Handle busy errors from extralite adapter
+          is_busy = e.is_a?(Extralite::BusyError) || e.message.include?("busy")
           if is_busy && attempt < max_attempts
             # Exponential backoff with jitter to avoid thundering herd
             exponential_delay = [base_delay * (2**(attempt - 1)), max_delay].min
@@ -113,17 +111,6 @@ module ClaudeMemory
             raise
           end
         end
-      end
-
-      # Check if error is a database busy error from either adapter
-      def busy_error?(error)
-        # Extralite adapter
-        return true if defined?(Extralite::BusyError) && error.is_a?(Extralite::BusyError)
-        # SQLite3 adapter
-        return true if defined?(SQLite3::BusyException) && error.is_a?(SQLite3::BusyException)
-        # Sequel may wrap the error
-        return true if error.is_a?(Sequel::DatabaseError) && error.message.include?("busy")
-        false
       end
 
       def should_ingest?(transcript_path)

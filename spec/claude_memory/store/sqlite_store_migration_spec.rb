@@ -19,7 +19,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       store.close
 
       # Manually set version to 1 to test v2 migration
-      db = Sequel.sqlite(db_path)
+      db = Sequel.connect("extralite:#{db_path}")
       db[:meta].where(key: "schema_version").update(value: "1")
       db.disconnect
 
@@ -95,7 +95,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
 
     it "migrates sequentially from v0 to v6" do
       # Create empty database
-      db = Sequel.sqlite(db_path)
+      db = Sequel.connect("extralite:#{db_path}")
       db.create_table?(:meta) do
         String :key, primary_key: true
         String :value

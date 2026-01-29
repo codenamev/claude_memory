@@ -9,7 +9,7 @@ ClaudeMemory is a Ruby gem that provides long-term, self-managed memory for Clau
 **Key dependencies:**
 - Ruby 3.2.0+
 - Sequel (~> 5.0) for database access
-- SQLite3 (~> 2.0) for storage
+- Extralite (~> 2.14) for high-performance SQLite storage
 
 ## Development Commands
 

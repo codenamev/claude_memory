@@ -13,8 +13,3 @@ gem "rspec", "~> 3.0"
 gem "standard", "~> 1.3"
 
 gem "lefthook", "~> 1.6"
-
-# Optional: High-performance SQLite adapter
-# Provides 12-14x performance boost and better concurrency (releases GVL)
-# Will automatically use if available, otherwise falls back to sqlite3
-gem "extralite", "~> 2.14", require: false

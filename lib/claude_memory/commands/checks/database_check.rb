@@ -50,7 +50,7 @@ module ClaudeMemory
 
           details = {
             path: @db_path,
-            adapter: store.using_extralite? ? "extralite" : "sqlite3",
+            adapter: "extralite",
             schema_version: store.schema_version,
             fact_count: store.facts.count,
             content_count: store.content_items.count,

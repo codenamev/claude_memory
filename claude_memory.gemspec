@@ -31,11 +31,5 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "sequel", "~> 5.0"
-  spec.add_dependency "sqlite3", "~> 2.0"
-
-  # Optional high-performance SQLite adapter
-  # Install with: gem install extralite
-  # Provides 12-14x performance boost and better concurrency (releases GVL)
-  # Will automatically use if available, otherwise falls back to sqlite3
-  spec.metadata["optional_dependencies"] = "extralite:~> 2.14"
+  spec.add_dependency "extralite", "~> 2.14"
 end

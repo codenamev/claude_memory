@@ -2,8 +2,8 @@ PATH
   remote: .
   specs:
     claude_memory (0.4.0)
+      extralite (~> 2.14)
       sequel (~> 5.0)
-      sqlite3 (~> 2.0)
 
 GEM
   remote: https://rubygems.org/
@@ -78,7 +78,6 @@ GEM
     ruby-progressbar (1.13.0)
     sequel (5.100.0)
       bigdecimal
-    sqlite3 (2.9.0-x86_64-darwin)
     standard (1.53.0)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.0)
@@ -102,7 +101,6 @@ PLATFORMS
 
 DEPENDENCIES
   claude_memory!
-  extralite (~> 2.14)
   irb
   lefthook (~> 1.6)
   rake (~> 13.0)
@@ -145,7 +143,6 @@ CHECKSUMS
   rubocop-performance (1.26.1) sha256=cd19b936ff196df85829d264b522fd4f98b6c89ad271fa52744a8c11b8f71834
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33
   sequel (5.100.0) sha256=cb0329b62287a01db68eead46759c14497a3fae01b174e2c41da108a9e9b4a12
-  sqlite3 (2.9.0-x86_64-darwin) sha256=59fe51baa3cb33c36d27ce78b4ed9360cd33ccca09498c2ae63850c97c0a6026
   standard (1.53.0) sha256=f3c9493385db7079d0abce6f7582f553122156997b81258cd361d3480eeacf9c
   standard-custom (1.0.2) sha256=424adc84179a074f1a2a309bb9cf7cd6bfdb2b6541f20c6bf9436c0ba22a652b
   standard-performance (1.9.0) sha256=49483d31be448292951d80e5e67cdcb576c2502103c7b40aec6f1b6e9c88e3f2

@@ -7,7 +7,7 @@ require "tmpdir"
 
 RSpec.describe "Migration 003: Add Session Metadata" do
   let(:db_path) { File.join(Dir.mktmpdir, "test_migration.db") }
-  let(:db) { Sequel.sqlite(db_path) }
+  let(:db) { Sequel.connect("extralite:#{db_path}") }
   let(:migrations_path) { File.expand_path("../../../../db/migrations", __dir__) }
 
   before do
@@ -109,7 +109,7 @@ RSpec.describe "Migration 003: Add Session Metadata" do
     tool_call = db[:tool_calls].where(id: tool_call_id).first
     expect(tool_call[:tool_name]).to eq("Read")
     expect(tool_call[:tool_input]).to eq('{"file": "test.rb"}')
-    expect(tool_call[:is_error]).to eq(false)
+    expect(tool_call[:is_error]).to eq(0) # SQLite stores booleans as 0/1
   end
 
   it "cascades delete when content_item is removed" do

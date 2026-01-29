@@ -198,75 +198,10 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore do
     end
   end
 
-  describe "adapter selection" do
-    it "uses extralite by default if available" do
-      if EXTRALITE_AVAILABLE
-        expect(described_class.default_adapter).to eq(:extralite)
-        expect(described_class.using_extralite?).to be true
-      else
-        expect(described_class.default_adapter).to eq(:sqlite3)
-        expect(described_class.using_extralite?).to be false
-      end
-    end
-
-    it "can explicitly use sqlite3 adapter" do
-      path = File.join(Dir.tmpdir, "claude_memory_sqlite3_test_#{Process.pid}.sqlite3")
-      sqlite3_store = described_class.new(path, adapter: :sqlite3)
-
-      expect(sqlite3_store.using_extralite?).to be false
-      expect(sqlite3_store.db).to be_a(Sequel::Database)
-
-      # Verify basic operations work
-      entity_id = sqlite3_store.find_or_create_entity(type: "test", name: "adapter_test")
-      expect(entity_id).to be > 0
-
-      sqlite3_store.close
-      FileUtils.rm_f(path)
-    end
-
-    if EXTRALITE_AVAILABLE
-      it "can explicitly use extralite adapter" do
-        path = File.join(Dir.tmpdir, "claude_memory_extralite_test_#{Process.pid}.sqlite3")
-        extralite_store = described_class.new(path, adapter: :extralite)
-
-        expect(extralite_store.using_extralite?).to be true
-        expect(extralite_store.db).to be_a(Sequel::Database)
-
-        # Verify basic operations work
-        entity_id = extralite_store.find_or_create_entity(type: "test", name: "adapter_test")
-        expect(entity_id).to be > 0
-
-        extralite_store.close
-        FileUtils.rm_f(path)
-      end
-
-      it "extralite and sqlite3 produce compatible databases" do
-        path = File.join(Dir.tmpdir, "claude_memory_compat_test_#{Process.pid}.sqlite3")
-
-        # Create database with extralite
-        ext_store = described_class.new(path, adapter: :extralite)
-        entity_id = ext_store.find_or_create_entity(type: "test", name: "compat_test")
-        fact_id = ext_store.insert_fact(
-          subject_entity_id: entity_id,
-          predicate: "test_predicate",
-          object_literal: "test_value"
-        )
-        ext_store.close
-
-        # Read with sqlite3
-        sq3_store = described_class.new(path, adapter: :sqlite3)
-        facts = sq3_store.facts.where(id: fact_id).first
-        expect(facts[:object_literal]).to eq("test_value")
-        sq3_store.close
-
-        FileUtils.rm_f(path)
-      end
-    end
-
-    it "raises error for unknown adapter" do
-      expect {
-        described_class.new(db_path, adapter: :unknown)
-      }.to raise_error(ArgumentError, /Unknown adapter/)
+  describe "adapter" do
+    it "uses extralite adapter" do
+      expect(store.db).to be_a(Sequel::Database)
+      expect(store.db.adapter_scheme).to eq(:extralite)
     end
   end
 end

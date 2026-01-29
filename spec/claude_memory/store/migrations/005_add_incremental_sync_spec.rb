@@ -7,7 +7,7 @@ require "tmpdir"
 
 RSpec.describe "Migration 005: Add Incremental Sync" do
   let(:db_path) { File.join(Dir.mktmpdir, "test_migration.db") }
-  let(:db) { Sequel.sqlite(db_path) }
+  let(:db) { Sequel.connect("extralite:#{db_path}") }
   let(:migrations_path) { File.expand_path("../../../../db/migrations", __dir__) }
 
   before do
