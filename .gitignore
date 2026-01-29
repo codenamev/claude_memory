@@ -11,5 +11,8 @@
 .rspec_status
 .claude_memory.sqlite3
 .claude/.memory.sqlite3
+.claude/memory.sqlite3
+.claude/memory.sqlite3-shm
+.claude/memory.sqlite3-wal
 .claude/mind.*
 .claude/settings*.json
