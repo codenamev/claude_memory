@@ -7,7 +7,14 @@ pre-commit:
       run: bundle exec rake standard:fix
       stage_fixed: true
     tests:
-      run: bundle exec rspec
+      run: |
+        specs=$(.lefthook/map_specs.rb)
+        if [ -n "$specs" ]; then
+          echo "Running specs for changed files..."
+          bundle exec rspec $specs --format progress
+        else
+          echo "No changed lib/ files, skipping tests"
+        fi
     quality-review:
       run: |
         staged_ruby=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rb$' || true)

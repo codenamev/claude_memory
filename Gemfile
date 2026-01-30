@@ -9,6 +9,7 @@ gem "irb"
 gem "rake", "~> 13.0"
 
 gem "rspec", "~> 3.0"
+gem "parallel_tests"
 
 gem "standard", "~> 1.3"
 
