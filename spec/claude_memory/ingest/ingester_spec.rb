@@ -255,6 +255,29 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
           )
         }.to raise_error(StandardError, /Ingestion failed/)
       end
+
+      it "retries on Sequel::DatabaseError with 'database is locked' message" do
+        File.write(transcript_path, "test content\n")
+
+        attempt_count = 0
+        allow(store.db).to receive(:transaction).and_wrap_original do |method, *args, &block|
+          attempt_count += 1
+          if attempt_count < 3
+            # Simulate the exact error from the hooks: Sequel wrapping Extralite::Error
+            raise Sequel::DatabaseError.new("database is locked")
+          end
+          method.call(*args, &block)
+        end
+
+        result = ingester.ingest(
+          source: "claude_code",
+          session_id: "sess-1",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:status]).to eq(:ingested)
+        expect(attempt_count).to eq(3)
+      end
     end
   end
 end

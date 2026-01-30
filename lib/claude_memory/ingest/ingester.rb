@@ -88,6 +88,7 @@ module ClaudeMemory
       # Retry database operations with exponential backoff + jitter
       # This handles concurrent access when MCP server and hooks both write simultaneously
       # With busy_timeout=30000ms, each attempt waits up to 30s before raising BusyError
+      # Handles both "busy" and "locked" error messages from SQLite/Extralite
       # Total potential wait time: 30s * 10 attempts + backoff delays = ~5 minutes max
       def with_retry(max_attempts: 10, base_delay: 0.2, max_delay: 5.0)
         attempt = 0
@@ -95,8 +96,10 @@ module ClaudeMemory
           attempt += 1
           yield
         rescue Extralite::BusyError, Sequel::DatabaseError => e
-          # Handle busy errors from extralite adapter
-          is_busy = e.is_a?(Extralite::BusyError) || e.message.include?("busy")
+          # Handle busy/locked errors from extralite adapter
+          is_busy = e.is_a?(Extralite::BusyError) ||
+            e.message.include?("busy") ||
+            e.message.include?("locked")
           if is_busy && attempt < max_attempts
             # Exponential backoff with jitter to avoid thundering herd
             exponential_delay = [base_delay * (2**(attempt - 1)), max_delay].min
@@ -105,9 +108,10 @@ module ClaudeMemory
             sleep(total_delay)
             retry
           elsif is_busy
+            # Max attempts reached, give up
             raise
           else
-            # Not a busy error, re-raise immediately
+            # Not a busy/locked error, re-raise immediately
             raise
           end
         end
