@@ -11,6 +11,10 @@ ClaudeMemory is a Ruby gem that provides long-term, self-managed memory for Clau
 - Sequel (~> 5.0) for database access
 - Extralite (~> 2.14) for high-performance SQLite storage
 
+## Working with This Codebase
+
+**Check memory before exploring code.** Use `memory.recall`, `memory.decisions`, `memory.architecture`, or `memory.conventions` to find existing knowledge before reading files.
+
 ## Development Commands
 
 ### Setup
@@ -48,6 +52,18 @@ bundle exec rake release # Tag + push to RubyGems (requires credentials)
 # Or via bundle exec
 bundle exec claude-memory <command>
 ```
+
+### Evals
+```bash
+# Run automated evaluation suite
+./bin/run-evals                # Run all evals with summary report
+
+# Or run directly with RSpec
+bundle exec rspec spec/evals/  # Run all eval scenarios
+bundle exec rspec --tag eval   # Run only eval-tagged tests
+```
+
+The eval framework tests ClaudeMemory's effectiveness by comparing baseline (no memory) vs memory-enabled responses. See `spec/evals/README.md` for details.
 
 ## Architecture
 
