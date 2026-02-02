@@ -17,7 +17,8 @@ module ClaudeMemory
               properties: {
                 query: {type: "string", description: "Search query for existing knowledge (e.g., 'authentication flow', 'error handling', 'database setup')"},
                 limit: {type: "integer", description: "Max results", default: 10},
-                scope: {type: "string", enum: ["all", "global", "project"], description: "Filter by scope: 'all' (default), 'global', or 'project'", default: "all"}
+                scope: {type: "string", enum: ["all", "global", "project"], description: "Filter by scope: 'all' (default), 'global', or 'project'", default: "all"},
+                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses", default: false}
               },
               required: ["query"]
             }
@@ -240,7 +241,8 @@ module ClaudeMemory
                 query: {type: "string", description: "Search query"},
                 mode: {type: "string", enum: ["vector", "text", "both"], default: "both", description: "Search mode: vector (embeddings), text (FTS), or both (hybrid)"},
                 limit: {type: "integer", default: 10, description: "Maximum results to return"},
-                scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"}
+                scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"},
+                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses", default: false}
               },
               required: ["query"]
             }
@@ -259,7 +261,8 @@ module ClaudeMemory
                   description: "2-5 concepts that must all be present"
                 },
                 limit: {type: "integer", default: 10, description: "Maximum results to return"},
-                scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"}
+                scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"},
+                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses", default: false}
               },
               required: ["concepts"]
             }

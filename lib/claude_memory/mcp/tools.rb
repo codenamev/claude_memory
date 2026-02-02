@@ -79,8 +79,9 @@ module ClaudeMemory
 
         scope = extract_scope(args)
         limit = extract_limit(args)
+        compact = args["compact"] == true
         results = @recall.query(args["query"], limit: limit, scope: scope)
-        ResponseFormatter.format_recall_results(results)
+        ResponseFormatter.format_recall_results(results, compact: compact)
       rescue Sequel::DatabaseError, Sequel::DatabaseConnectionError, SQLite3::CantOpenException, Errno::ENOENT => e
         database_not_found_error(e)
       end
@@ -348,20 +349,22 @@ module ClaudeMemory
         mode = (args["mode"] || "both").to_sym
         scope = extract_scope(args)
         limit = extract_limit(args)
+        compact = args["compact"] == true
 
         results = @recall.query_semantic(query, limit: limit, scope: scope, mode: mode)
-        ResponseFormatter.format_semantic_results(query, mode.to_s, scope, results)
+        ResponseFormatter.format_semantic_results(query, mode.to_s, scope, results, compact: compact)
       end
 
       def search_concepts(args)
         concepts = args["concepts"]
         scope = extract_scope(args)
         limit = extract_limit(args)
+        compact = args["compact"] == true
 
         return {error: "Must provide 2-5 concepts"} unless (2..5).cover?(concepts.size)
 
         results = @recall.query_concepts(concepts, limit: limit, scope: scope)
-        ResponseFormatter.format_concept_results(concepts, scope, results)
+        ResponseFormatter.format_concept_results(concepts, scope, results, compact: compact)
       end
 
       def databases_exist?

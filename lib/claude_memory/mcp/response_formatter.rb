@@ -9,26 +9,29 @@ module ClaudeMemory
     class ResponseFormatter
       # Format recall query results into MCP response
       # @param results [Array<Hash>] Recall results with :fact and :receipts
+      # @param compact [Boolean] Omit receipts for smaller responses
       # @return [Hash] MCP response with facts array
-      def self.format_recall_results(results)
+      def self.format_recall_results(results, compact: false)
         {
-          facts: results.map { |r| format_recall_fact(r) }
+          facts: results.map { |r| format_recall_fact(r, compact: compact) }
         }
       end
 
       # Format single recall fact result
       # @param result [Hash] Single result with :fact, :receipts, :source
+      # @param compact [Boolean] Omit receipts
       # @return [Hash] Formatted fact for MCP response
-      def self.format_recall_fact(result)
-        {
+      def self.format_recall_fact(result, compact: false)
+        fact = {
           id: result[:fact][:id],
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
           status: result[:fact][:status],
-          source: result[:source],
-          receipts: result[:receipts].map { |p| format_receipt(p) }
+          source: result[:source]
         }
+        fact[:receipts] = result[:receipts].map { |p| format_receipt(p) } unless compact
+        fact
       end
 
       # Format index query results with token estimates
@@ -204,52 +207,57 @@ module ClaudeMemory
       # @param mode [String] Search mode (vector, text, both)
       # @param scope [String] Scope
       # @param results [Array<Hash>] Results with similarity scores
+      # @param compact [Boolean] Omit receipts for smaller responses
       # @return [Hash] Formatted semantic search response
-      def self.format_semantic_results(query, mode, scope, results)
+      def self.format_semantic_results(query, mode, scope, results, compact: false)
         {
           query: query,
           mode: mode,
           scope: scope,
           count: results.size,
-          facts: results.map { |r| format_semantic_fact(r) }
+          facts: results.map { |r| format_semantic_fact(r, compact: compact) }
         }
       end
 
       # Format single semantic search fact with similarity
       # @param result [Hash] Result with fact, receipts, and similarity
+      # @param compact [Boolean] Omit receipts
       # @return [Hash] Formatted fact with similarity
-      def self.format_semantic_fact(result)
-        {
+      def self.format_semantic_fact(result, compact: false)
+        fact = {
           id: result[:fact][:id],
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
           scope: result[:fact][:scope],
           source: result[:source],
-          similarity: result[:similarity],
-          receipts: result[:receipts].map { |r| format_receipt(r) }
+          similarity: result[:similarity]
         }
+        fact[:receipts] = result[:receipts].map { |r| format_receipt(r) } unless compact
+        fact
       end
 
       # Format concept search results
       # @param concepts [Array<String>] Concepts searched
       # @param scope [String] Scope
       # @param results [Array<Hash>] Results with similarity scores
+      # @param compact [Boolean] Omit receipts for smaller responses
       # @return [Hash] Formatted concept search response
-      def self.format_concept_results(concepts, scope, results)
+      def self.format_concept_results(concepts, scope, results, compact: false)
         {
           concepts: concepts,
           scope: scope,
           count: results.size,
-          facts: results.map { |r| format_concept_fact(r) }
+          facts: results.map { |r| format_concept_fact(r, compact: compact) }
         }
       end
 
       # Format single concept search fact with multi-concept similarity
       # @param result [Hash] Result with average and per-concept similarities
+      # @param compact [Boolean] Omit receipts
       # @return [Hash] Formatted fact with concept similarities
-      def self.format_concept_fact(result)
-        {
+      def self.format_concept_fact(result, compact: false)
+        fact = {
           id: result[:fact][:id],
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
@@ -257,9 +265,10 @@ module ClaudeMemory
           scope: result[:fact][:scope],
           source: result[:source],
           average_similarity: result[:similarity],
-          concept_similarities: result[:concept_similarities],
-          receipts: result[:receipts].map { |r| format_receipt(r) }
+          concept_similarities: result[:concept_similarities]
         }
+        fact[:receipts] = result[:receipts].map { |r| format_receipt(r) } unless compact
+        fact
       end
 
       # Format shortcut query results (decisions, architecture, etc.)

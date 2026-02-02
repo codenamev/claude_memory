@@ -53,6 +53,20 @@ RSpec.describe ClaudeMemory::MCP::ResponseFormatter do
       expect(fact[:receipts].length).to eq(1)
     end
 
+    it "omits receipts in compact mode" do
+      result = {
+        fact: {id: 1, subject_name: "repo", predicate: "uses", object_literal: "Ruby", status: "active"},
+        source: :project,
+        receipts: [{quote: "We use Ruby", strength: "stated"}]
+      }
+
+      fact = described_class.format_recall_fact(result, compact: true)
+
+      expect(fact[:id]).to eq(1)
+      expect(fact[:subject]).to eq("repo")
+      expect(fact).not_to have_key(:receipts)
+    end
+
     it "formats multiple receipts" do
       result = {
         fact: {id: 1, subject_name: "repo", predicate: "uses", object_literal: "Ruby", status: "active"},
@@ -453,6 +467,20 @@ RSpec.describe ClaudeMemory::MCP::ResponseFormatter do
       expect(formatted[:similarity]).to eq(0.87)
       expect(formatted[:receipts].length).to eq(1)
     end
+
+    it "omits receipts in compact mode" do
+      result = {
+        fact: {id: 10, subject_name: "app", predicate: "uses", object_literal: "Rails", scope: "project"},
+        source: :project,
+        similarity: 0.87,
+        receipts: [{quote: "Built with Rails", strength: "stated"}]
+      }
+
+      formatted = described_class.format_semantic_fact(result, compact: true)
+
+      expect(formatted[:similarity]).to eq(0.87)
+      expect(formatted).not_to have_key(:receipts)
+    end
   end
 
   describe ".format_concept_results" do
@@ -495,6 +523,21 @@ RSpec.describe ClaudeMemory::MCP::ResponseFormatter do
       expect(formatted[:average_similarity]).to eq(0.88)
       expect(formatted[:concept_similarities]).to eq({"Rails" => 0.9, "Postgres" => 0.86})
       expect(formatted[:receipts].length).to eq(1)
+    end
+
+    it "omits receipts in compact mode" do
+      result = {
+        fact: {id: 5, subject_name: "app", predicate: "uses", object_literal: "Rails + Postgres", scope: "project"},
+        source: :project,
+        similarity: 0.88,
+        concept_similarities: {"Rails" => 0.9, "Postgres" => 0.86},
+        receipts: [{quote: "Using Rails with Postgres", strength: "stated"}]
+      }
+
+      formatted = described_class.format_concept_fact(result, compact: true)
+
+      expect(formatted[:average_similarity]).to eq(0.88)
+      expect(formatted).not_to have_key(:receipts)
     end
   end
 
