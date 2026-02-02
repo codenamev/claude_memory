@@ -27,7 +27,8 @@
       "Bash(wc:*)",
       "mcp__plugin_claude-memory_memory__memory_architecture",
       "mcp__plugin_claude-memory_memory__memory_recall_index",
-      "Bash(./bin/run-evals:*)"
+      "Bash(./bin/run-evals:*)",
+      "WebSearch"
     ]
   },
   "enableAllProjectMcpServers": true
