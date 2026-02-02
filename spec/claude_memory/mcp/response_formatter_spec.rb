@@ -261,6 +261,7 @@ RSpec.describe ClaudeMemory::MCP::ResponseFormatter do
       expect(formatted[:strength]).to eq("stated")
       expect(formatted[:session_id]).to eq("session-123")
       expect(formatted[:occurred_at]).to eq("2024-01-15T14:30:00Z")
+      expect(formatted[:occurred_ago]).to be_a(String)
     end
   end
 
@@ -307,6 +308,7 @@ RSpec.describe ClaudeMemory::MCP::ResponseFormatter do
       expect(formatted[:object]).to eq("PostgreSQL")
       expect(formatted[:status]).to eq("active")
       expect(formatted[:created_at]).to eq("2024-01-15T14:30:00Z")
+      expect(formatted[:created_ago]).to be_a(String)
       expect(formatted[:source]).to eq(:project)
     end
   end

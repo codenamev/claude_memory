@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../core/relative_time"
+
 module ClaudeMemory
   module MCP
     # Pure logic for formatting domain objects into MCP tool responses
@@ -76,6 +78,7 @@ module ClaudeMemory
             object: explanation[:fact][:object_literal],
             status: explanation[:fact][:status],
             valid_from: explanation[:fact][:valid_from],
+            valid_from_ago: Core::RelativeTime.format(explanation[:fact][:valid_from]),
             valid_to: explanation[:fact][:valid_to]
           },
           source: scope,
@@ -100,6 +103,7 @@ module ClaudeMemory
             confidence: explanation[:fact][:confidence],
             scope: explanation[:fact][:scope],
             valid_from: explanation[:fact][:valid_from],
+            valid_from_ago: Core::RelativeTime.format(explanation[:fact][:valid_from]),
             valid_to: explanation[:fact][:valid_to]
           },
           receipts: explanation[:receipts].map { |r| format_detailed_receipt(r) },
@@ -126,7 +130,8 @@ module ClaudeMemory
           quote: receipt[:quote],
           strength: receipt[:strength],
           session_id: receipt[:session_id],
-          occurred_at: receipt[:occurred_at]
+          occurred_at: receipt[:occurred_at],
+          occurred_ago: Core::RelativeTime.format(receipt[:occurred_at])
         }
       end
 
@@ -151,6 +156,7 @@ module ClaudeMemory
           object: change[:object_literal],
           status: change[:status],
           created_at: change[:created_at],
+          created_ago: Core::RelativeTime.format(change[:created_at]),
           source: change[:source]
         }
       end
