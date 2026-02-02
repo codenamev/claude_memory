@@ -6,6 +6,7 @@
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
 - *[yoanbernabeu/grepai](https://github.com/yoanbernabeu/grepai) - Semantic code search with vector embeddings*
 - *[supermemoryai/claude-supermemory](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed persistent memory plugin*
+- *[tobi/qmd](https://github.com/tobi/qmd) - On-device hybrid search engine (updated 2026-02-02)*
 
 This document identifies design patterns and features from claude-mem and episodic-memory that could improve claude_memory. Implemented improvements have been removed from this document.
 
@@ -877,6 +878,44 @@ Key remaining items:
 
 ---
 
+## QMD Study Update (2026-02-02)
+
+Source: docs/influence/qmd.md (updated)
+
+Re-analyzed QMD after significant project evolution: now 5,700+ stars, Claude Code plugin distribution, custom fine-tuned query expansion model (SFT + GRPO), MCP structured content pattern, and YAML-based collection management. Previous recommendations (sqlite-vec, RRF, docids, smart expansion) remain valid and unimplemented.
+
+### New High Priority Recommendations
+
+- [ ] **Claude Code Plugin Distribution Format** ⭐: Package ClaudeMemory as marketplace plugin for single-command installation
+  - Value: 10x easier installation (one command vs multi-step gem + MCP + hook config)
+  - Evidence: `.claude-plugin/marketplace.json` — complete plugin spec with MCP server bundling and skill definitions
+  - Implementation: Create `.claude-plugin/marketplace.json`, skill definition with `allowed-tools: mcp__claude-memory__*`, inline health check
+  - Effort: 2-3 days
+
+- [ ] **MCP Structured Content Pattern** ⭐: Return dual human-readable text + machine-parseable JSON from all MCP tools
+  - Value: Better Claude tool consumption — text summaries for simple use, JSON for structured processing
+  - Evidence: `mcp.ts:288-291` — `{ content: [text], structuredContent: {results} }` pattern
+  - Implementation: Update all 18 MCP tool handlers to return both `content` and `structuredContent`
+  - Effort: 1-2 days
+
+- [ ] **MCP Query Guide Prompt** ⭐: Register prompt teaching Claude when to use recall vs recall_semantic vs search_concepts
+  - Value: Improved tool selection quality without per-query instructions
+  - Evidence: `mcp.ts:172-252` — registered prompt with search strategy, score interpretation, workflow
+  - Implementation: Register `memory_guide` prompt in MCP server
+  - Effort: 4-6 hours
+
+- [ ] **Inline Status Check in Skills**: Run `claude-memory doctor --brief` on skill load for immediate health feedback
+  - Value: Users see memory health before tool usage
+  - Evidence: `SKILL.md:18` — `!` prefix runs command during skill load
+  - Effort: 1-2 hours
+
+### New Findings (Not Recommended for Adoption)
+
+- **Custom Fine-Tuned Query Expansion** (Qwen3-1.7B, SFT → GRPO): Impressive two-stage training for structured lex/vec/hyde output routing. Reject for our use case (1.7B model too heavy for fact retrieval). Good reference for future distiller reward function design.
+- **Session-Scoped LLM Lifecycle** (`ILLMSession` with AbortSignal): Good pattern to reference if we ever add local LLM integration for distillation.
+
+---
+
 ## QMD-Inspired Improvements (2026-01-26)
 
 Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizations for search quality and performance. QMD is an on-device markdown search engine with hybrid BM25 + vector + LLM reranking, achieving 50%+ Hit@3 improvement over BM25-only search.
@@ -1190,4 +1229,4 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 
 *This document has been updated to reflect completed implementations. Fourteen major improvements have been successfully integrated: 6 from claude-mem and 8 from episodic-memory. ClaudeMemory now combines the best of both systems while maintaining its unique advantages in fact-based knowledge representation and truth maintenance.*
 
-*Last updated: 2026-02-02 - Added Claude-Supermemory study (context injection, tool compression, relative times)*
+*Last updated: 2026-02-02 - Updated QMD study (plugin distribution, structured MCP content, query guide prompt, fine-tuned model analysis)*
