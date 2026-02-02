@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require_relative "text_summary"
 
 module ClaudeMemory
   module MCP
@@ -104,13 +105,16 @@ module ClaudeMemory
         # Connections are automatically reopened on next use
         release_connections
 
+        text_summary = TextSummary.for_tool(name, result)
+
         {
           jsonrpc: "2.0",
           id: id,
           result: {
             content: [
-              {type: "text", text: JSON.generate(result)}
-            ]
+              {type: "text", text: text_summary}
+            ],
+            structuredContent: result
           }
         }
       end

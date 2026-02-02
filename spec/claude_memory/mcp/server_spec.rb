@@ -53,7 +53,7 @@ RSpec.describe ClaudeMemory::MCP::Server do
   end
 
   describe "tools/call" do
-    it "calls a tool and returns result" do
+    it "returns text summary in content" do
       response = send_request({
         jsonrpc: "2.0",
         id: 3,
@@ -66,8 +66,23 @@ RSpec.describe ClaudeMemory::MCP::Server do
 
       content = response["result"]["content"]
       expect(content.first["type"]).to eq("text")
-      result = JSON.parse(content.first["text"])
-      expect(result["databases"]["legacy"]["schema_version"]).to eq(7)
+      expect(content.first["text"]).to include("Memory status:")
+    end
+
+    it "returns structured data in structuredContent" do
+      response = send_request({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "memory.status",
+          arguments: {}
+        }
+      })
+
+      structured = response["result"]["structuredContent"]
+      expect(structured).to be_a(Hash)
+      expect(structured["databases"]["legacy"]["schema_version"]).to eq(7)
     end
   end
 
