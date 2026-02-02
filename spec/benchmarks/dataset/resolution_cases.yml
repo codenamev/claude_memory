@@ -1,0 +1,1428 @@
+# DevMemBench Resolution Cases
+# ~100 FEVER-inspired truth maintenance scenarios
+#
+# Expected outcomes:
+#   supersede   - Single-value predicate, stated strength replaces existing
+#   conflict    - Single-value predicate, inferred contradicts stated
+#   accumulate  - Multi-value predicate, different values coexist
+#   corroborate - Same predicate+value, adds provenance
+
+# ============================================================
+# SUPERSESSION - Single-value, stated replaces existing (~25 cases)
+# ============================================================
+
+- id: r_sup_001
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "MySQL 5.7"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "PostgreSQL 15"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Single-value predicate with new stated value replaces old"
+
+- id: r_sup_002
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Rails 6.1"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Rails 7.1"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Framework version upgrade, stated strength triggers supersession"
+
+- id: r_sup_003
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Cookie-based session auth"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "JWT with refresh tokens"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Auth method migration, single-value predicate"
+
+- id: r_sup_004
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Heroku"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "AWS ECS Fargate"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Deployment platform migration"
+
+- id: r_sup_005
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "MongoDB 4.4"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "DynamoDB"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "NoSQL database switch, same predicate slot"
+
+- id: r_sup_006
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Express.js"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Fastify"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Node.js framework switch"
+
+- id: r_sup_007
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Basic auth"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "OAuth 2.0 with PKCE"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Auth upgrade from basic to OAuth"
+
+- id: r_sup_008
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "DigitalOcean Droplets"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Kubernetes on GKE"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Infrastructure modernization"
+
+- id: r_sup_009
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "SQLite for development"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "PostgreSQL for all environments"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Unifying database across environments"
+
+- id: r_sup_010
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Create React App"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Vite"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Build tool migration"
+
+- id: r_sup_011
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Webpack 4"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Webpack 5"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Bundler major version upgrade"
+
+- id: r_sup_012
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "SAML 2.0 SSO"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "OIDC with Auth0"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "SSO provider migration"
+
+- id: r_sup_013
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "AWS Lambda"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "AWS ECS Fargate"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Moving from serverless to containers"
+
+- id: r_sup_014
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Redis 5"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Redis 7"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Cache infrastructure version upgrade"
+
+- id: r_sup_015
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "React 17"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "React 18"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Frontend framework major upgrade"
+
+- id: r_sup_016
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Render"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Fly.io"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Hosting platform switch"
+
+- id: r_sup_017
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Cassandra"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "ScyllaDB"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Compatible database replacement for performance"
+
+- id: r_sup_018
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "API key authentication"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "mTLS certificates"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Security hardening from API keys to mTLS"
+
+# --- Supersession with explicit supersedes flag ---
+- id: r_sup_019
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "MySQL"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "PostgreSQL"
+    strength: inferred
+    supersedes: true
+  expected_outcome: supersede
+  rationale: "Explicit supersedes flag overrides inferred strength"
+
+- id: r_sup_020
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Django"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "FastAPI"
+    strength: inferred
+    supersedes: true
+  expected_outcome: supersede
+  rationale: "Explicit supersedes flag on framework change"
+
+- id: r_sup_021
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Docker Compose"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Kubernetes"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Orchestration upgrade"
+
+- id: r_sup_022
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "RabbitMQ"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Apache Kafka"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Message broker migration"
+
+- id: r_sup_023
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Mocha + Chai"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Vitest"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Test framework migration"
+
+- id: r_sup_024
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Firebase Auth"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Clerk"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Auth provider switch"
+
+- id: r_sup_025
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Netlify"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Vercel"
+    strength: stated
+  expected_outcome: supersede
+  rationale: "Frontend hosting migration"
+
+# ============================================================
+# CONFLICT - Single-value, inferred contradicts stated (~25 cases)
+# ============================================================
+
+- id: r_con_001
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "PostgreSQL"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "MySQL"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred fact contradicts stated database choice"
+
+- id: r_con_002
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Rails 7"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Sinatra"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred framework contradicts stated framework"
+
+- id: r_con_003
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "JWT tokens"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Session cookies"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred auth contradicts stated auth method"
+
+- id: r_con_004
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "AWS ECS"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Heroku"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred deployment contradicts stated platform"
+
+- id: r_con_005
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "DuckDB"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "SQLite"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred embedded DB contradicts stated choice"
+
+- id: r_con_006
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Next.js 14"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Remix"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred meta-framework contradicts stated"
+
+- id: r_con_007
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "OAuth 2.0"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "API keys"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred simpler auth contradicts OAuth"
+
+- id: r_con_008
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Kubernetes"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Docker Compose"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred local-style deployment contradicts K8s"
+
+- id: r_con_009
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Elasticsearch 8"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "OpenSearch"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred search engine fork contradicts stated"
+
+- id: r_con_010
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Polars"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Pandas"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred older DataFrame lib contradicts stated"
+
+- id: r_con_011
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Firestore"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "MongoDB"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred NoSQL DB contradicts stated Firestore"
+
+- id: r_con_012
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Airflow"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Prefect"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred orchestrator contradicts stated"
+
+- id: r_con_013
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "mTLS"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Bearer tokens"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred token auth contradicts mTLS"
+
+- id: r_con_014
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Vercel"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Netlify"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred hosting contradicts stated Vercel"
+
+- id: r_con_015
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "TimescaleDB"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "InfluxDB"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred time-series DB contradicts stated"
+
+- id: r_con_016
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "gRPC"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "REST with OpenAPI"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred API style contradicts stated gRPC"
+
+- id: r_con_017
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Passkeys (WebAuthn)"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Password + 2FA"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred traditional auth contradicts passkeys"
+
+- id: r_con_018
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "GKE"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "EKS"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred cloud provider contradicts stated"
+
+- id: r_con_019
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Neon Postgres"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Supabase"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred Postgres provider contradicts stated"
+
+- id: r_con_020
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Tailwind CSS"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "styled-components"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred CSS approach contradicts Tailwind"
+
+- id: r_con_021
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "etcd"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Consul KV"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred config store contradicts etcd"
+
+- id: r_con_022
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Sequel"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "ActiveRecord"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred ORM contradicts stated Sequel"
+
+- id: r_con_023
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "AWS IAM roles"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "Service accounts with keys"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred credential style contradicts IAM"
+
+- id: r_con_024
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Fly.io"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Railway"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred PaaS contradicts stated Fly.io"
+
+- id: r_con_025
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "RSpec"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Minitest"
+    strength: inferred
+  expected_outcome: conflict
+  rationale: "Inferred test framework contradicts RSpec"
+
+# ============================================================
+# ACCUMULATION - Multi-value predicate, different values (~25 cases)
+# ============================================================
+
+- id: r_acc_001
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use snake_case for methods"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use 2-space indentation"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Multi-value predicate, different conventions coexist"
+
+- id: r_acc_002
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use Result objects for errors"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Use FTS5 for search"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Multi-value predicate, different decisions coexist"
+
+- id: r_acc_003
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use frozen_string_literal"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use dependency injection for I/O"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Multiple conventions accumulate"
+
+- id: r_acc_004
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use dual-database architecture"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Use hooks for ingestion"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Multiple architectural decisions coexist"
+
+- id: r_acc_005
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use type hints for all functions"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use Pydantic v2 for validation"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Python conventions accumulate"
+
+- id: r_acc_006
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use functional components"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use strict TypeScript"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "React/TS conventions accumulate"
+
+- id: r_acc_007
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use PostgreSQL over MongoDB"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Use Sidekiq directly instead of ActiveJob"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Infrastructure decisions accumulate"
+
+- id: r_acc_008
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use table-driven tests"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use context.Context as first param"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Go conventions accumulate"
+
+- id: r_acc_009
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use conventional commits"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Require PR reviews"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Global conventions accumulate"
+
+- id: r_acc_010
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use Polars instead of Pandas"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Use Airflow over Prefect"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Data pipeline decisions accumulate"
+
+- id: r_acc_011
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Never commit secrets"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use semantic versioning"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Security and release conventions coexist"
+
+- id: r_acc_012
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use gRPC for inter-service communication"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Use OpenTelemetry for tracing"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Infrastructure decisions accumulate"
+
+- id: r_acc_013
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use pathlib.Path"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use structured logging"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Python conventions accumulate"
+
+- id: r_acc_014
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use CSS modules with Tailwind"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use barrel exports from feature directories"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Frontend conventions accumulate"
+
+- id: r_acc_015
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use Stripe Elements for payments"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Use TanStack Query over SWR"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Frontend decisions accumulate"
+
+- id: r_acc_016
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use golangci-lint"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Keep packages small"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Go quality conventions accumulate"
+
+- id: r_acc_017
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use error wrapping with %w"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use interfaces for dependencies"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Go patterns accumulate"
+
+- id: r_acc_018
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use Kubernetes operators"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Use Terraform for IaC"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Infrastructure decisions accumulate"
+
+- id: r_acc_019
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use service objects for business logic"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use strong parameters"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Rails conventions accumulate"
+
+- id: r_acc_020
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Domain objects must be immutable"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use null objects instead of nil checks"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Design pattern conventions accumulate"
+
+- id: r_acc_021
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use Extralite over sqlite3 gem"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Publish snapshots to .claude/rules/"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "ClaudeMemory architectural decisions accumulate"
+
+- id: r_acc_022
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Write ADRs for architectural decisions"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Keep CI under 10 minutes"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Process conventions accumulate"
+
+- id: r_acc_023
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Prefer composition over inheritance"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Write tests before fixing bugs"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Design and process conventions accumulate"
+
+- id: r_acc_024
+  existing_fact:
+    subject: repo
+    predicate: convention
+    object: "Use database constraints"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: convention
+    object: "Use ActiveModel::Serializer"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Rails data layer conventions accumulate"
+
+- id: r_acc_025
+  existing_fact:
+    subject: repo
+    predicate: decision
+    object: "Use WAL mode for SQLite"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: decision
+    object: "Use database transactions for multi-step ops"
+    strength: stated
+  expected_outcome: accumulate
+  rationale: "Database operation decisions accumulate"
+
+# ============================================================
+# CORROBORATION - Same predicate+value, adds provenance (~25 cases)
+# ============================================================
+
+- id: r_cor_001
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "PostgreSQL"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "PostgreSQL"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Same database mentioned again adds provenance"
+
+- id: r_cor_002
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Rails 7.1"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Rails 7.1"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Same framework mentioned again"
+
+- id: r_cor_003
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "JWT tokens"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "JWT tokens"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Same auth method confirmed"
+
+- id: r_cor_004
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "AWS ECS Fargate"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "AWS ECS Fargate"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Same deployment platform confirmed"
+
+- id: r_cor_005
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Redis"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Redis"
+    strength: inferred
+  expected_outcome: corroborate
+  rationale: "Same database, inferred confirmation still corroborates"
+
+- id: r_cor_006
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Sequel"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Sequel"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Same ORM mentioned in different context"
+
+- id: r_cor_007
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "SQLite"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "SQLite"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Same embedded DB confirmed"
+
+- id: r_cor_008
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "RSpec"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "RSpec"
+    strength: inferred
+  expected_outcome: corroborate
+  rationale: "Same test framework, inferred from Gemfile"
+
+- id: r_cor_009
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "OAuth 2.0"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "OAuth 2.0"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "OAuth mentioned in different conversation"
+
+- id: r_cor_010
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Vercel"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Vercel"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Deployment platform re-confirmed"
+
+- id: r_cor_011
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "DuckDB"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "DuckDB"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Analytical DB re-confirmed"
+
+- id: r_cor_012
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Polars"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Polars"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "DataFrame lib re-confirmed"
+
+- id: r_cor_013
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Firestore"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Firestore"
+    strength: inferred
+  expected_outcome: corroborate
+  rationale: "NoSQL DB inferred confirmation"
+
+- id: r_cor_014
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "mTLS"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "mTLS"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "mTLS re-confirmed"
+
+- id: r_cor_015
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Kubernetes"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "Kubernetes"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "K8s deployment confirmed again"
+
+# --- Case-insensitive corroboration ---
+- id: r_cor_016
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "PostgreSQL"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "postgresql"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Case-insensitive match should corroborate"
+
+- id: r_cor_017
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Next.js 14"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "next.js 14"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Case-insensitive match for framework"
+
+- id: r_cor_018
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "AWS ECS Fargate"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "aws ecs fargate"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Case-insensitive platform match"
+
+- id: r_cor_019
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Redis"
+    strength: inferred
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Redis"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Stated confirmation of previously inferred fact"
+
+- id: r_cor_020
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Airflow"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Airflow"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Orchestrator confirmed in different session"
+
+- id: r_cor_021
+  existing_fact:
+    subject: repo
+    predicate: auth_method
+    object: "AWS IAM roles"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: auth_method
+    object: "AWS IAM roles"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "IAM auth re-confirmed"
+
+- id: r_cor_022
+  existing_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "GKE"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: deployment_platform
+    object: "GKE"
+    strength: inferred
+  expected_outcome: corroborate
+  rationale: "Cloud provider inferred confirmation"
+
+- id: r_cor_023
+  existing_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Kafka"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_database
+    object: "Kafka"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Message broker re-confirmed"
+
+- id: r_cor_024
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "TanStack Query"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "TanStack Query"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "Data fetching library re-confirmed"
+
+- id: r_cor_025
+  existing_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Tailwind CSS"
+    strength: stated
+  incoming_fact:
+    subject: repo
+    predicate: uses_framework
+    object: "Tailwind CSS"
+    strength: stated
+  expected_outcome: corroborate
+  rationale: "CSS framework re-confirmed"

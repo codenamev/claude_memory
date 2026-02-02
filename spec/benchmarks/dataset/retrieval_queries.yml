@@ -1,0 +1,894 @@
+# DevMemBench Retrieval Queries
+# ~150 queries organized by difficulty level
+#
+# Difficulty levels:
+#   easy       - Keywords overlap with fact text (FTS5 should handle)
+#   medium     - Semantic match, different words (embedding should help)
+#   hard       - Cross-category or multi-fact reasoning
+#   abstention - Should return no relevant results
+#   temporal   - Newer fact should rank higher than superseded
+#   scope      - Tests project vs global ranking
+
+# ============================================================
+# EASY - Direct keyword overlap (~40 queries)
+# ============================================================
+
+- id: q_easy_001
+  query: "What database does the Acme API use?"
+  expected_facts: [ts_db_001]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_002
+  query: "What framework does the Acme API use?"
+  expected_facts: [ts_fw_001]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_003
+  query: "What caching solution does Acme API use?"
+  expected_facts: [ts_db_002]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_004
+  query: "What is the data pipeline orchestration tool?"
+  expected_facts: [ts_fw_003]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_005
+  query: "What testing framework does ClaudeMemory use?"
+  expected_facts: [ts_fw_011]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_006
+  query: "What linter does ClaudeMemory use?"
+  expected_facts: [ts_fw_012]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_007
+  query: "What frontend framework does shopfront use?"
+  expected_facts: [ts_fw_005]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_008
+  query: "What CSS framework does shopfront use?"
+  expected_facts: [ts_fw_007]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_009
+  query: "frozen_string_literal convention"
+  expected_facts: [cv_ruby_001]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_010
+  query: "What indentation does Ruby code use?"
+  expected_facts: [cv_ruby_002]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_011
+  query: "What RSpec syntax should be used?"
+  expected_facts: [cv_ruby_003]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_012
+  query: "How does ClaudeMemory handle errors?"
+  expected_facts: [dc_001]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_013
+  query: "dual database architecture"
+  expected_facts: [dc_002]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_014
+  query: "What search engine does ClaudeMemory use?"
+  expected_facts: [dc_003]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_015
+  query: "How are transcripts ingested?"
+  expected_facts: [dc_004]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_016
+  query: "What authentication method does the API use?"
+  expected_facts: [au_001]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_017
+  query: "Where is the shopfront deployed?"
+  expected_facts: [dp_003]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_018
+  query: "What deployment platform does infracore use?"
+  expected_facts: [dp_004]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_019
+  query: "TypeScript strict mode convention"
+  expected_facts: [cv_ts_002]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_020
+  query: "What type hints convention does the Python project have?"
+  expected_facts: [cv_python_001]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_021
+  query: "table-driven tests Go convention"
+  expected_facts: [cv_go_001]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_022
+  query: "What is the commit message format?"
+  expected_facts: [cv_global_001]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_023
+  query: "What data processing library does the pipeline use?"
+  expected_facts: [ts_fw_004]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_024
+  query: "How does shopfront validate API responses?"
+  expected_facts: [cv_ts_003]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_025
+  query: "What inter-service communication does infracore use?"
+  expected_facts: [ts_fw_009]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_026
+  query: "What is the Go error handling convention?"
+  expected_facts: [cv_go_003]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_027
+  query: "What is the background job processor?"
+  expected_facts: [ts_fw_002]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_028
+  query: "Sequel dataset methods convention"
+  expected_facts: [cv_ruby_004]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_029
+  query: "What logging library does Go use?"
+  expected_facts: [cv_go_007]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_030
+  query: "Where is the gem published?"
+  expected_facts: [dp_005]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_031
+  query: "Pydantic validation convention"
+  expected_facts: [cv_python_002]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_032
+  query: "What is the Python linter?"
+  expected_facts: [cv_python_003]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_033
+  query: "How does shopfront handle server state?"
+  expected_facts: [ts_fw_006]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_034
+  query: "What does infracore use for distributed tracing?"
+  expected_facts: [dc_016]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_035
+  query: "What payment solution does the frontend use?"
+  expected_facts: [dc_014]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_036
+  query: "How are infrastructure services deployed with GitOps?"
+  expected_facts: [dp_004]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_037
+  query: "service objects convention Rails"
+  expected_facts: [cv_ruby_005]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_038
+  query: "What database does ClaudeMemory use?"
+  expected_facts: [ts_db_007]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_039
+  query: "null object pattern convention"
+  expected_facts: [cv_ruby_010]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+- id: q_easy_040
+  query: "WAL mode SQLite decision"
+  expected_facts: [dc_025]
+  difficulty: easy
+  tests: [fts5, semantic, hybrid]
+
+# ============================================================
+# MEDIUM - Semantic match, different words (~40 queries)
+# ============================================================
+
+- id: q_med_001
+  query: "How do we persist data in the API?"
+  expected_facts: [ts_db_001]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_002
+  query: "What ORM layer is used for database access?"
+  expected_facts: [ts_fw_010]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_003
+  query: "How do we speed up repeated data lookups?"
+  expected_facts: [ts_db_002]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_004
+  query: "What tool schedules and runs data jobs?"
+  expected_facts: [ts_fw_003]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_005
+  query: "How should string mutability be handled in Ruby?"
+  expected_facts: [cv_ruby_001]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_006
+  query: "What is the preferred error flow pattern?"
+  expected_facts: [dc_001, cv_ruby_013]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_007
+  query: "How is memory organized across different projects?"
+  expected_facts: [dc_002]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_008
+  query: "How do services verify identity?"
+  expected_facts: [au_001, au_004]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_009
+  query: "Where does the application run in production?"
+  expected_facts: [dp_001]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_010
+  query: "How do we make sure code quality stays high?"
+  expected_facts: [ts_fw_012, cv_python_003, cv_go_004]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_011
+  query: "What are the rules for writing clean functions?"
+  expected_facts: [edge_overlap_001, edge_overlap_002]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_012
+  query: "How do components render on the server?"
+  expected_facts: [cv_ts_009, ts_fw_005]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_013
+  query: "How are external systems abstracted for testing?"
+  expected_facts: [cv_go_005, cv_ruby_008]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_014
+  query: "What approach to formatting whitespace is used?"
+  expected_facts: [cv_ruby_002, cv_global_009, edge_conflict_001]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_015
+  query: "How do we prevent data corruption in multi-step writes?"
+  expected_facts: [dc_024, dc_025]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_016
+  query: "What process runs before code is merged?"
+  expected_facts: [cv_global_002]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_017
+  query: "How are version numbers chosen?"
+  expected_facts: [cv_global_003]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_018
+  query: "How do we document major technical choices?"
+  expected_facts: [cv_global_004]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_019
+  query: "How do microservices talk to each other?"
+  expected_facts: [ts_fw_009, dc_015]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_020
+  query: "What keeps sensitive data out of the repo?"
+  expected_facts: [cv_global_007]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_021
+  query: "How are UI styles applied to components?"
+  expected_facts: [cv_ts_005, ts_fw_007]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_022
+  query: "What ensures data contracts are honored at runtime?"
+  expected_facts: [cv_ts_003, cv_python_002]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_023
+  query: "How is the system observable in production?"
+  expected_facts: [dc_016]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_024
+  query: "What tool manages cloud resources?"
+  expected_facts: [dc_023]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_025
+  query: "How are objects constructed with their collaborators?"
+  expected_facts: [cv_ruby_008, cv_go_008, cv_go_005]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_026
+  query: "How do we handle concurrent database access?"
+  expected_facts: [dc_025]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_027
+  query: "What prevents nil-related bugs?"
+  expected_facts: [cv_ruby_010]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_028
+  query: "How is the build toolchain managed?"
+  expected_facts: [dc_011]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_029
+  query: "What approach is used for asynchronous processing?"
+  expected_facts: [ts_fw_002, cv_python_008]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_030
+  query: "How do we validate data before it reaches downstream?"
+  expected_facts: [dc_021]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_031
+  query: "How should test code be organized?"
+  expected_facts: [cv_ts_004, cv_python_004]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_032
+  query: "What message broker handles event streams?"
+  expected_facts: [ts_db_009]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_033
+  query: "What approach prevents excessive method decomposition?"
+  expected_facts: [edge_overlap_001, edge_overlap_002]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_034
+  query: "How are module boundaries defined in the frontend?"
+  expected_facts: [cv_ts_006]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_035
+  query: "How is configuration stored for microservices?"
+  expected_facts: [ts_db_006, cv_global_006]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_036
+  query: "What is the approach to class design?"
+  expected_facts: [cv_global_008]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_037
+  query: "How do we fix bugs reliably?"
+  expected_facts: [cv_global_010]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_038
+  query: "How do objects ensure they cannot be changed after creation?"
+  expected_facts: [cv_ruby_009, cv_python_007]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_039
+  query: "What practices keep builds fast?"
+  expected_facts: [cv_global_005]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+- id: q_med_040
+  query: "How is structured output generated from logs?"
+  expected_facts: [cv_python_006, cv_go_007]
+  difficulty: medium
+  tests: [semantic, hybrid]
+
+# ============================================================
+# HARD - Cross-category, multi-fact reasoning (~30 queries)
+# ============================================================
+
+- id: q_hard_001
+  query: "Describe the complete technology stack for the Acme API"
+  expected_facts: [ts_db_001, ts_fw_001, ts_fw_002, ts_fw_013, au_001, dp_001]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_002
+  query: "What technology choices has the dataflow team made?"
+  expected_facts: [dc_009, dc_010, dc_011, dc_021]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_003
+  query: "How do different projects handle deployment?"
+  expected_facts: [dp_001, dp_002, dp_003, dp_004, dp_005]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_004
+  query: "Compare authentication approaches across all services"
+  expected_facts: [au_001, au_002, au_003, au_004, au_005]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_005
+  query: "What are all the Ruby-related conventions and decisions?"
+  expected_facts: [cv_ruby_001, cv_ruby_002, cv_ruby_003, cv_ruby_004, cv_ruby_005]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_006
+  query: "How does the team ensure code quality across all projects?"
+  expected_facts: [ts_fw_012, cv_python_003, cv_go_004, cv_global_002, cv_global_005]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_007
+  query: "What is the full architecture of ClaudeMemory?"
+  expected_facts: [ts_db_007, ts_fw_010, ts_fw_011, dc_002, dc_003, dc_004]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_008
+  query: "What databases are used across all projects?"
+  expected_facts: [ts_db_001, ts_db_003, ts_db_005, ts_db_006, ts_db_007]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_009
+  query: "How do all projects handle testing?"
+  expected_facts: [cv_ruby_003, cv_python_004, cv_ts_004, cv_go_001, ts_fw_011]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_010
+  query: "What naming conventions exist across the codebase?"
+  expected_facts: [edge_sim_001, edge_sim_002, cv_ruby_007]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_011
+  query: "How is the shopfront frontend architected?"
+  expected_facts: [ts_fw_005, ts_fw_006, ts_fw_007, cv_ts_001, cv_ts_009]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_012
+  query: "What are the data storage and processing patterns for dataflow?"
+  expected_facts: [ts_db_003, ts_db_004, ts_fw_004, ts_db_009]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_013
+  query: "What security practices are in place?"
+  expected_facts: [au_001, au_004, cv_global_007, cv_ruby_006]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_014
+  query: "What infrastructure management tools does the team use?"
+  expected_facts: [dc_023, dc_017, dp_004]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_015
+  query: "How do projects handle dependency injection?"
+  expected_facts: [cv_ruby_008, cv_go_005, cv_go_008]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_016
+  query: "What are the error handling strategies across projects?"
+  expected_facts: [dc_001, cv_ruby_013, cv_go_003]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_017
+  query: "How do different projects handle data validation?"
+  expected_facts: [cv_ts_003, cv_python_002, dc_021, cv_ruby_012]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_018
+  query: "What are all the global team conventions?"
+  expected_facts: [cv_global_001, cv_global_002, cv_global_003, cv_global_004, cv_global_005, cv_global_006, cv_global_007, cv_global_008, cv_global_009, cv_global_010]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_019
+  query: "What design patterns are used in ClaudeMemory?"
+  expected_facts: [dc_001, cv_ruby_009, cv_ruby_010, cv_ruby_008]
+  difficulty: hard
+  tests: [hybrid]
+
+- id: q_hard_020
+  query: "What are the observability and monitoring choices?"
+  expected_facts: [dc_016, cv_python_006, cv_go_007, ts_db_010]
+  difficulty: hard
+  tests: [hybrid]
+
+# ============================================================
+# ABSTENTION - Should return nothing relevant (~20 queries)
+# ============================================================
+
+- id: q_abs_001
+  query: "What monitoring tool does this project use?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_002
+  query: "What mobile framework does the team use?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_003
+  query: "What GraphQL schema does the API expose?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_004
+  query: "What machine learning models are deployed?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_005
+  query: "What blockchain integration exists?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_006
+  query: "What real-time collaboration features are supported?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_007
+  query: "What video processing pipeline is used?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_008
+  query: "What email delivery service does the team use?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_009
+  query: "What CMS powers the marketing site?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_010
+  query: "What WebSocket server handles chat?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_011
+  query: "What PDF generation library is used?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_012
+  query: "What A/B testing platform is configured?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_013
+  query: "What internationalization library handles translations?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_014
+  query: "What feature flag system is in place?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_015
+  query: "What CRON scheduling library is used?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_016
+  query: "What geolocation service does the app use?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_017
+  query: "What image optimization pipeline exists?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_018
+  query: "What accessibility testing tool is configured?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_019
+  query: "What load balancer sits in front of the API?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+- id: q_abs_020
+  query: "What DNS provider manages the domain?"
+  expected_facts: []
+  difficulty: abstention
+  tests: [fts5, semantic, hybrid]
+
+# ============================================================
+# TEMPORAL - Newer fact should rank higher (~20 queries)
+# ============================================================
+
+- id: q_temp_001
+  query: "What primary database does the Acme API currently use?"
+  expected_facts: [ts_db_v2_011]
+  excluded_facts: [ts_db_v1_011]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_002
+  query: "What React version does the shopfront use now?"
+  expected_facts: [ts_fw_v2_014]
+  excluded_facts: [ts_fw_v1_014]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_003
+  query: "What is the current authentication method for the API?"
+  expected_facts: [au_v2_006]
+  excluded_facts: [au_v1_006]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_004
+  query: "Where is the API deployed right now?"
+  expected_facts: [dp_v2_006]
+  excluded_facts: [dp_v1_006]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_005
+  query: "What database did the API migrate to?"
+  expected_facts: [ts_db_v2_011]
+  excluded_facts: [ts_db_v1_011]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_006
+  query: "What hosting platform replaced Heroku?"
+  expected_facts: [dp_v2_006]
+  excluded_facts: [dp_v1_006]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_007
+  query: "What is the latest React component pattern?"
+  expected_facts: [ts_fw_v2_014]
+  excluded_facts: [ts_fw_v1_014]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_008
+  query: "How does authentication work after the migration?"
+  expected_facts: [au_v2_006]
+  excluded_facts: [au_v1_006]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_009
+  query: "What is the current API deployment infrastructure?"
+  expected_facts: [dp_v2_006]
+  excluded_facts: [dp_v1_006]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_010
+  query: "What database engine powers the Acme API today?"
+  expected_facts: [ts_db_v2_011]
+  excluded_facts: [ts_db_v1_011]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_011
+  query: "What frontend rendering model is used currently?"
+  expected_facts: [ts_fw_v2_014]
+  excluded_facts: [ts_fw_v1_014]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_012
+  query: "How has the auth system evolved?"
+  expected_facts: [au_v2_006]
+  excluded_facts: [au_v1_006]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_013
+  query: "What replaced MySQL?"
+  expected_facts: [ts_db_v2_011]
+  excluded_facts: [ts_db_v1_011]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_014
+  query: "What replaced cookie-based authentication?"
+  expected_facts: [au_v2_006]
+  excluded_facts: [au_v1_006]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+- id: q_temp_015
+  query: "What replaced class components in the frontend?"
+  expected_facts: [ts_fw_v2_014]
+  excluded_facts: [ts_fw_v1_014]
+  difficulty: temporal
+  tests: [fts5, semantic, hybrid]
+
+# ============================================================
+# SCOPE - Project vs global ranking (~10 queries)
+# ============================================================
+
+- id: q_scope_001
+  query: "What indentation should be used?"
+  expected_facts: [cv_ruby_002, cv_global_009, edge_conflict_001]
+  preferred_scope: project
+  difficulty: scope
+  tests: [fts5, semantic, hybrid]
+
+- id: q_scope_002
+  query: "What are the coding conventions?"
+  expected_facts: [cv_ruby_001, cv_ruby_002, cv_global_001, cv_global_008]
+  preferred_scope: project
+  difficulty: scope
+  tests: [fts5, semantic, hybrid]
+
+- id: q_scope_003
+  query: "How should PR reviews work?"
+  expected_facts: [cv_global_002]
+  preferred_scope: global
+  difficulty: scope
+  tests: [fts5, semantic, hybrid]
+
+- id: q_scope_004
+  query: "What design principles should guide code structure?"
+  expected_facts: [cv_global_008, cv_go_006]
+  preferred_scope: global
+  difficulty: scope
+  tests: [fts5, semantic, hybrid]
+
+- id: q_scope_005
+  query: "How should secrets be managed?"
+  expected_facts: [cv_global_007, cv_global_006]
+  preferred_scope: global
+  difficulty: scope
+  tests: [fts5, semantic, hybrid]

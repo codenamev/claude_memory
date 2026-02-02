@@ -1,0 +1,1048 @@
+# DevMemBench Facts Dataset
+# ~200 developer-domain facts across 6 predicate types and 5 simulated projects
+#
+# Predicate cardinalities (from PredicatePolicy):
+#   single-value: uses_database, uses_framework, auth_method, deployment_platform
+#   multi-value:  convention, decision
+#
+# Projects:
+#   - acme_api:     Ruby/Rails API service
+#   - dataflow:     Python data pipeline
+#   - shopfront:    TypeScript/React e-commerce frontend
+#   - infracore:    Go infrastructure service
+#   - claude_mem:   Ruby gem (mirrors this project)
+
+# ============================================================
+# TECH STACK - uses_database (~25 facts)
+# ============================================================
+
+- id: ts_db_001
+  subject: acme_api
+  predicate: uses_database
+  object: "PostgreSQL 15 for primary relational data storage"
+  text: "We use PostgreSQL 15 as our primary database for all relational data in the Acme API."
+  scope: project
+  fts_keywords: "database sql relational storage postgres"
+
+- id: ts_db_002
+  subject: acme_api
+  predicate: uses_database
+  object: "Redis 7 for caching and session storage"
+  text: "Redis 7 is used for caching frequently accessed data and storing user sessions."
+  scope: project
+  fts_keywords: "cache session store redis nosql"
+
+- id: ts_db_003
+  subject: dataflow
+  predicate: uses_database
+  object: "Apache Parquet files on S3 for data lake storage"
+  text: "The data pipeline writes output to Parquet files stored in S3 for the data lake."
+  scope: project
+  fts_keywords: "data lake parquet s3 columnar storage"
+
+- id: ts_db_004
+  subject: dataflow
+  predicate: uses_database
+  object: "DuckDB for local analytical queries"
+  text: "We use DuckDB for running analytical queries locally during development and testing."
+  scope: project
+  fts_keywords: "analytics query olap duckdb embedded"
+
+- id: ts_db_005
+  subject: shopfront
+  predicate: uses_database
+  object: "Firestore for real-time product catalog"
+  text: "The product catalog is stored in Firestore for real-time sync across clients."
+  scope: project
+  fts_keywords: "firestore nosql realtime catalog firebase"
+
+- id: ts_db_006
+  subject: infracore
+  predicate: uses_database
+  object: "etcd for distributed configuration storage"
+  text: "Service configuration is stored in etcd for distributed consensus."
+  scope: project
+  fts_keywords: "etcd distributed config consensus key-value"
+
+- id: ts_db_007
+  subject: claude_mem
+  predicate: uses_database
+  object: "SQLite with Extralite adapter for embedded storage"
+  text: "ClaudeMemory uses SQLite via the Extralite adapter for high-performance embedded storage."
+  scope: project
+  fts_keywords: "sqlite extralite embedded storage database"
+
+- id: ts_db_008
+  subject: acme_api
+  predicate: uses_database
+  object: "Elasticsearch 8 for full-text search"
+  text: "Full-text search across products and orders is powered by Elasticsearch 8."
+  scope: project
+  fts_keywords: "search fulltext elasticsearch index"
+
+- id: ts_db_009
+  subject: dataflow
+  predicate: uses_database
+  object: "Apache Kafka for event streaming"
+  text: "Events from source systems flow through Apache Kafka topics before pipeline processing."
+  scope: project
+  fts_keywords: "kafka streaming events queue message broker"
+
+- id: ts_db_010
+  subject: infracore
+  predicate: uses_database
+  object: "TimescaleDB for metrics time-series data"
+  text: "Infrastructure metrics are stored in TimescaleDB for efficient time-series queries."
+  scope: project
+  fts_keywords: "timescaledb timeseries metrics monitoring"
+
+# --- Temporal/versioned database facts for testing knowledge updates ---
+- id: ts_db_v1_011
+  subject: acme_api
+  predicate: uses_database
+  object: "MySQL 5.7 for primary data storage"
+  text: "The Acme API originally used MySQL 5.7 as its primary database."
+  scope: project
+  fts_keywords: "database mysql primary storage legacy"
+  status: superseded
+  valid_from: "2024-01-01T00:00:00Z"
+  valid_to: "2024-06-01T00:00:00Z"
+
+- id: ts_db_v2_011
+  subject: acme_api
+  predicate: uses_database
+  object: "PostgreSQL 15 for primary relational data storage"
+  text: "We migrated from MySQL to PostgreSQL 15 in June 2024 for better JSON support."
+  scope: project
+  fts_keywords: "database postgres migration primary storage"
+  supersedes: ts_db_v1_011
+  valid_from: "2024-06-01T00:00:00Z"
+
+# ============================================================
+# TECH STACK - uses_framework (~25 facts)
+# ============================================================
+
+- id: ts_fw_001
+  subject: acme_api
+  predicate: uses_framework
+  object: "Ruby on Rails 7.1 for the API backend"
+  text: "The Acme API is built on Ruby on Rails 7.1 in API-only mode."
+  scope: project
+  fts_keywords: "framework rails ruby backend api"
+
+- id: ts_fw_002
+  subject: acme_api
+  predicate: uses_framework
+  object: "Sidekiq 7 for background job processing"
+  text: "Background jobs like email sending and report generation use Sidekiq 7."
+  scope: project
+  fts_keywords: "background jobs queue sidekiq async processing"
+
+- id: ts_fw_003
+  subject: dataflow
+  predicate: uses_framework
+  object: "Apache Airflow 2.8 for pipeline orchestration"
+  text: "Data pipelines are orchestrated using Apache Airflow 2.8 with Celery executor."
+  scope: project
+  fts_keywords: "airflow orchestration pipeline scheduling dag"
+
+- id: ts_fw_004
+  subject: dataflow
+  predicate: uses_framework
+  object: "Polars for DataFrame operations"
+  text: "We use Polars instead of Pandas for DataFrame operations due to better performance."
+  scope: project
+  fts_keywords: "polars dataframe data processing python"
+
+- id: ts_fw_005
+  subject: shopfront
+  predicate: uses_framework
+  object: "Next.js 14 with App Router"
+  text: "The e-commerce frontend uses Next.js 14 with the App Router for server components."
+  scope: project
+  fts_keywords: "nextjs react frontend ssr server components"
+
+- id: ts_fw_006
+  subject: shopfront
+  predicate: uses_framework
+  object: "TanStack Query v5 for server state management"
+  text: "Server state is managed with TanStack Query v5 for caching and synchronization."
+  scope: project
+  fts_keywords: "tanstack query react state cache server"
+
+- id: ts_fw_007
+  subject: shopfront
+  predicate: uses_framework
+  object: "Tailwind CSS v3 for styling"
+  text: "All styling uses Tailwind CSS v3 with a custom design system configuration."
+  scope: project
+  fts_keywords: "tailwind css styling design frontend"
+
+- id: ts_fw_008
+  subject: infracore
+  predicate: uses_framework
+  object: "Go standard library net/http for HTTP server"
+  text: "The HTTP server uses Go's standard library net/http package, no external framework."
+  scope: project
+  fts_keywords: "go http server stdlib net"
+
+- id: ts_fw_009
+  subject: infracore
+  predicate: uses_framework
+  object: "gRPC-Go for inter-service communication"
+  text: "Services communicate via gRPC using the official gRPC-Go library."
+  scope: project
+  fts_keywords: "grpc rpc communication protocol service"
+
+- id: ts_fw_010
+  subject: claude_mem
+  predicate: uses_framework
+  object: "Sequel (~> 5.0) for database access"
+  text: "This project uses Sequel (~> 5.0) for database access, not ActiveRecord."
+  scope: project
+  fts_keywords: "sequel orm database access ruby"
+
+- id: ts_fw_011
+  subject: claude_mem
+  predicate: uses_framework
+  object: "RSpec for testing"
+  text: "All tests are written in RSpec with expect syntax and documentation formatter."
+  scope: project
+  fts_keywords: "rspec testing test framework ruby"
+
+- id: ts_fw_012
+  subject: claude_mem
+  predicate: uses_framework
+  object: "Standard Ruby for linting"
+  text: "Code style is enforced by Standard Ruby, a zero-config Ruby linter."
+  scope: project
+  fts_keywords: "standard ruby linting style code quality"
+
+- id: ts_fw_013
+  subject: acme_api
+  predicate: uses_framework
+  object: "Devise for authentication"
+  text: "User authentication is handled by the Devise gem with custom strategies."
+  scope: project
+  fts_keywords: "devise authentication gem ruby rails"
+
+# --- Temporal framework version ---
+- id: ts_fw_v1_014
+  subject: shopfront
+  predicate: uses_framework
+  object: "React 17 with class components"
+  text: "The frontend was originally built with React 17 using class components."
+  scope: project
+  fts_keywords: "react class components frontend legacy"
+  status: superseded
+  valid_from: "2023-01-01T00:00:00Z"
+  valid_to: "2024-03-01T00:00:00Z"
+
+- id: ts_fw_v2_014
+  subject: shopfront
+  predicate: uses_framework
+  object: "React 18 with hooks and server components"
+  text: "We upgraded to React 18 with hooks and server components in March 2024."
+  scope: project
+  fts_keywords: "react hooks server components frontend modern"
+  supersedes: ts_fw_v1_014
+  valid_from: "2024-03-01T00:00:00Z"
+
+# ============================================================
+# CONVENTIONS (~80 facts)
+# ============================================================
+
+# --- Ruby conventions ---
+- id: cv_ruby_001
+  subject: claude_mem
+  predicate: convention
+  object: "Use frozen_string_literal: true in all Ruby files"
+  text: "All Ruby files must include the frozen_string_literal: true magic comment at the top."
+  scope: project
+  fts_keywords: "convention style ruby frozen string literal"
+
+- id: cv_ruby_002
+  subject: claude_mem
+  predicate: convention
+  object: "Use 2-space indentation for Ruby code"
+  text: "Ruby code uses 2-space indentation, enforced by Standard Ruby."
+  scope: project
+  fts_keywords: "convention style indentation spaces ruby"
+
+- id: cv_ruby_003
+  subject: claude_mem
+  predicate: convention
+  object: "Prefer expect syntax over should in RSpec"
+  text: "Tests must use RSpec's expect syntax. The should syntax is disabled."
+  scope: project
+  fts_keywords: "convention rspec expect should testing style"
+
+- id: cv_ruby_004
+  subject: claude_mem
+  predicate: convention
+  object: "Use Sequel dataset methods instead of raw SQL"
+  text: "Always use Sequel's dataset methods for queries. Avoid raw SQL where possible."
+  scope: project
+  fts_keywords: "convention sequel sql database query"
+
+- id: cv_ruby_005
+  subject: acme_api
+  predicate: convention
+  object: "Use service objects for business logic"
+  text: "Business logic should be extracted into service objects, not placed in controllers."
+  scope: project
+  fts_keywords: "convention service object pattern business logic"
+
+- id: cv_ruby_006
+  subject: acme_api
+  predicate: convention
+  object: "Use strong parameters for all controller inputs"
+  text: "All controller actions must use strong parameters for input filtering."
+  scope: project
+  fts_keywords: "convention rails controller strong parameters security"
+
+- id: cv_ruby_007
+  subject: acme_api
+  predicate: convention
+  object: "Prefix private methods with underscore in service objects"
+  text: "Private methods in service objects should be prefixed with underscore for clarity."
+  scope: project
+  fts_keywords: "convention naming private method underscore"
+
+- id: cv_ruby_008
+  subject: claude_mem
+  predicate: convention
+  object: "Use dependency injection for I/O in command classes"
+  text: "All command classes receive stdout, stderr, stdin via constructor injection for testability."
+  scope: project
+  fts_keywords: "convention dependency injection io testing"
+
+- id: cv_ruby_009
+  subject: claude_mem
+  predicate: convention
+  object: "Domain objects must be immutable (frozen)"
+  text: "All domain objects are frozen after initialization. Use copy constructors for modifications."
+  scope: project
+  fts_keywords: "convention immutable frozen domain object"
+
+- id: cv_ruby_010
+  subject: claude_mem
+  predicate: convention
+  object: "Use null objects instead of nil checks"
+  text: "Use NullFact, NullExplanation etc. instead of checking for nil returns."
+  scope: project
+  fts_keywords: "convention null object pattern nil check"
+
+# --- Python conventions ---
+- id: cv_python_001
+  subject: dataflow
+  predicate: convention
+  object: "Use type hints for all function signatures"
+  text: "All function signatures must include type hints. Use mypy --strict for validation."
+  scope: project
+  fts_keywords: "convention python type hints mypy typing"
+
+- id: cv_python_002
+  subject: dataflow
+  predicate: convention
+  object: "Use Pydantic v2 for data validation"
+  text: "All data models use Pydantic v2 for validation and serialization."
+  scope: project
+  fts_keywords: "convention pydantic validation model python"
+
+- id: cv_python_003
+  subject: dataflow
+  predicate: convention
+  object: "Use ruff for linting and formatting"
+  text: "Code style is enforced by ruff with the default configuration."
+  scope: project
+  fts_keywords: "convention linting formatting python ruff"
+
+- id: cv_python_004
+  subject: dataflow
+  predicate: convention
+  object: "Use pytest with fixtures for all tests"
+  text: "All tests use pytest. Shared setup goes in conftest.py fixtures."
+  scope: project
+  fts_keywords: "convention testing pytest fixtures python"
+
+- id: cv_python_005
+  subject: dataflow
+  predicate: convention
+  object: "Use pathlib.Path instead of os.path"
+  text: "Always use pathlib.Path for file operations instead of os.path functions."
+  scope: project
+  fts_keywords: "convention pathlib path file python"
+
+- id: cv_python_006
+  subject: dataflow
+  predicate: convention
+  object: "Use structured logging with structlog"
+  text: "All logging must use structlog for structured JSON output."
+  scope: project
+  fts_keywords: "convention logging structured structlog json python"
+
+# --- TypeScript/React conventions ---
+- id: cv_ts_001
+  subject: shopfront
+  predicate: convention
+  object: "Use functional components with hooks only"
+  text: "All React components must be functional components using hooks. No class components."
+  scope: project
+  fts_keywords: "convention react functional hooks components typescript"
+
+- id: cv_ts_002
+  subject: shopfront
+  predicate: convention
+  object: "Use strict TypeScript with no any types"
+  text: "TypeScript strict mode is enabled. Using 'any' type is forbidden."
+  scope: project
+  fts_keywords: "convention typescript strict any type safety"
+
+- id: cv_ts_003
+  subject: shopfront
+  predicate: convention
+  object: "Use Zod for runtime validation of API responses"
+  text: "All API responses are validated at runtime using Zod schemas."
+  scope: project
+  fts_keywords: "convention zod validation runtime schema typescript"
+
+- id: cv_ts_004
+  subject: shopfront
+  predicate: convention
+  object: "Co-locate test files next to source files"
+  text: "Test files live next to their source files as ComponentName.test.tsx."
+  scope: project
+  fts_keywords: "convention testing colocation file structure typescript"
+
+- id: cv_ts_005
+  subject: shopfront
+  predicate: convention
+  object: "Use CSS modules with Tailwind for component styles"
+  text: "Component-specific styles use CSS modules combined with Tailwind utility classes."
+  scope: project
+  fts_keywords: "convention css modules tailwind styling component"
+
+- id: cv_ts_006
+  subject: shopfront
+  predicate: convention
+  object: "Use barrel exports from feature directories"
+  text: "Each feature directory has an index.ts that re-exports its public API."
+  scope: project
+  fts_keywords: "convention barrel exports index module typescript"
+
+- id: cv_ts_007
+  subject: shopfront
+  predicate: convention
+  object: "Use React.memo only when profiler shows re-render issues"
+  text: "Do not prematurely optimize with React.memo. Only use when React DevTools profiler shows issues."
+  scope: project
+  fts_keywords: "convention react memo optimization performance"
+
+# --- Go conventions ---
+- id: cv_go_001
+  subject: infracore
+  predicate: convention
+  object: "Use table-driven tests for all test functions"
+  text: "All Go tests must use the table-driven test pattern with subtests."
+  scope: project
+  fts_keywords: "convention go testing table driven subtests"
+
+- id: cv_go_002
+  subject: infracore
+  predicate: convention
+  object: "Use context.Context as first parameter in all public functions"
+  text: "All public functions that do I/O must accept context.Context as the first parameter."
+  scope: project
+  fts_keywords: "convention go context parameter function signature"
+
+- id: cv_go_003
+  subject: infracore
+  predicate: convention
+  object: "Use error wrapping with fmt.Errorf and %w verb"
+  text: "Errors should be wrapped with fmt.Errorf(\"doing X: %w\", err) for context."
+  scope: project
+  fts_keywords: "convention go error wrapping fmt errorf"
+
+- id: cv_go_004
+  subject: infracore
+  predicate: convention
+  object: "Use golangci-lint with project .golangci.yml config"
+  text: "Code quality is enforced by golangci-lint with the project's custom configuration."
+  scope: project
+  fts_keywords: "convention go linting golangci lint config"
+
+- id: cv_go_005
+  subject: infracore
+  predicate: convention
+  object: "Use interfaces for all external dependencies"
+  text: "External dependencies (databases, APIs, file system) must be behind interfaces for testing."
+  scope: project
+  fts_keywords: "convention go interface dependency injection testing"
+
+- id: cv_go_006
+  subject: infracore
+  predicate: convention
+  object: "Keep packages small with single responsibility"
+  text: "Go packages should be small, focused, and have a single clear responsibility."
+  scope: project
+  fts_keywords: "convention go package small single responsibility"
+
+# --- Cross-project / global conventions ---
+- id: cv_global_001
+  subject: repo
+  predicate: convention
+  object: "Use conventional commits for all commit messages"
+  text: "All commit messages must follow Conventional Commits format: type(scope): description."
+  scope: global
+  fts_keywords: "convention git commit message format global"
+
+- id: cv_global_002
+  subject: repo
+  predicate: convention
+  object: "Require PR reviews from at least one team member"
+  text: "All pull requests require at least one approved review before merging."
+  scope: global
+  fts_keywords: "convention pr review code review approval global"
+
+- id: cv_global_003
+  subject: repo
+  predicate: convention
+  object: "Use semantic versioning for all releases"
+  text: "All projects follow semantic versioning (semver) for release tagging."
+  scope: global
+  fts_keywords: "convention versioning semver release tag global"
+
+- id: cv_global_004
+  subject: repo
+  predicate: convention
+  object: "Write ADRs for all significant architectural decisions"
+  text: "Significant architectural decisions are documented in Architecture Decision Records."
+  scope: global
+  fts_keywords: "convention adr architecture decision record documentation global"
+
+- id: cv_global_005
+  subject: repo
+  predicate: convention
+  object: "Keep CI pipeline under 10 minutes"
+  text: "CI pipelines should complete in under 10 minutes. Optimize or parallelize if slower."
+  scope: global
+  fts_keywords: "convention ci pipeline speed performance global"
+
+- id: cv_global_006
+  subject: repo
+  predicate: convention
+  object: "Use environment variables for all configuration"
+  text: "Application configuration must come from environment variables, not hardcoded values."
+  scope: global
+  fts_keywords: "convention config environment variables twelve factor global"
+
+- id: cv_global_007
+  subject: repo
+  predicate: convention
+  object: "Never commit secrets or credentials to version control"
+  text: "Secrets and credentials must never be committed. Use .env files in .gitignore."
+  scope: global
+  fts_keywords: "convention security secrets credentials gitignore global"
+
+- id: cv_global_008
+  subject: repo
+  predicate: convention
+  object: "Prefer composition over inheritance"
+  text: "I prefer composition over inheritance in all languages. Keep inheritance trees shallow."
+  scope: global
+  fts_keywords: "convention design pattern composition inheritance global"
+
+- id: cv_global_009
+  subject: repo
+  predicate: convention
+  object: "Use 4-space indentation for Python, 2-space for Ruby/YAML"
+  text: "Python files use 4-space indentation. Ruby and YAML files use 2-space indentation."
+  scope: global
+  fts_keywords: "convention indentation spaces formatting global"
+
+- id: cv_global_010
+  subject: repo
+  predicate: convention
+  object: "Write tests before fixing bugs (TDD for bug fixes)"
+  text: "When fixing bugs, write a failing test first that reproduces the bug, then fix it."
+  scope: global
+  fts_keywords: "convention tdd testing bug fix red green global"
+
+# --- Additional project-specific conventions ---
+- id: cv_ruby_011
+  subject: acme_api
+  predicate: convention
+  object: "Use ActiveModel::Serializer for JSON responses"
+  text: "API JSON responses are formatted using ActiveModel::Serializer."
+  scope: project
+  fts_keywords: "convention serializer json api response rails"
+
+- id: cv_ruby_012
+  subject: acme_api
+  predicate: convention
+  object: "Use database-level constraints for data integrity"
+  text: "Always add database-level constraints (NOT NULL, unique indexes) in addition to model validations."
+  scope: project
+  fts_keywords: "convention database constraints integrity validation"
+
+- id: cv_ruby_013
+  subject: claude_mem
+  predicate: convention
+  object: "Use Result objects (Success/Failure) for error handling"
+  text: "Methods that can fail return Result objects instead of raising exceptions."
+  scope: project
+  fts_keywords: "convention result success failure error handling"
+
+- id: cv_python_007
+  subject: dataflow
+  predicate: convention
+  object: "Use dataclasses for simple value objects"
+  text: "Simple value objects use @dataclass(frozen=True). Use Pydantic only when validation is needed."
+  scope: project
+  fts_keywords: "convention dataclass frozen value object python"
+
+- id: cv_python_008
+  subject: dataflow
+  predicate: convention
+  object: "Use async/await for all I/O operations"
+  text: "All I/O-bound operations should be async. Use asyncio.gather for concurrent I/O."
+  scope: project
+  fts_keywords: "convention async await io asyncio concurrency python"
+
+- id: cv_ts_008
+  subject: shopfront
+  predicate: convention
+  object: "Use absolute imports with @/ alias"
+  text: "Use absolute imports with the @/ path alias instead of relative imports."
+  scope: project
+  fts_keywords: "convention import absolute path alias typescript"
+
+- id: cv_ts_009
+  subject: shopfront
+  predicate: convention
+  object: "Use server components by default, client components only when needed"
+  text: "Default to server components. Add 'use client' directive only for interactivity."
+  scope: project
+  fts_keywords: "convention react server client components nextjs"
+
+- id: cv_go_007
+  subject: infracore
+  predicate: convention
+  object: "Use zerolog for structured logging"
+  text: "All logging uses zerolog for high-performance structured JSON logging."
+  scope: project
+  fts_keywords: "convention go zerolog logging structured json"
+
+- id: cv_go_008
+  subject: infracore
+  predicate: convention
+  object: "Use wire for compile-time dependency injection"
+  text: "Dependency injection is done at compile time using Google Wire."
+  scope: project
+  fts_keywords: "convention go wire dependency injection compile"
+
+# ============================================================
+# DECISIONS (~40 facts)
+# ============================================================
+
+- id: dc_001
+  subject: claude_mem
+  predicate: decision
+  object: "Use Result objects (Success/Failure) instead of exceptions for error handling"
+  text: "We decided to use Result objects for error handling instead of raising exceptions. This makes error paths explicit."
+  scope: project
+  fts_keywords: "decision error handling result pattern exceptions"
+
+- id: dc_002
+  subject: claude_mem
+  predicate: decision
+  object: "Use dual-database architecture (global + project) for memory separation"
+  text: "Memory is split across two SQLite databases: global for user preferences, project for local facts."
+  scope: project
+  fts_keywords: "decision architecture dual database global project separation"
+
+- id: dc_003
+  subject: claude_mem
+  predicate: decision
+  object: "Use FTS5 with porter stemming for full-text search"
+  text: "We chose SQLite FTS5 with porter and unicode61 tokenizers for search instead of an external engine."
+  scope: project
+  fts_keywords: "decision search fts5 porter stemming sqlite"
+
+- id: dc_004
+  subject: claude_mem
+  predicate: decision
+  object: "Use hooks instead of polling for transcript ingestion"
+  text: "Transcripts are ingested via Claude Code hooks on Stop/SessionStart events, not by polling."
+  scope: project
+  fts_keywords: "decision hooks polling ingestion transcript events"
+
+- id: dc_005
+  subject: acme_api
+  predicate: decision
+  object: "Use PostgreSQL instead of MongoDB for primary storage"
+  text: "We chose PostgreSQL over MongoDB because our data is highly relational."
+  scope: project
+  fts_keywords: "decision database postgresql mongodb relational"
+
+- id: dc_006
+  subject: acme_api
+  predicate: decision
+  object: "Use Sidekiq instead of ActiveJob for background processing"
+  text: "We use Sidekiq directly instead of ActiveJob for better control over job options."
+  scope: project
+  fts_keywords: "decision background jobs sidekiq activejob processing"
+
+- id: dc_007
+  subject: acme_api
+  predicate: decision
+  object: "Implement rate limiting at the API gateway level"
+  text: "Rate limiting is implemented in the API gateway (nginx) rather than in application code."
+  scope: project
+  fts_keywords: "decision rate limiting api gateway nginx"
+
+- id: dc_008
+  subject: acme_api
+  predicate: decision
+  object: "Use database-level soft deletes with deleted_at column"
+  text: "Records are soft-deleted using a deleted_at timestamp column instead of hard deletion."
+  scope: project
+  fts_keywords: "decision soft delete database records deleted_at"
+
+- id: dc_009
+  subject: dataflow
+  predicate: decision
+  object: "Use Polars instead of Pandas for data processing"
+  text: "We migrated from Pandas to Polars for 10x better performance on large datasets."
+  scope: project
+  fts_keywords: "decision polars pandas performance dataframe"
+
+- id: dc_010
+  subject: dataflow
+  predicate: decision
+  object: "Use Airflow over Prefect for pipeline orchestration"
+  text: "We chose Airflow over Prefect due to better community support and operator ecosystem."
+  scope: project
+  fts_keywords: "decision airflow prefect orchestration pipeline"
+
+- id: dc_011
+  subject: dataflow
+  predicate: decision
+  object: "Use uv instead of pip for dependency management"
+  text: "Package management uses uv for faster dependency resolution and reproducible builds."
+  scope: project
+  fts_keywords: "decision uv pip package management python"
+
+- id: dc_012
+  subject: shopfront
+  predicate: decision
+  object: "Use Next.js App Router instead of Pages Router"
+  text: "We adopted the App Router for streaming, server components, and better data fetching."
+  scope: project
+  fts_keywords: "decision nextjs app router pages router"
+
+- id: dc_013
+  subject: shopfront
+  predicate: decision
+  object: "Use TanStack Query instead of SWR for data fetching"
+  text: "TanStack Query was chosen over SWR for better mutation support and devtools."
+  scope: project
+  fts_keywords: "decision tanstack query swr data fetching"
+
+- id: dc_014
+  subject: shopfront
+  predicate: decision
+  object: "Use Stripe Elements for payment UI"
+  text: "Payment forms use Stripe Elements for PCI compliance and consistent UX."
+  scope: project
+  fts_keywords: "decision stripe payments pci compliance ui"
+
+- id: dc_015
+  subject: infracore
+  predicate: decision
+  object: "Use gRPC instead of REST for inter-service communication"
+  text: "Internal services communicate via gRPC for type safety and performance."
+  scope: project
+  fts_keywords: "decision grpc rest api inter-service communication"
+
+- id: dc_016
+  subject: infracore
+  predicate: decision
+  object: "Use OpenTelemetry for distributed tracing"
+  text: "Distributed tracing uses OpenTelemetry SDK with Jaeger as the backend."
+  scope: project
+  fts_keywords: "decision opentelemetry tracing observability jaeger"
+
+- id: dc_017
+  subject: infracore
+  predicate: decision
+  object: "Use Kubernetes operators for stateful workloads"
+  text: "Stateful services are managed by custom Kubernetes operators rather than StatefulSets directly."
+  scope: project
+  fts_keywords: "decision kubernetes operator stateful workload"
+
+- id: dc_018
+  subject: claude_mem
+  predicate: decision
+  object: "Use Extralite adapter instead of sqlite3 gem"
+  text: "We use Extralite for better performance and GVL release during database operations."
+  scope: project
+  fts_keywords: "decision extralite sqlite3 gem performance gvl"
+
+- id: dc_019
+  subject: claude_mem
+  predicate: decision
+  object: "Publish curated snapshots to .claude/rules/ for fast context loading"
+  text: "Memory snapshots are published to .claude/rules/ so Claude loads context without MCP queries."
+  scope: project
+  fts_keywords: "decision publish snapshot rules context loading"
+
+- id: dc_020
+  subject: acme_api
+  predicate: decision
+  object: "Use JWT for API authentication with short-lived tokens"
+  text: "API authentication uses JWT with 15-minute expiry and refresh token rotation."
+  scope: project
+  fts_keywords: "decision jwt authentication token expiry refresh"
+
+# --- Additional decisions ---
+- id: dc_021
+  subject: dataflow
+  predicate: decision
+  object: "Use Great Expectations for data quality validation"
+  text: "Data quality is validated using Great Expectations suites at pipeline stage boundaries."
+  scope: project
+  fts_keywords: "decision data quality validation great expectations"
+
+- id: dc_022
+  subject: shopfront
+  predicate: decision
+  object: "Use Vercel for frontend deployment"
+  text: "The Next.js frontend is deployed on Vercel for automatic preview deployments."
+  scope: project
+  fts_keywords: "decision deployment vercel frontend nextjs preview"
+
+- id: dc_023
+  subject: infracore
+  predicate: decision
+  object: "Use Terraform for infrastructure as code"
+  text: "All cloud infrastructure is managed with Terraform modules stored in a separate repo."
+  scope: project
+  fts_keywords: "decision terraform infrastructure code iac cloud"
+
+- id: dc_024
+  subject: acme_api
+  predicate: decision
+  object: "Use database transactions for all multi-step operations"
+  text: "Any operation that modifies multiple tables must be wrapped in a database transaction."
+  scope: project
+  fts_keywords: "decision transaction database consistency multi-step"
+
+- id: dc_025
+  subject: claude_mem
+  predicate: decision
+  object: "Use WAL mode for SQLite concurrency"
+  text: "SQLite is configured with WAL journal mode for concurrent reads during hook execution."
+  scope: project
+  fts_keywords: "decision wal sqlite concurrency journal mode"
+
+# ============================================================
+# AUTH_METHOD (~15 facts)
+# ============================================================
+
+- id: au_001
+  subject: acme_api
+  predicate: auth_method
+  object: "JWT tokens with 15-minute expiry and refresh rotation"
+  text: "Authentication uses JWT tokens with 15-minute access token expiry and automatic refresh rotation."
+  scope: project
+  fts_keywords: "authentication jwt token refresh rotation security"
+
+- id: au_002
+  subject: shopfront
+  predicate: auth_method
+  object: "OAuth 2.0 with Google and GitHub social login"
+  text: "Users authenticate via OAuth 2.0 social login with Google and GitHub providers."
+  scope: project
+  fts_keywords: "authentication oauth social login google github"
+
+- id: au_003
+  subject: dataflow
+  predicate: auth_method
+  object: "AWS IAM roles for service authentication"
+  text: "Pipeline services authenticate to AWS using IAM roles attached to ECS tasks."
+  scope: project
+  fts_keywords: "authentication iam aws roles service ecs"
+
+- id: au_004
+  subject: infracore
+  predicate: auth_method
+  object: "mTLS certificates for inter-service authentication"
+  text: "Services authenticate to each other using mutual TLS certificates managed by cert-manager."
+  scope: project
+  fts_keywords: "authentication mtls certificates tls service mesh"
+
+- id: au_005
+  subject: claude_mem
+  predicate: auth_method
+  object: "No authentication (local CLI tool)"
+  text: "ClaudeMemory runs as a local CLI tool with no authentication needed."
+  scope: project
+  fts_keywords: "authentication none local cli"
+
+# --- Temporal auth change ---
+- id: au_v1_006
+  subject: acme_api
+  predicate: auth_method
+  object: "Cookie-based session authentication"
+  text: "The API originally used cookie-based session authentication."
+  scope: project
+  fts_keywords: "authentication cookie session legacy"
+  status: superseded
+  valid_from: "2023-01-01T00:00:00Z"
+  valid_to: "2024-09-01T00:00:00Z"
+
+- id: au_v2_006
+  subject: acme_api
+  predicate: auth_method
+  object: "JWT tokens with 15-minute expiry and refresh rotation"
+  text: "We migrated from cookie sessions to JWT tokens in September 2024."
+  scope: project
+  fts_keywords: "authentication jwt token migration"
+  supersedes: au_v1_006
+  valid_from: "2024-09-01T00:00:00Z"
+
+# ============================================================
+# DEPLOYMENT_PLATFORM (~15 facts)
+# ============================================================
+
+- id: dp_001
+  subject: acme_api
+  predicate: deployment_platform
+  object: "AWS ECS Fargate with blue-green deployments"
+  text: "The API runs on AWS ECS Fargate with blue-green deployment strategy."
+  scope: project
+  fts_keywords: "deployment aws ecs fargate blue green"
+
+- id: dp_002
+  subject: dataflow
+  predicate: deployment_platform
+  object: "AWS ECS with Airflow managed on MWAA"
+  text: "Airflow runs on Amazon MWAA. Worker tasks execute on ECS Fargate."
+  scope: project
+  fts_keywords: "deployment aws ecs mwaa airflow managed"
+
+- id: dp_003
+  subject: shopfront
+  predicate: deployment_platform
+  object: "Vercel with automatic preview deployments"
+  text: "The frontend deploys to Vercel with automatic preview URLs for each PR."
+  scope: project
+  fts_keywords: "deployment vercel preview frontend nextjs"
+
+- id: dp_004
+  subject: infracore
+  predicate: deployment_platform
+  object: "Kubernetes on GKE with Argo CD for GitOps"
+  text: "Infrastructure services run on GKE with Argo CD managing deployments via GitOps."
+  scope: project
+  fts_keywords: "deployment kubernetes gke argocd gitops"
+
+- id: dp_005
+  subject: claude_mem
+  predicate: deployment_platform
+  object: "RubyGems.org for gem distribution"
+  text: "The gem is published to RubyGems.org using rake release."
+  scope: project
+  fts_keywords: "deployment rubygems gem distribution release"
+
+# --- Temporal deployment change ---
+- id: dp_v1_006
+  subject: acme_api
+  predicate: deployment_platform
+  object: "Heroku for API hosting"
+  text: "The API was initially deployed on Heroku."
+  scope: project
+  fts_keywords: "deployment heroku paas legacy"
+  status: superseded
+  valid_from: "2023-01-01T00:00:00Z"
+  valid_to: "2024-04-01T00:00:00Z"
+
+- id: dp_v2_006
+  subject: acme_api
+  predicate: deployment_platform
+  object: "AWS ECS Fargate with blue-green deployments"
+  text: "We migrated from Heroku to AWS ECS Fargate in April 2024 for better scaling."
+  scope: project
+  fts_keywords: "deployment aws ecs fargate migration"
+  supersedes: dp_v1_006
+  valid_from: "2024-04-01T00:00:00Z"
+
+# ============================================================
+# Additional facts for edge cases and diversity
+# ============================================================
+
+# Facts with very similar text (tests deduplication)
+- id: edge_sim_001
+  subject: acme_api
+  predicate: convention
+  object: "Use snake_case for all method names"
+  text: "Method names must use snake_case formatting in all Ruby files."
+  scope: project
+  fts_keywords: "convention naming snake_case method ruby"
+
+- id: edge_sim_002
+  subject: acme_api
+  predicate: convention
+  object: "Use snake_case for all variable names"
+  text: "Variable names must use snake_case formatting in all Ruby files."
+  scope: project
+  fts_keywords: "convention naming snake_case variable ruby"
+
+# Facts with overlapping predicates (different projects, same predicate)
+- id: edge_overlap_001
+  subject: acme_api
+  predicate: convention
+  object: "Maximum method length is 15 lines"
+  text: "Methods should not exceed 15 lines. Extract helper methods for longer logic."
+  scope: project
+  fts_keywords: "convention method length lines limit"
+
+- id: edge_overlap_002
+  subject: infracore
+  predicate: convention
+  object: "Maximum function length is 30 lines"
+  text: "Go functions should not exceed 30 lines. Split into smaller functions if longer."
+  scope: project
+  fts_keywords: "convention function length lines limit go"
+
+# Global preference that might conflict with project convention
+- id: edge_conflict_001
+  subject: repo
+  predicate: convention
+  object: "Prefer spaces over tabs for indentation"
+  text: "I always use spaces for indentation, never tabs."
+  scope: global
+  fts_keywords: "convention indentation spaces tabs preference global"
+
+# Inferred facts (lower confidence)
+- id: edge_inferred_001
+  subject: acme_api
+  predicate: uses_framework
+  object: "Rack for HTTP middleware"
+  text: "The middleware stack appears to use Rack based on the Gemfile."
+  scope: project
+  fts_keywords: "framework rack middleware http ruby"
+  strength: inferred
+  confidence: 0.7
+
+- id: edge_inferred_002
+  subject: dataflow
+  predicate: uses_database
+  object: "Snowflake for data warehouse queries"
+  text: "Some references to Snowflake suggest it may be used as the data warehouse."
+  scope: project
+  fts_keywords: "database snowflake warehouse analytics"
+  strength: inferred
+  confidence: 0.5

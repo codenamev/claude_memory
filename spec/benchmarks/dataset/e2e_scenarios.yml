@@ -1,0 +1,387 @@
+# DevMemEval End-to-End Scenarios
+# ~30 scenarios across LongMemEval's 5 memory ability categories
+#
+# Abilities:
+#   information_extraction    - Can the system recall specific stored facts?
+#   multi_session_reasoning   - Can it synthesize across multiple facts?
+#   temporal_reasoning        - Can it handle time-ordered knowledge?
+#   knowledge_update          - Does it prefer newer facts over superseded ones?
+#   abstention                - Does it correctly say "I don't know"?
+
+# ============================================================
+# INFORMATION EXTRACTION (~8 scenarios)
+# ============================================================
+
+- id: e2e_ext_001
+  ability: information_extraction
+  name: "Tech stack recall"
+  facts_to_load:
+    - {id: ts_db_001, predicate: uses_database, object: "PostgreSQL 15 for primary relational data storage", text: "We use PostgreSQL 15 as our primary database for all relational data.", fts_keywords: "database sql relational storage postgres"}
+    - {id: ts_fw_001, predicate: uses_framework, object: "Ruby on Rails 7.1 for the API backend", text: "The API is built on Ruby on Rails 7.1 in API-only mode.", fts_keywords: "framework rails ruby backend api"}
+    - {id: ts_fw_010, predicate: uses_framework, object: "Sequel (~> 5.0) for database access", text: "This project uses Sequel for database access, not ActiveRecord.", fts_keywords: "sequel orm database access ruby"}
+  prompt: "What database and ORM does this project use?"
+  acceptance_keywords: ["PostgreSQL", "Sequel"]
+  rejection_keywords: ["ActiveRecord", "MySQL", "MongoDB"]
+  threshold: 1.0
+
+- id: e2e_ext_002
+  ability: information_extraction
+  name: "Convention recall"
+  facts_to_load:
+    - {id: cv_ruby_001, predicate: convention, object: "Use frozen_string_literal: true in all Ruby files", text: "All Ruby files must include frozen_string_literal: true.", fts_keywords: "convention style ruby frozen string"}
+    - {id: cv_ruby_003, predicate: convention, object: "Prefer expect syntax over should in RSpec", text: "Tests must use RSpec's expect syntax. The should syntax is disabled.", fts_keywords: "convention rspec expect should testing"}
+  prompt: "What are the Ruby coding conventions for this project?"
+  acceptance_keywords: ["frozen_string_literal", "expect"]
+  rejection_keywords: ["should syntax"]
+  threshold: 0.75
+
+- id: e2e_ext_003
+  ability: information_extraction
+  name: "Decision recall"
+  facts_to_load:
+    - {id: dc_001, predicate: decision, object: "Use Result objects (Success/Failure) instead of exceptions", text: "We decided to use Result objects for error handling instead of raising exceptions.", fts_keywords: "decision error handling result pattern"}
+  prompt: "How does this project handle errors?"
+  acceptance_keywords: ["Result", "Success", "Failure"]
+  rejection_keywords: ["exceptions", "raise"]
+  threshold: 0.5
+
+- id: e2e_ext_004
+  ability: information_extraction
+  name: "Auth method recall"
+  facts_to_load:
+    - {id: au_001, predicate: auth_method, object: "JWT tokens with 15-minute expiry and refresh rotation", text: "Authentication uses JWT tokens with 15-minute access token expiry and automatic refresh rotation.", fts_keywords: "authentication jwt token refresh rotation"}
+  prompt: "How does user authentication work in this API?"
+  acceptance_keywords: ["JWT", "refresh"]
+  rejection_keywords: ["cookie", "session", "Basic"]
+  threshold: 1.0
+
+- id: e2e_ext_005
+  ability: information_extraction
+  name: "Deployment platform recall"
+  facts_to_load:
+    - {id: dp_001, predicate: deployment_platform, object: "AWS ECS Fargate with blue-green deployments", text: "The API runs on AWS ECS Fargate with blue-green deployment strategy.", fts_keywords: "deployment aws ecs fargate blue green"}
+  prompt: "Where is this application deployed?"
+  acceptance_keywords: ["ECS", "Fargate"]
+  rejection_keywords: ["Heroku", "Lambda"]
+  threshold: 1.0
+
+- id: e2e_ext_006
+  ability: information_extraction
+  name: "Testing framework recall"
+  facts_to_load:
+    - {id: ts_fw_011, predicate: uses_framework, object: "RSpec for testing", text: "All tests are written in RSpec with expect syntax and documentation formatter.", fts_keywords: "rspec testing test framework ruby"}
+    - {id: cv_ruby_003, predicate: convention, object: "Prefer expect syntax over should in RSpec", text: "Tests use RSpec's expect syntax.", fts_keywords: "convention rspec expect"}
+  prompt: "What testing framework and syntax does this Ruby project use?"
+  acceptance_keywords: ["RSpec", "expect"]
+  rejection_keywords: ["Minitest", "should"]
+  threshold: 1.0
+
+- id: e2e_ext_007
+  ability: information_extraction
+  name: "Database access layer recall"
+  facts_to_load:
+    - {id: ts_fw_010, predicate: uses_framework, object: "Sequel (~> 5.0) for database access", text: "This project uses Sequel for database access, not ActiveRecord.", fts_keywords: "sequel orm database access ruby"}
+    - {id: cv_ruby_004, predicate: convention, object: "Use Sequel dataset methods instead of raw SQL", text: "Always use Sequel's dataset methods. Avoid raw SQL.", fts_keywords: "convention sequel sql database query"}
+  prompt: "What ORM does this project use and what are the query conventions?"
+  acceptance_keywords: ["Sequel", "dataset"]
+  rejection_keywords: ["ActiveRecord", "raw SQL"]
+  threshold: 0.75
+
+- id: e2e_ext_008
+  ability: information_extraction
+  name: "Design pattern recall"
+  facts_to_load:
+    - {id: cv_ruby_009, predicate: convention, object: "Domain objects must be immutable (frozen)", text: "All domain objects are frozen after initialization.", fts_keywords: "convention immutable frozen domain"}
+    - {id: cv_ruby_010, predicate: convention, object: "Use null objects instead of nil checks", text: "Use NullFact, NullExplanation etc. instead of nil checks.", fts_keywords: "convention null object pattern nil"}
+  prompt: "What design patterns does this project use for domain objects?"
+  acceptance_keywords: ["immutable", "null object"]
+  rejection_keywords: []
+  threshold: 0.75
+
+# ============================================================
+# MULTI-SESSION REASONING (~8 scenarios)
+# ============================================================
+
+- id: e2e_multi_001
+  ability: multi_session_reasoning
+  name: "Full stack synthesis"
+  facts_to_load:
+    - {id: ts_db_001, predicate: uses_database, object: "PostgreSQL 15", text: "We use PostgreSQL 15 as primary database.", fts_keywords: "database postgres"}
+    - {id: ts_fw_001, predicate: uses_framework, object: "Ruby on Rails 7.1", text: "Built on Rails 7.1 API-only mode.", fts_keywords: "framework rails ruby"}
+    - {id: ts_fw_011, predicate: uses_framework, object: "RSpec for testing", text: "Tests written in RSpec.", fts_keywords: "rspec testing"}
+    - {id: au_001, predicate: auth_method, object: "JWT tokens", text: "JWT auth with refresh rotation.", fts_keywords: "auth jwt"}
+    - {id: dp_001, predicate: deployment_platform, object: "AWS ECS Fargate", text: "Runs on ECS Fargate.", fts_keywords: "deployment aws ecs"}
+  prompt: "Describe the complete technology stack for this project including database, framework, testing, auth, and deployment."
+  acceptance_keywords: ["PostgreSQL", "Rails", "RSpec", "JWT", "ECS"]
+  rejection_keywords: []
+  threshold: 0.6
+
+- id: e2e_multi_002
+  ability: multi_session_reasoning
+  name: "Convention synthesis"
+  facts_to_load:
+    - {id: cv_ruby_001, predicate: convention, object: "Use frozen_string_literal: true", text: "All Ruby files include frozen_string_literal.", fts_keywords: "convention frozen string"}
+    - {id: cv_ruby_002, predicate: convention, object: "Use 2-space indentation", text: "Ruby uses 2-space indentation.", fts_keywords: "convention indentation"}
+    - {id: cv_ruby_003, predicate: convention, object: "Prefer expect syntax in RSpec", text: "Use expect syntax.", fts_keywords: "convention rspec expect"}
+    - {id: cv_ruby_004, predicate: convention, object: "Use Sequel dataset methods", text: "Use dataset methods, not raw SQL.", fts_keywords: "convention sequel dataset"}
+  prompt: "List all the Ruby coding conventions for this project."
+  acceptance_keywords: ["frozen_string_literal", "2-space", "expect", "Sequel"]
+  rejection_keywords: []
+  threshold: 0.5
+
+- id: e2e_multi_003
+  ability: multi_session_reasoning
+  name: "Decision rationale synthesis"
+  facts_to_load:
+    - {id: dc_001, predicate: decision, object: "Use Result objects instead of exceptions", text: "Result objects make error paths explicit.", fts_keywords: "decision error result"}
+    - {id: dc_002, predicate: decision, object: "Use dual-database architecture", text: "Global + project databases for memory separation.", fts_keywords: "decision dual database"}
+    - {id: dc_003, predicate: decision, object: "Use FTS5 for search", text: "SQLite FTS5 with porter stemming instead of external engine.", fts_keywords: "decision search fts5"}
+    - {id: dc_004, predicate: decision, object: "Use hooks for transcript ingestion", text: "Hooks on Stop events, not polling.", fts_keywords: "decision hooks ingestion"}
+  prompt: "What are the key architectural decisions in this project and why were they made?"
+  acceptance_keywords: ["Result", "dual", "FTS5", "hooks"]
+  rejection_keywords: []
+  threshold: 0.5
+
+- id: e2e_multi_004
+  ability: multi_session_reasoning
+  name: "Cross-concern reasoning"
+  facts_to_load:
+    - {id: cv_ruby_008, predicate: convention, object: "Use dependency injection for I/O", text: "Commands receive stdout/stderr via constructor injection.", fts_keywords: "convention dependency injection"}
+    - {id: cv_ruby_009, predicate: convention, object: "Domain objects must be immutable", text: "Domain objects are frozen after init.", fts_keywords: "convention immutable frozen"}
+    - {id: dc_001, predicate: decision, object: "Use Result objects instead of exceptions", text: "Result objects for error handling.", fts_keywords: "decision result error"}
+  prompt: "How does this project balance testability with clean design?"
+  acceptance_keywords: ["dependency injection", "immutable"]
+  rejection_keywords: []
+  threshold: 0.5
+
+- id: e2e_multi_005
+  ability: multi_session_reasoning
+  name: "Security posture synthesis"
+  facts_to_load:
+    - {id: au_001, predicate: auth_method, object: "JWT with refresh rotation", text: "JWT tokens with 15-minute expiry.", fts_keywords: "auth jwt security"}
+    - {id: cv_global_007, predicate: convention, object: "Never commit secrets", text: "Secrets never committed to version control.", fts_keywords: "security secrets credentials", scope: "global"}
+    - {id: cv_ruby_006, predicate: convention, object: "Use strong parameters for all inputs", text: "All controller actions must use strong params.", fts_keywords: "security strong parameters input"}
+  prompt: "What security practices does this project follow?"
+  acceptance_keywords: ["JWT", "secrets", "strong parameters"]
+  rejection_keywords: []
+  threshold: 0.5
+
+- id: e2e_multi_006
+  ability: multi_session_reasoning
+  name: "Data layer architecture"
+  facts_to_load:
+    - {id: ts_db_007, predicate: uses_database, object: "SQLite with Extralite", text: "SQLite via Extralite adapter for embedded storage.", fts_keywords: "sqlite extralite database"}
+    - {id: dc_002, predicate: decision, object: "Dual-database architecture", text: "Global + project databases.", fts_keywords: "decision dual database"}
+    - {id: dc_025, predicate: decision, object: "Use WAL mode for concurrency", text: "SQLite WAL mode for concurrent reads.", fts_keywords: "decision wal concurrency"}
+    - {id: dc_003, predicate: decision, object: "FTS5 for search", text: "FTS5 with porter stemming.", fts_keywords: "decision fts5 search"}
+  prompt: "Describe the data storage architecture and the decisions behind it."
+  acceptance_keywords: ["SQLite", "dual", "WAL", "FTS5"]
+  rejection_keywords: []
+  threshold: 0.5
+
+- id: e2e_multi_007
+  ability: multi_session_reasoning
+  name: "Quality assurance practices"
+  facts_to_load:
+    - {id: ts_fw_011, predicate: uses_framework, object: "RSpec for testing", text: "Tests written in RSpec.", fts_keywords: "rspec testing"}
+    - {id: ts_fw_012, predicate: uses_framework, object: "Standard Ruby for linting", text: "Standard Ruby enforces code style.", fts_keywords: "standard ruby linting"}
+    - {id: cv_global_002, predicate: convention, object: "Require PR reviews", text: "PRs require at least one approved review.", fts_keywords: "pr review approval", scope: "global"}
+    - {id: cv_global_010, predicate: convention, object: "TDD for bug fixes", text: "Write failing test first when fixing bugs.", fts_keywords: "tdd testing bug fix", scope: "global"}
+  prompt: "How does this project ensure code quality?"
+  acceptance_keywords: ["RSpec", "Standard Ruby", "review"]
+  rejection_keywords: []
+  threshold: 0.5
+
+- id: e2e_multi_008
+  ability: multi_session_reasoning
+  name: "Project tooling overview"
+  facts_to_load:
+    - {id: ts_db_007, predicate: uses_database, object: "SQLite with Extralite", text: "SQLite via Extralite.", fts_keywords: "sqlite database"}
+    - {id: ts_fw_010, predicate: uses_framework, object: "Sequel for database access", text: "Sequel for DB access.", fts_keywords: "sequel orm"}
+    - {id: ts_fw_011, predicate: uses_framework, object: "RSpec for testing", text: "RSpec for tests.", fts_keywords: "rspec testing"}
+    - {id: ts_fw_012, predicate: uses_framework, object: "Standard Ruby for linting", text: "Standard Ruby linter.", fts_keywords: "standard ruby linting"}
+    - {id: dp_005, predicate: deployment_platform, object: "RubyGems.org", text: "Published to RubyGems.org.", fts_keywords: "rubygems distribution"}
+  prompt: "What tools and libraries does this Ruby gem project use?"
+  acceptance_keywords: ["SQLite", "Sequel", "RSpec", "RubyGems"]
+  rejection_keywords: []
+  threshold: 0.5
+
+# ============================================================
+# TEMPORAL REASONING (~5 scenarios)
+# ============================================================
+
+- id: e2e_temp_001
+  ability: temporal_reasoning
+  name: "Database migration awareness"
+  facts_to_load:
+    - {id: ts_db_v1, predicate: uses_database, object: "MySQL 5.7", text: "Originally used MySQL 5.7.", fts_keywords: "database mysql legacy", status: superseded, valid_from: "2024-01-01T00:00:00Z", valid_to: "2024-06-01T00:00:00Z"}
+    - {id: ts_db_v2, predicate: uses_database, object: "PostgreSQL 15", text: "Migrated to PostgreSQL 15 in June 2024.", fts_keywords: "database postgres migration", valid_from: "2024-06-01T00:00:00Z"}
+  prompt: "What database does this project currently use?"
+  acceptance_keywords: ["PostgreSQL"]
+  rejection_keywords: ["MySQL"]
+  threshold: 1.0
+
+- id: e2e_temp_002
+  ability: temporal_reasoning
+  name: "Framework upgrade awareness"
+  facts_to_load:
+    - {id: fw_v1, predicate: uses_framework, object: "React 17 with class components", text: "Originally built with React 17 and classes.", fts_keywords: "react class legacy", status: superseded, valid_from: "2023-01-01T00:00:00Z", valid_to: "2024-03-01T00:00:00Z"}
+    - {id: fw_v2, predicate: uses_framework, object: "React 18 with hooks", text: "Upgraded to React 18 with hooks in March 2024.", fts_keywords: "react hooks modern", valid_from: "2024-03-01T00:00:00Z"}
+  prompt: "What version of React does the frontend use?"
+  acceptance_keywords: ["React 18", "hooks"]
+  rejection_keywords: ["React 17", "class components"]
+  threshold: 0.75
+
+- id: e2e_temp_003
+  ability: temporal_reasoning
+  name: "Auth migration awareness"
+  facts_to_load:
+    - {id: au_v1, predicate: auth_method, object: "Cookie-based session auth", text: "Originally used cookie sessions.", fts_keywords: "auth cookie session legacy", status: superseded, valid_from: "2023-01-01T00:00:00Z", valid_to: "2024-09-01T00:00:00Z"}
+    - {id: au_v2, predicate: auth_method, object: "JWT with refresh rotation", text: "Migrated to JWT in September 2024.", fts_keywords: "auth jwt token migration", valid_from: "2024-09-01T00:00:00Z"}
+  prompt: "How does authentication work in this API?"
+  acceptance_keywords: ["JWT"]
+  rejection_keywords: ["cookie", "session"]
+  threshold: 1.0
+
+- id: e2e_temp_004
+  ability: temporal_reasoning
+  name: "Deployment migration awareness"
+  facts_to_load:
+    - {id: dp_v1, predicate: deployment_platform, object: "Heroku", text: "Initially deployed on Heroku.", fts_keywords: "deployment heroku legacy", status: superseded, valid_from: "2023-01-01T00:00:00Z", valid_to: "2024-04-01T00:00:00Z"}
+    - {id: dp_v2, predicate: deployment_platform, object: "AWS ECS Fargate", text: "Migrated to ECS Fargate in April 2024.", fts_keywords: "deployment aws ecs migration", valid_from: "2024-04-01T00:00:00Z"}
+  prompt: "Where is the API deployed?"
+  acceptance_keywords: ["ECS", "Fargate"]
+  rejection_keywords: ["Heroku"]
+  threshold: 1.0
+
+- id: e2e_temp_005
+  ability: temporal_reasoning
+  name: "Migration history awareness"
+  facts_to_load:
+    - {id: dp_old, predicate: deployment_platform, object: "Heroku", text: "Was on Heroku.", fts_keywords: "heroku legacy", status: superseded, valid_from: "2023-01-01T00:00:00Z", valid_to: "2024-04-01T00:00:00Z"}
+    - {id: dp_new, predicate: deployment_platform, object: "AWS ECS Fargate", text: "Now on ECS Fargate.", fts_keywords: "aws ecs current", valid_from: "2024-04-01T00:00:00Z"}
+    - {id: db_old, predicate: uses_database, object: "MySQL 5.7", text: "Was MySQL.", fts_keywords: "mysql legacy", status: superseded, valid_from: "2024-01-01T00:00:00Z", valid_to: "2024-06-01T00:00:00Z"}
+    - {id: db_new, predicate: uses_database, object: "PostgreSQL 15", text: "Now PostgreSQL.", fts_keywords: "postgres current", valid_from: "2024-06-01T00:00:00Z"}
+  prompt: "What infrastructure changes has this project gone through?"
+  acceptance_keywords: ["PostgreSQL", "ECS"]
+  rejection_keywords: []
+  threshold: 0.75
+
+# ============================================================
+# KNOWLEDGE UPDATE (~5 scenarios)
+# ============================================================
+
+- id: e2e_upd_001
+  ability: knowledge_update
+  name: "Database switch"
+  facts_to_load:
+    - {id: db_old, predicate: uses_database, object: "MySQL 5.7", text: "Used MySQL 5.7.", fts_keywords: "database mysql", status: superseded, valid_from: "2024-01-01T00:00:00Z", valid_to: "2024-06-01T00:00:00Z"}
+    - {id: db_new, predicate: uses_database, object: "PostgreSQL 15", text: "Now uses PostgreSQL 15.", fts_keywords: "database postgres", valid_from: "2024-06-01T00:00:00Z"}
+  prompt: "What database does this project use?"
+  acceptance_keywords: ["PostgreSQL"]
+  rejection_keywords: ["MySQL"]
+  threshold: 1.0
+
+- id: e2e_upd_002
+  ability: knowledge_update
+  name: "Framework version update"
+  facts_to_load:
+    - {id: fw_old, predicate: uses_framework, object: "Rails 6.1", text: "Was Rails 6.1.", fts_keywords: "rails legacy", status: superseded, valid_from: "2023-01-01T00:00:00Z", valid_to: "2024-08-01T00:00:00Z"}
+    - {id: fw_new, predicate: uses_framework, object: "Rails 7.1", text: "Upgraded to Rails 7.1.", fts_keywords: "rails modern", valid_from: "2024-08-01T00:00:00Z"}
+  prompt: "What version of Rails does this project run?"
+  acceptance_keywords: ["7.1"]
+  rejection_keywords: ["6.1"]
+  threshold: 1.0
+
+- id: e2e_upd_003
+  ability: knowledge_update
+  name: "Hosting platform change"
+  facts_to_load:
+    - {id: host_old, predicate: deployment_platform, object: "Heroku", text: "On Heroku.", fts_keywords: "heroku", status: superseded, valid_from: "2023-01-01T00:00:00Z", valid_to: "2024-04-01T00:00:00Z"}
+    - {id: host_new, predicate: deployment_platform, object: "AWS ECS Fargate", text: "Now on ECS Fargate.", fts_keywords: "aws ecs fargate", valid_from: "2024-04-01T00:00:00Z"}
+  prompt: "Where is the application hosted?"
+  acceptance_keywords: ["ECS", "Fargate", "AWS"]
+  rejection_keywords: ["Heroku"]
+  threshold: 0.75
+
+- id: e2e_upd_004
+  ability: knowledge_update
+  name: "Auth method migration"
+  facts_to_load:
+    - {id: auth_old, predicate: auth_method, object: "Basic auth", text: "Used Basic auth.", fts_keywords: "auth basic", status: superseded, valid_from: "2023-01-01T00:00:00Z", valid_to: "2024-06-01T00:00:00Z"}
+    - {id: auth_new, predicate: auth_method, object: "OAuth 2.0 with PKCE", text: "Now uses OAuth 2.0 with PKCE.", fts_keywords: "auth oauth pkce", valid_from: "2024-06-01T00:00:00Z"}
+  prompt: "How does authentication work?"
+  acceptance_keywords: ["OAuth", "PKCE"]
+  rejection_keywords: ["Basic"]
+  threshold: 0.75
+
+- id: e2e_upd_005
+  ability: knowledge_update
+  name: "Build tool migration"
+  facts_to_load:
+    - {id: build_old, predicate: uses_framework, object: "Webpack 4", text: "Used Webpack 4.", fts_keywords: "webpack bundler", status: superseded, valid_from: "2023-01-01T00:00:00Z", valid_to: "2024-05-01T00:00:00Z"}
+    - {id: build_new, predicate: uses_framework, object: "Vite", text: "Migrated to Vite.", fts_keywords: "vite bundler", valid_from: "2024-05-01T00:00:00Z"}
+  prompt: "What build tool does this project use?"
+  acceptance_keywords: ["Vite"]
+  rejection_keywords: ["Webpack"]
+  threshold: 1.0
+
+# ============================================================
+# ABSTENTION (~5 scenarios)
+# ============================================================
+
+- id: e2e_abs_001
+  ability: abstention
+  name: "Unknown CI/CD"
+  facts_to_load:
+    - {id: ts_db_001, predicate: uses_database, object: "PostgreSQL 15", text: "Uses PostgreSQL.", fts_keywords: "database postgres"}
+    - {id: ts_fw_001, predicate: uses_framework, object: "Rails 7.1", text: "Uses Rails 7.1.", fts_keywords: "framework rails"}
+    - {id: cv_ruby_001, predicate: convention, object: "Use frozen_string_literal", text: "Use frozen_string_literal.", fts_keywords: "convention ruby"}
+  prompt: "What CI/CD pipeline does this project use?"
+  acceptance_keywords: ["don't have", "no information", "not sure", "not specified", "don't know", "not mentioned", "no memory", "no data"]
+  rejection_keywords: ["GitHub Actions", "Jenkins", "CircleCI", "GitLab CI", "Travis"]
+  threshold: 0.5
+
+- id: e2e_abs_002
+  ability: abstention
+  name: "Unknown monitoring"
+  facts_to_load:
+    - {id: ts_db_001, predicate: uses_database, object: "PostgreSQL 15", text: "Uses PostgreSQL.", fts_keywords: "database postgres"}
+    - {id: dp_001, predicate: deployment_platform, object: "AWS ECS Fargate", text: "Deployed on ECS.", fts_keywords: "deployment aws ecs"}
+  prompt: "What monitoring and alerting tools does this project use?"
+  acceptance_keywords: ["don't have", "no information", "not sure", "not specified", "don't know", "not mentioned", "no memory", "no data"]
+  rejection_keywords: ["Datadog", "New Relic", "PagerDuty", "Prometheus", "Grafana"]
+  threshold: 0.5
+
+- id: e2e_abs_003
+  ability: abstention
+  name: "Unknown mobile app"
+  facts_to_load:
+    - {id: ts_fw_005, predicate: uses_framework, object: "Next.js 14", text: "Frontend uses Next.js.", fts_keywords: "nextjs frontend"}
+    - {id: ts_fw_007, predicate: uses_framework, object: "Tailwind CSS v3", text: "Styling with Tailwind.", fts_keywords: "tailwind css"}
+  prompt: "What mobile app framework does the team use?"
+  acceptance_keywords: ["don't have", "no information", "not sure", "not specified", "don't know", "not mentioned", "no memory", "no data", "no mobile"]
+  rejection_keywords: ["React Native", "Flutter", "Swift", "Kotlin"]
+  threshold: 0.5
+
+- id: e2e_abs_004
+  ability: abstention
+  name: "Unknown ML pipeline"
+  facts_to_load:
+    - {id: ts_fw_003, predicate: uses_framework, object: "Apache Airflow 2.8", text: "Airflow for orchestration.", fts_keywords: "airflow pipeline"}
+    - {id: ts_fw_004, predicate: uses_framework, object: "Polars for DataFrame operations", text: "Uses Polars for data.", fts_keywords: "polars dataframe"}
+  prompt: "What machine learning framework is used for model training?"
+  acceptance_keywords: ["don't have", "no information", "not sure", "not specified", "don't know", "not mentioned", "no memory", "no data"]
+  rejection_keywords: ["PyTorch", "TensorFlow", "scikit-learn", "XGBoost"]
+  threshold: 0.5
+
+- id: e2e_abs_005
+  ability: abstention
+  name: "Unknown GraphQL"
+  facts_to_load:
+    - {id: ts_fw_001, predicate: uses_framework, object: "Rails 7.1 API-only", text: "Rails API backend.", fts_keywords: "rails api"}
+    - {id: au_001, predicate: auth_method, object: "JWT tokens", text: "JWT auth.", fts_keywords: "jwt auth"}
+  prompt: "What GraphQL schema and resolvers does this API use?"
+  acceptance_keywords: ["don't have", "no information", "not sure", "not specified", "don't know", "not mentioned", "no memory", "no data", "no GraphQL"]
+  rejection_keywords: ["Apollo", "graphql-ruby", "Absinthe", "Sangria"]
+  threshold: 0.5
