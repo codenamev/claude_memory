@@ -28,6 +28,8 @@ Automated evaluation framework for testing ClaudeMemory's effectiveness, inspire
 
 ## Running Evals
 
+### Stub Mode (Default - Fast, Free)
+
 ```bash
 # Run all evals
 bundle exec rspec spec/evals/ --format documentation
@@ -38,6 +40,25 @@ bundle exec rspec spec/evals/convention_recall_spec.rb
 # Run only eval tests (skip other tests)
 bundle exec rspec --tag eval
 ```
+
+### Real Mode (Slow, Costs Money)
+
+Run evals with actual Claude CLI calls for validation:
+
+```bash
+# Run real mode tests (requires claude CLI and API key)
+EVAL_MODE=real bundle exec rspec spec/evals/ --tag eval_real
+
+# Run specific scenario
+EVAL_MODE=real bundle exec rspec spec/evals/convention_recall_spec.rb --tag eval_real
+```
+
+**See [REAL_MODE.md](REAL_MODE.md) for details on:**
+- Setup and prerequisites
+- Cost estimates (~$0.04 per test)
+- How it works (directory isolation, CLI execution)
+- Adding new real eval tests
+- CI integration
 
 ## Adding New Scenarios (Easy with Week 2 Helpers!)
 

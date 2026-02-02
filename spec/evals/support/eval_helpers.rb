@@ -3,6 +3,8 @@
 require "tmpdir"
 require "fileutils"
 require "digest"
+require_relative "claude_cli_runner"
+require_relative "simple_acceptance_criteria"
 
 # Week 2: Extracted common patterns from Week 1 spike
 # Only extracted after seeing clear repetition across 3 evals
@@ -26,6 +28,23 @@ module EvalHelpers
         # Subclasses must define this to identify the eval
         def eval_name
           self.class.description.downcase.gsub(/\s+/, "_")
+        end
+
+        # CLI runner helpers
+        def baseline_runner
+          @baseline_runner ||= CliRunnerFactory.baseline_runner
+        end
+
+        def memory_runner
+          @memory_runner ||= CliRunnerFactory.memory_enabled_runner(project_root)
+        end
+
+        def project_root
+          File.expand_path("../../..", __dir__)
+        end
+
+        def eval_mode
+          ENV["EVAL_MODE"] || "stub"
         end
       end
     end

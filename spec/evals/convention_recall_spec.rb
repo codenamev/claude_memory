@@ -31,6 +31,13 @@ RSpec.describe "Convention Recall Eval", :eval do
     builder.close
   end
 
+  def acceptance_criteria
+    @criteria ||= EvalHelpers::SimpleAcceptanceCriteria.new(
+      required_keywords: ["2-space", "indentation", "RSpec", "expect"],
+      threshold: 0.75
+    )
+  end
+
   def stub_claude_response_with_memory
     stub_success_response(
       "Based on the project memory, this Ruby project follows these conventions:\n\n" \
@@ -81,6 +88,30 @@ RSpec.describe "Convention Recall Eval", :eval do
     end
   end
 
+  describe "with memory enabled (CLI)", :eval_real, :slow do
+    before do
+      populate_fixture_memory
+    end
+
+    it "mentions conventions using real Claude" do
+      skip "Real mode requires claude CLI" unless system("which claude > /dev/null 2>&1")
+      skip "Skipped in stub mode" if eval_mode == "stub"
+
+      prompt = "What are the coding conventions for this Ruby project?"
+      context = "This is a Ruby gem project."
+
+      result = memory_runner.run(prompt: prompt, context: context)
+
+      expect(result[:success]).to be(true), "Claude CLI should succeed"
+
+      evaluation = acceptance_criteria.evaluate(result[:result])
+
+      expect(evaluation.passed?).to be(true),
+        "Response should mention conventions\n" \
+        "Details: #{evaluation.details}"
+    end
+  end
+
   context "baseline (no memory)" do
     it "does not mention specific project conventions" do
       result = stub_claude_response_without_memory
@@ -102,6 +133,26 @@ RSpec.describe "Convention Recall Eval", :eval do
       score = score_from_checks(mentions_indentation, mentions_rspec)
 
       expect(score).to eq(0.0), "Baseline should not include stored conventions"
+    end
+  end
+
+  context "baseline (no memory, CLI)", :eval_real, :slow do
+    it "gives generic advice without project context" do
+      skip "Real mode requires claude CLI" unless system("which claude > /dev/null 2>&1")
+      skip "Skipped in stub mode" if eval_mode == "stub"
+
+      prompt = "What are the coding conventions for this Ruby project?"
+
+      result = baseline_runner.run(prompt: prompt)
+
+      expect(result[:success]).to be(true), "Claude CLI should succeed"
+
+      evaluation = acceptance_criteria.evaluate(result[:result])
+
+      # Baseline likely won't mention project-specific conventions
+      expect(evaluation.score).to be < 0.5,
+        "Baseline should not know project conventions\n" \
+        "Details: #{evaluation.details}"
     end
   end
 
