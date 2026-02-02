@@ -1,10 +1,11 @@
 # Improvements to Consider
 
-*Updated: 2026-01-29*
+*Updated: 2026-02-02*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
 - *[yoanbernabeu/grepai](https://github.com/yoanbernabeu/grepai) - Semantic code search with vector embeddings*
+- *[supermemoryai/claude-supermemory](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed persistent memory plugin*
 
 This document identifies design patterns and features from claude-mem and episodic-memory that could improve claude_memory. Implemented improvements have been removed from this document.
 
@@ -63,6 +64,48 @@ Source: docs/influence/grepai.md
   - Implementation: FastEmbed adapter (BAAI/bge-small-en-v1.5), embeddings stored in `embedding_json` column, `Recall#query_semantic(mode: :both)` merges vector + FTS results
   - No API calls -- fastembed-rb runs ONNX model locally (~67MB, downloaded once)
   - RRF-style fusion still a potential optimization (current: naive merge with deduplication)
+
+---
+
+## Claude-Supermemory Study (2026-02-02)
+
+Source: docs/influence/claude-supermemory.md
+
+Claude-Supermemory is a cloud-backed Claude Code plugin (~1,195 LOC, JavaScript) that captures transcripts and injects recalled context via hooks. Its architecture is fundamentally different from ours (cloud API vs local SQLite), but several patterns are directly adoptable.
+
+### High Priority Recommendations
+
+- [ ] **SessionStart Context Injection via Hook** ⭐: Inject recalled facts into Claude's context at session start using `hookSpecificOutput.additionalContext`, ensuring Claude has memory before any MCP tool calls
+  - Value: Guarantees Claude sees memory context immediately, supplements existing `.claude/rules/` publish
+  - Evidence: `context-hook.js:72-74` — uses hook response to inject `<supermemory-context>` XML
+  - Effort: 1-2 days (hook handler, context formatter, settings)
+
+- [ ] **Tool-Specific Observation Compression** ⭐: Compact per-tool summarization for provenance (e.g., `Edited auth.js: "login()" → "async login()"`)
+  - Value: ~70% token reduction vs raw tool I/O in provenance descriptions
+  - Evidence: `compress.js:13-75` — 10 tool handlers with human-readable output
+  - Effort: 4-6 hours (class + tests + ingest integration)
+
+- [ ] **Relative Time Formatting in Recall Output** ⭐: Display "2hrs ago", "3d ago" instead of ISO timestamps in MCP recall results and CLI output
+  - Value: More readable temporal context for humans and Claude
+  - Evidence: `format-context.js:1-23` — progressive granularity (just now → mins → hrs → days → date)
+  - Effort: 2-3 hours (module + tests + integration)
+
+### Medium Priority Recommendations
+
+- [ ] **System Tag Stripping in ContentSanitizer**: Strip `<system-reminder>` and self-referential context tags during ingestion
+  - Value: Cleaner ingested content, prevents meta-content from polluting facts
+  - Evidence: `transcript-formatter.js:168-175` — regex removal of system tags
+  - Effort: 1-2 hours
+
+- [ ] **Configurable Tool Capture Filtering**: Skip/capture lists for controlling which tool observations are ingested
+  - Value: Reduces noise from read-heavy tools (Read, Glob, Grep)
+  - Evidence: `settings.js:9-15` — `skipTools` and `captureTools` with whitelist/blacklist modes
+  - Effort: 3-4 hours
+
+- [ ] **Claude Code Plugin Distribution Format**: Package as plugin for `/install plugin` workflow
+  - Value: Dramatically reduced setup friction vs manual gem + MCP + hook configuration
+  - Evidence: `plugin/hooks/hooks.json`, `plugin/skills/`, `plugin/commands/` — structured plugin format
+  - Effort: 2-3 days (wait for plugin ecosystem maturity)
 
 ---
 
@@ -1147,4 +1190,4 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 
 *This document has been updated to reflect completed implementations. Fourteen major improvements have been successfully integrated: 6 from claude-mem and 8 from episodic-memory. ClaudeMemory now combines the best of both systems while maintaining its unique advantages in fact-based knowledge representation and truth maintenance.*
 
-*Last updated: 2026-01-26 - Added ROI metrics tracking for distillation token economics*
+*Last updated: 2026-02-02 - Added Claude-Supermemory study (context injection, tool compression, relative times)*
