@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-02
+
 ### Added
 
 **Semantic Search with FastEmbed**
@@ -16,15 +18,9 @@ All notable changes to this project will be documented in this file.
   - Semantic easy: Recall@5 = 0.900, medium: 0.696
   - Hybrid aggregate: Recall@5 = 0.727 (was 0.266 with TF-IDF fallback)
 
-### Changed
-
-### Fixed
-
 ### Documentation
 - Updated benchmark results throughout README, spec/benchmarks/README, and architecture docs
 - Replaced TF-IDF embedding references with FastEmbed in architecture documentation
-
-### Internal
 
 ## [0.3.0] - 2026-01-29
 
