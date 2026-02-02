@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require_relative "query_guide"
 require_relative "text_summary"
 
 module ClaudeMemory
@@ -59,6 +60,10 @@ module ClaudeMemory
           handle_tools_list(id)
         when "tools/call"
           handle_tools_call(id, request["params"])
+        when "prompts/list"
+          handle_prompts_list(id)
+        when "prompts/get"
+          handle_prompts_get(id, request["params"])
         when "shutdown"
           @running = false
           {jsonrpc: "2.0", id: id, result: nil}
@@ -74,7 +79,8 @@ module ClaudeMemory
           result: {
             protocolVersion: PROTOCOL_VERSION,
             capabilities: {
-              tools: {}
+              tools: {},
+              prompts: {}
             },
             serverInfo: {
               name: "claude-memory",
@@ -117,6 +123,26 @@ module ClaudeMemory
             structuredContent: result
           }
         }
+      end
+
+      def handle_prompts_list(id)
+        {
+          jsonrpc: "2.0",
+          id: id,
+          result: {
+            prompts: [QueryGuide.definition]
+          }
+        }
+      end
+
+      def handle_prompts_get(id, params)
+        name = params&.dig("name")
+
+        if name == QueryGuide::PROMPT_NAME
+          {jsonrpc: "2.0", id: id, result: QueryGuide.content}
+        else
+          {jsonrpc: "2.0", id: id, error: {code: -32602, message: "Unknown prompt: #{name}"}}
+        end
       end
 
       def release_connections

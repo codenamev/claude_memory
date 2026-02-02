@@ -86,6 +86,46 @@ RSpec.describe ClaudeMemory::MCP::Server do
     end
   end
 
+  describe "prompts/list" do
+    it "returns available prompts" do
+      response = send_request({
+        jsonrpc: "2.0",
+        id: 5,
+        method: "prompts/list"
+      })
+
+      prompts = response["result"]["prompts"]
+      expect(prompts.map { |p| p["name"] }).to include("memory_guide")
+    end
+  end
+
+  describe "prompts/get" do
+    it "returns memory_guide prompt content" do
+      response = send_request({
+        jsonrpc: "2.0",
+        id: 6,
+        method: "prompts/get",
+        params: {name: "memory_guide"}
+      })
+
+      messages = response["result"]["messages"]
+      expect(messages).to be_an(Array)
+      expect(messages.first["role"]).to eq("user")
+      expect(messages.first["content"]["text"]).to include("memory.recall")
+    end
+
+    it "returns error for unknown prompt" do
+      response = send_request({
+        jsonrpc: "2.0",
+        id: 7,
+        method: "prompts/get",
+        params: {name: "nonexistent"}
+      })
+
+      expect(response["error"]["code"]).to eq(-32602)
+    end
+  end
+
   describe "unknown method" do
     it "returns method not found error" do
       response = send_request({
