@@ -37,6 +37,13 @@ RSpec.describe "Tech Stack Recall Eval", :eval do
     builder.close
   end
 
+  def acceptance_criteria
+    @criteria ||= EvalHelpers::SimpleAcceptanceCriteria.new(
+      required_keywords: ["RSpec", "testing", "SQLite", "Sequel"],
+      threshold: 0.75
+    )
+  end
+
   def stub_claude_response_with_memory
     stub_success_response(
       "This project uses RSpec as the testing framework. RSpec is a BDD testing tool " \
@@ -91,6 +98,30 @@ RSpec.describe "Tech Stack Recall Eval", :eval do
     end
   end
 
+  describe "with memory enabled (CLI)", :eval_real, :slow do
+    before do
+      populate_fixture_memory
+    end
+
+    it "identifies tech stack using real Claude" do
+      skip "Real mode requires claude CLI" unless system("which claude > /dev/null 2>&1")
+      skip "Skipped in stub mode" if eval_mode == "stub"
+
+      prompt = "What testing framework and database does this Ruby project use?"
+      context = "This is a Ruby gem project."
+
+      result = memory_runner.run(prompt: prompt, context: context)
+
+      expect(result[:success]).to be(true), "Claude CLI should succeed"
+
+      evaluation = acceptance_criteria.evaluate(result[:result])
+
+      expect(evaluation.passed?).to be(true),
+        "Response should identify tech stack\n" \
+        "Details: #{evaluation.details}"
+    end
+  end
+
   context "baseline (no memory)" do
     it "cannot identify the specific framework without memory" do
       result = stub_claude_response_without_memory
@@ -119,6 +150,26 @@ RSpec.describe "Tech Stack Recall Eval", :eval do
       )
 
       expect(score).to eq(0.0), "Baseline cannot identify framework without memory"
+    end
+  end
+
+  context "baseline (no memory, CLI)", :eval_real, :slow do
+    it "gives generic tech stack advice without project knowledge" do
+      skip "Real mode requires claude CLI" unless system("which claude > /dev/null 2>&1")
+      skip "Skipped in stub mode" if eval_mode == "stub"
+
+      prompt = "What testing framework and database does this Ruby project use?"
+
+      result = baseline_runner.run(prompt: prompt)
+
+      expect(result[:success]).to be(true), "Claude CLI should succeed"
+
+      evaluation = acceptance_criteria.evaluate(result[:result])
+
+      # Baseline likely won't identify project-specific tech stack
+      expect(evaluation.score).to be < 0.5,
+        "Baseline should not know project tech stack\n" \
+        "Details: #{evaluation.details}"
     end
   end
 

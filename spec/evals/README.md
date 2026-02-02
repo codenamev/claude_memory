@@ -22,9 +22,13 @@ Automated evaluation framework for testing ClaudeMemory's effectiveness, inspire
 - Still 15/15 tests passing, faster to add new scenarios
 
 **Scenarios implemented:**
-1. **Convention Recall** - Tests memory of coding conventions (indentation, testing style)
-2. **Architectural Decision** - Tests memory of architectural choices (Sequel vs ActiveRecord)
-3. **Tech Stack Recall** - Tests memory of frameworks and databases (RSpec, SQLite)
+1. **Convention Recall** - Tests memory of coding conventions (indentation, testing style) ✅ CLI tests
+2. **Architectural Decision** - Tests memory of architectural choices (Sequel vs ActiveRecord) ✅ CLI tests
+3. **Tech Stack Recall** - Tests memory of frameworks and databases (RSpec, SQLite) ✅ CLI tests
+4. **Code Style Adherence** - Tests memory of style choices (Rubocop rules, spacing)
+5. **Error Handling Patterns** - Tests memory of error handling approaches (Result pattern)
+6. **Framework API Usage** - Tests memory of specific API patterns (Sequel datasets)
+7. **Implementation Consistency** - Tests memory of implementation patterns (frozen strings)
 
 ## Running Evals
 

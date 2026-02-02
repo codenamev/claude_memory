@@ -23,6 +23,13 @@ RSpec.describe "Architectural Decision Eval", :eval do
     builder.close
   end
 
+  def acceptance_criteria
+    @criteria ||= EvalHelpers::SimpleAcceptanceCriteria.new(
+      required_keywords: ["Sequel", "database", "access"],
+      threshold: 0.67
+    )
+  end
+
   def stub_claude_response_with_memory
     stub_success_response(
       "Based on the project's architectural decisions, you should use Sequel for " \
@@ -76,6 +83,30 @@ RSpec.describe "Architectural Decision Eval", :eval do
     end
   end
 
+  describe "with memory enabled (CLI)", :eval_real, :slow do
+    before do
+      populate_fixture_memory
+    end
+
+    it "follows architectural decision using real Claude" do
+      skip "Real mode requires claude CLI" unless system("which claude > /dev/null 2>&1")
+      skip "Skipped in stub mode" if eval_mode == "stub"
+
+      prompt = "What library should I use for database access in this project?"
+      context = "This is a Ruby gem project that needs to query a database."
+
+      result = memory_runner.run(prompt: prompt, context: context)
+
+      expect(result[:success]).to be(true), "Claude CLI should succeed"
+
+      evaluation = acceptance_criteria.evaluate(result[:result])
+
+      expect(evaluation.passed?).to be(true),
+        "Response should follow architectural decision\n" \
+        "Details: #{evaluation.details}"
+    end
+  end
+
   context "baseline (no memory)" do
     it "gives generic advice without knowing the decision" do
       result = stub_claude_response_without_memory
@@ -98,6 +129,27 @@ RSpec.describe "Architectural Decision Eval", :eval do
       score = recommends_sequel_specifically ? 1.0 : 0.0
 
       expect(score).to eq(0.0), "Baseline should not know to recommend Sequel specifically"
+    end
+  end
+
+  context "baseline (no memory, CLI)", :eval_real, :slow do
+    it "gives generic options without knowing project decision" do
+      skip "Real mode requires claude CLI" unless system("which claude > /dev/null 2>&1")
+      skip "Skipped in stub mode" if eval_mode == "stub"
+
+      prompt = "What library should I use for database access in this project?"
+
+      result = baseline_runner.run(prompt: prompt)
+
+      expect(result[:success]).to be(true), "Claude CLI should succeed"
+
+      evaluation = acceptance_criteria.evaluate(result[:result])
+
+      # Baseline may mention Sequel generically but won't know project decision
+      # We expect lower confidence in the specific choice
+      expect(evaluation.score).to be < 0.8,
+        "Baseline should not confidently recommend project-specific choice\n" \
+        "Details: #{evaluation.details}"
     end
   end
 

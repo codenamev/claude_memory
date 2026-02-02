@@ -213,14 +213,23 @@ Future phases can add semantic similarity scoring.
 - [x] Verify stub mode still works
 - [x] Document real mode usage
 
-### Phase 2: Expand (Future)
+### Phase 2: Expand Coverage ✅
 
-- [ ] Add 2-3 more scenarios with CLI tests
-- [ ] Tune acceptance criteria based on results
-- [ ] Measure actual costs and variance
+- [x] Add tech_stack_recall CLI tests
+- [x] Add architectural_decision CLI tests
+- [x] Add convention_recall CLI tests (Phase 1)
+- [x] 3 scenarios with 6 CLI tests total
+- [x] All tests pass in stub mode
+- [x] Ready for real mode validation
+
+**Current Coverage:**
+- Convention Recall (2 CLI tests: baseline + memory)
+- Tech Stack Recall (2 CLI tests: baseline + memory)
+- Architectural Decision (2 CLI tests: baseline + memory)
 
 ### Phase 3: CI Integration (Future)
 
 - [ ] Add GitHub Actions workflow
 - [ ] Set up API key secret
 - [ ] Run on release events only
+- [ ] Add cost tracking/reporting
