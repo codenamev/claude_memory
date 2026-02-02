@@ -14,6 +14,11 @@ GEM
     diff-lcs (1.6.2)
     erb (6.0.1)
     extralite (2.14)
+    fastembed (1.1.0)
+      onnxruntime (~> 0.9)
+      tokenizers (~> 0.5)
+    ffi (1.17.3-x86_64-darwin)
+    ffi (1.17.3-x86_64-linux-gnu)
     io-console (0.8.2)
     irb (1.16.0)
       pp (>= 0.6.0)
@@ -23,6 +28,10 @@ GEM
     language_server-protocol (3.17.0.5)
     lefthook (1.13.6)
     lint_roller (1.1.0)
+    onnxruntime (0.10.1-x86_64-darwin)
+      ffi
+    onnxruntime (0.10.1-x86_64-linux)
+      ffi
     parallel (1.27.0)
     parallel_tests (5.5.0)
       parallel
@@ -93,6 +102,8 @@ GEM
       lint_roller (~> 1.1)
       rubocop-performance (~> 1.26.0)
     stringio (3.2.0)
+    tokenizers (0.6.3-x86_64-darwin)
+    tokenizers (0.6.3-x86_64-linux)
     tsort (0.2.0)
     unicode-display_width (3.2.0)
       unicode-emoji (~> 4.1)
@@ -104,6 +115,7 @@ PLATFORMS
 
 DEPENDENCIES
   claude_memory!
+  fastembed
   irb
   lefthook (~> 1.6)
   parallel_tests
@@ -119,12 +131,17 @@ CHECKSUMS
   diff-lcs (1.6.2) sha256=9ae0d2cba7d4df3075fe8cd8602a8604993efc0dfa934cff568969efb1909962
   erb (6.0.1) sha256=28ecdd99c5472aebd5674d6061e3c6b0a45c049578b071e5a52c2a7f13c197e5
   extralite (2.14) sha256=f40d2e1c83b34ede8039ef356427c0f619b0e81ddc8e5a80303d3383d0621ed5
+  fastembed (1.1.0) sha256=0b59cd93cc6879bed599585404d3230103002b9fb966f1dfe0cc94c334ad168c
+  ffi (1.17.3-x86_64-darwin) sha256=1f211811eb5cfaa25998322cdd92ab104bfbd26d1c4c08471599c511f2c00bb5
+  ffi (1.17.3-x86_64-linux-gnu) sha256=3746b01f677aae7b16dc1acb7cb3cc17b3e35bdae7676a3f568153fb0e2c887f
   io-console (0.8.2) sha256=d6e3ae7a7cc7574f4b8893b4fca2162e57a825b223a177b7afa236c5ef9814cc
   irb (1.16.0) sha256=2abe56c9ac947cdcb2f150572904ba798c1e93c890c256f8429981a7675b0806
   json (2.18.0) sha256=b10506aee4183f5cf49e0efc48073d7b75843ce3782c68dbeb763351c08fd505
   language_server-protocol (3.17.0.5) sha256=fd1e39a51a28bf3eec959379985a72e296e9f9acfce46f6a79d31ca8760803cc
   lefthook (1.13.6) sha256=87625da61ede93261eaa85e27181a96b4fd9666ba834b0ee8dcbde2b46f784e9
   lint_roller (1.1.0) sha256=2c0c845b632a7d172cb849cc90c1bce937a28c5c8ccccb50dfd46a485003cc87
+  onnxruntime (0.10.1-x86_64-darwin) sha256=9b416fb9c1b9062e084757805dfa2e42a60f0be9c16e1d897684a2effd2e71f5
+  onnxruntime (0.10.1-x86_64-linux) sha256=378170c279ee83c772f7a27a739202d0162a5d40219621978f4787fabc4123a4
   parallel (1.27.0) sha256=4ac151e1806b755fb4e2dc2332cbf0e54f2e24ba821ff2d3dcf86bf6dc4ae130
   parallel_tests (5.5.0) sha256=783c1e4da27c4096a7b360f080ae03cf1122cb0dfdb4fe827013e0521642f666
   parser (3.3.10.1) sha256=06f6a725d2cd91e5e7f2b7c32ba143631e1f7c8ae2fb918fc4cebec187e6a688
@@ -152,6 +169,8 @@ CHECKSUMS
   standard-custom (1.0.2) sha256=424adc84179a074f1a2a309bb9cf7cd6bfdb2b6541f20c6bf9436c0ba22a652b
   standard-performance (1.9.0) sha256=49483d31be448292951d80e5e67cdcb576c2502103c7b40aec6f1b6e9c88e3f2
   stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
+  tokenizers (0.6.3-x86_64-darwin) sha256=4b71386cc08ceff5f86b448c74b2b297c00a280a1d502399b6cda23ef94e01fd
+  tokenizers (0.6.3-x86_64-linux) sha256=77a45cbde59daac33bdda1a74d45c18080478992a00ee7d898e7b8d15d0b3149
   tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f
   unicode-display_width (3.2.0) sha256=0cdd96b5681a5949cdbc2c55e7b420facae74c4aaf9a9815eee1087cb1853c42
   unicode-emoji (4.2.0) sha256=519e69150f75652e40bf736106cfbc8f0f73aa3fb6a65afe62fefa7f80b0f80f

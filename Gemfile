@@ -14,3 +14,5 @@ gem "parallel_tests"
 gem "standard", "~> 1.3"
 
 gem "lefthook", "~> 1.6"
+
+gem "fastembed", group: [:development, :test]
