@@ -30,6 +30,11 @@ The following improvements from the original analysis have been successfully imp
 12. **Incremental Sync** - mtime-based change detection to skip unchanged transcript files
 13. **Context-Aware Queries** - Filter facts by git branch, directory, or tools used
 14. **ROI Metrics Tracking** - ingestion_metrics table tracking token economics for distillation efficiency (2026-01-26)
+15. **Relative Time Formatting** - Human-readable "Xm ago", "Xh ago" timestamps in MCP recall output (2026-02-02)
+16. **System Tag Stripping** - Strip `<system-reminder>`, `<command-*>`, `<local-command-caveat>` during ingestion (2026-02-02)
+17. **MCP Structured Content Pattern** - Dual content (text summary) + structuredContent (JSON) from all tools (2026-02-02)
+18. **MCP Query Guide Prompt** - Registered `memory_guide` prompt teaching tool selection strategy (2026-02-02)
+19. **Compact Response Format** - `compact: true` parameter on recall tools to omit receipts (~60% smaller) (2026-02-02)
 
 ---
 
@@ -46,7 +51,7 @@ Source: docs/influence/grepai.md
   - Effort: 2-3 days (watcher class, integration, testing)
   - Trade-off: Background process ~10MB memory overhead, may complicate testing
 
-- [ ] **Compact Response Format for MCP Tools**: Reduce token usage by ~60% in MCP responses
+- [x] **Compact Response Format for MCP Tools**: Reduce token usage by ~60% in MCP responses
   - Value: Critical for scaling to large fact databases (1000+ facts)
   - Evidence: mcp/server.go:219 - `SearchResultCompact` omits content field, returns only metadata
   - Implementation: Add `compact: true` parameter to all recall tools, omit provenance/context excerpts by default, user can override with `compact: false`
@@ -86,14 +91,14 @@ Claude-Supermemory is a cloud-backed Claude Code plugin (~1,195 LOC, JavaScript)
   - Evidence: `compress.js:13-75` — 10 tool handlers with human-readable output
   - Effort: 4-6 hours (class + tests + ingest integration)
 
-- [ ] **Relative Time Formatting in Recall Output** ⭐: Display "2hrs ago", "3d ago" instead of ISO timestamps in MCP recall results and CLI output
+- [x] **Relative Time Formatting in Recall Output** ⭐: Display "2hrs ago", "3d ago" instead of ISO timestamps in MCP recall results and CLI output
   - Value: More readable temporal context for humans and Claude
   - Evidence: `format-context.js:1-23` — progressive granularity (just now → mins → hrs → days → date)
   - Effort: 2-3 hours (module + tests + integration)
 
 ### Medium Priority Recommendations
 
-- [ ] **System Tag Stripping in ContentSanitizer**: Strip `<system-reminder>` and self-referential context tags during ingestion
+- [x] **System Tag Stripping in ContentSanitizer**: Strip `<system-reminder>` and self-referential context tags during ingestion
   - Value: Cleaner ingested content, prevents meta-content from polluting facts
   - Evidence: `transcript-formatter.js:168-175` — regex removal of system tags
   - Effort: 1-2 hours
@@ -892,13 +897,13 @@ Re-analyzed QMD after significant project evolution: now 5,700+ stars, Claude Co
   - Implementation: Create `.claude-plugin/marketplace.json`, skill definition with `allowed-tools: mcp__claude-memory__*`, inline health check
   - Effort: 2-3 days
 
-- [ ] **MCP Structured Content Pattern** ⭐: Return dual human-readable text + machine-parseable JSON from all MCP tools
+- [x] **MCP Structured Content Pattern** ⭐: Return dual human-readable text + machine-parseable JSON from all MCP tools
   - Value: Better Claude tool consumption — text summaries for simple use, JSON for structured processing
   - Evidence: `mcp.ts:288-291` — `{ content: [text], structuredContent: {results} }` pattern
   - Implementation: Update all 18 MCP tool handlers to return both `content` and `structuredContent`
   - Effort: 1-2 days
 
-- [ ] **MCP Query Guide Prompt** ⭐: Register prompt teaching Claude when to use recall vs recall_semantic vs search_concepts
+- [x] **MCP Query Guide Prompt** ⭐: Register prompt teaching Claude when to use recall vs recall_semantic vs search_concepts
   - Value: Improved tool selection quality without per-query instructions
   - Evidence: `mcp.ts:172-252` — registered prompt with search strategy, score interpretation, workflow
   - Implementation: Register `memory_guide` prompt in MCP server
@@ -1229,4 +1234,4 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 
 *This document has been updated to reflect completed implementations. Fourteen major improvements have been successfully integrated: 6 from claude-mem and 8 from episodic-memory. ClaudeMemory now combines the best of both systems while maintaining its unique advantages in fact-based knowledge representation and truth maintenance.*
 
-*Last updated: 2026-02-02 - Updated QMD study (plugin distribution, structured MCP content, query guide prompt, fine-tuned model analysis)*
+*Last updated: 2026-02-02 - Implemented relative time formatting, system tag stripping, MCP structured content, query guide prompt, compact response format*
