@@ -166,9 +166,19 @@ module ClaudeMemory
     def should_write?(path, content)
       return true unless @fs.exist?(path)
 
-      existing_hash = @fs.file_hash(path)
-      new_hash = Digest::SHA256.hexdigest(content)
+      # Compare content without timestamp to avoid unnecessary rewrites
+      existing_content = @fs.read(path)
+      existing_normalized = normalize_for_comparison(existing_content)
+      new_normalized = normalize_for_comparison(content)
+
+      existing_hash = Digest::SHA256.hexdigest(existing_normalized)
+      new_hash = Digest::SHA256.hexdigest(new_normalized)
       existing_hash != new_hash
+    end
+
+    def normalize_for_comparison(content)
+      # Remove timestamp line for comparison to prevent churn on timestamp-only changes
+      content.gsub(/^  Generated: .+$/, "")
     end
 
     def ensure_import_exists(mode, path, rules_dir: nil)

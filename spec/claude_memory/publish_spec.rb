@@ -169,6 +169,27 @@ RSpec.describe ClaudeMemory::Publish do
         result = publish.publish!(mode: :shared)
         expect(result[:status]).to eq(:updated)
       end
+
+      it "does not rewrite when only timestamp would change (empty content)" do
+        # Publish with no facts
+        first = publish.publish!(mode: :shared)
+        expect(first[:status]).to eq(:updated)
+
+        # Publish again with no facts - should not rewrite
+        second = publish.publish!(mode: :shared)
+        expect(second[:status]).to eq(:unchanged)
+      end
+
+      it "does not rewrite when only timestamp would change (with facts)" do
+        create_fact("convention", "test rule")
+        first = publish.publish!(mode: :shared)
+        expect(first[:status]).to eq(:updated)
+
+        # Simulate time passing but no content change
+        sleep 0.01
+        second = publish.publish!(mode: :shared)
+        expect(second[:status]).to eq(:unchanged)
+      end
     end
   end
 end
