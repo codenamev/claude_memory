@@ -25,5 +25,11 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-      - name: Run the default task
+
+      # Optional: Run evals with summary report (makes results visible in logs)
+      - name: Run evals with summary
+        run: ./bin/run-evals
+
+      # Run full test suite (includes evals again, but that's fine)
+      - name: Run tests and linter
         run: bundle exec rake
