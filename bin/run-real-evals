@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Run real eval tests with cost tracking and summary
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}Real Eval Validation${NC}"
+echo -e "${BLUE}========================================${NC}"
+echo ""
+
+# Check prerequisites
+if ! command -v claude &> /dev/null; then
+  echo -e "${RED}Error: claude CLI not found${NC}"
+  echo "Install with: npm install -g @anthropic-ai/claude-code"
+  exit 1
+fi
+
+if [ -z "$ANTHROPIC_API_KEY" ]; then
+  echo -e "${YELLOW}Warning: ANTHROPIC_API_KEY not set${NC}"
+  echo "Real evals require an API key to run"
+  exit 1
+fi
+
+echo -e "${GREEN}✓${NC} Claude CLI found: $(claude --version)"
+echo -e "${GREEN}✓${NC} API key configured"
+echo ""
+
+# Parse arguments
+SCENARIOS="${1:-all}"
+OUTPUT_FILE="real-eval-results.json"
+
+echo -e "${BLUE}Running real eval tests...${NC}"
+echo ""
+
+START_TIME=$(date +%s)
+
+# Run tests
+if [ "$SCENARIOS" = "all" ]; then
+  echo "Running all scenarios with real Claude execution"
+  EVAL_MODE=real bundle exec rspec spec/evals/ --tag eval_real \
+    --format json --out "$OUTPUT_FILE" \
+    --format documentation
+else
+  echo "Running scenarios: $SCENARIOS"
+  for scenario in ${SCENARIOS//,/ }; do
+    echo "Running ${scenario}..."
+    EVAL_MODE=real bundle exec rspec "spec/evals/${scenario}_spec.rb" --tag eval_real \
+      --format documentation
+  done
+fi
+
+END_TIME=$(date +%s)
+DURATION=$((END_TIME - START_TIME))
+
+echo ""
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}Results Summary${NC}"
+echo -e "${BLUE}========================================${NC}"
+
+# Parse results if JSON output exists
+if [ -f "$OUTPUT_FILE" ]; then
+  ruby -e '
+    require "json"
+    results = JSON.parse(File.read("'"$OUTPUT_FILE"'"))
+
+    total = results["summary"]["example_count"]
+    passed = total - results["summary"]["failure_count"] - results["summary"]["pending_count"]
+    failed = results["summary"]["failure_count"]
+    pending = results["summary"]["pending_count"]
+    duration = results["summary"]["duration"]
+
+    # Estimate costs
+    real_tests = total - pending
+    estimated_cost = real_tests * 0.02
+
+    puts ""
+    puts "Total Examples: #{total}"
+    puts "Passed: \e[32m#{passed}\e[0m"
+    puts "Failed: #{failed > 0 ? "\e[31m#{failed}\e[0m" : "0"}"
+    puts "Pending: #{pending}"
+    puts "Duration: #{duration.round(2)}s"
+    puts ""
+    puts "Estimated Cost: \e[33m$#{format("%.2f", estimated_cost)}\e[0m"
+    puts ""
+
+    if failed > 0
+      puts "\e[31m⚠️  Some tests failed!\e[0m"
+      exit 1
+    else
+      puts "\e[32m✅ All tests passed!\e[0m"
+    end
+  '
+  exit_code=$?
+else
+  echo "Duration: ${DURATION}s"
+  exit_code=0
+fi
+
+echo ""
+echo -e "${BLUE}========================================${NC}"
+
+exit $exit_code

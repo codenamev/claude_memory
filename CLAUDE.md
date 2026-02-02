@@ -55,15 +55,20 @@ bundle exec claude-memory <command>
 
 ### Evals
 ```bash
-# Run automated evaluation suite
+# Run automated evaluation suite (stub mode - fast, free)
 ./bin/run-evals                # Run all evals with summary report
 
+# Run real eval validation (slow, costs ~$0.12)
+./bin/run-real-evals all       # Run all scenarios with real Claude
+./bin/run-real-evals convention_recall,tech_stack_recall  # Specific scenarios
+
 # Or run directly with RSpec
-bundle exec rspec spec/evals/  # Run all eval scenarios
+bundle exec rspec spec/evals/  # Run all eval scenarios (stub mode)
 bundle exec rspec --tag eval   # Run only eval-tagged tests
+EVAL_MODE=real bundle exec rspec spec/evals/ --tag eval_real  # Real mode
 ```
 
-The eval framework tests ClaudeMemory's effectiveness by comparing baseline (no memory) vs memory-enabled responses. See `spec/evals/README.md` for details.
+The eval framework tests ClaudeMemory's effectiveness by comparing baseline (no memory) vs memory-enabled responses. See `spec/evals/README.md` for details, `spec/evals/REAL_MODE.md` for real Claude execution, and `spec/evals/CI_INTEGRATION.md` for GitHub Actions integration.
 
 ## Architecture
 

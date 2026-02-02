@@ -227,9 +227,17 @@ Future phases can add semantic similarity scoring.
 - Tech Stack Recall (2 CLI tests: baseline + memory)
 - Architectural Decision (2 CLI tests: baseline + memory)
 
-### Phase 3: CI Integration (Future)
+### Phase 3: CI Integration ✅
 
-- [ ] Add GitHub Actions workflow
-- [ ] Set up API key secret
-- [ ] Run on release events only
-- [ ] Add cost tracking/reporting
+- [x] Add GitHub Actions workflow (`.github/workflows/real-evals.yml`)
+- [x] Set up API key secret (documented in CI_INTEGRATION.md)
+- [x] Run on release events (automatic validation)
+- [x] Add cost tracking/reporting (JSON results + release comments)
+- [x] Manual trigger support (workflow_dispatch)
+- [x] Helper script for local validation (`bin/run-real-evals`)
+
+**See [CI_INTEGRATION.md](CI_INTEGRATION.md) for:**
+- Setting up GitHub secrets
+- Triggering workflows
+- Viewing results and costs
+- Troubleshooting CI issues

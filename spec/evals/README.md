@@ -55,14 +55,15 @@ EVAL_MODE=real bundle exec rspec spec/evals/ --tag eval_real
 
 # Run specific scenario
 EVAL_MODE=real bundle exec rspec spec/evals/convention_recall_spec.rb --tag eval_real
+
+# Or use the helper script with cost tracking
+./bin/run-real-evals all
+./bin/run-real-evals convention_recall,tech_stack_recall
 ```
 
-**See [REAL_MODE.md](REAL_MODE.md) for details on:**
-- Setup and prerequisites
-- Cost estimates (~$0.04 per test)
-- How it works (directory isolation, CLI execution)
-- Adding new real eval tests
-- CI integration
+**See documentation:**
+- [REAL_MODE.md](REAL_MODE.md) - Test details, setup, usage
+- [CI_INTEGRATION.md](CI_INTEGRATION.md) - GitHub Actions, releases, automation
 
 ## Adding New Scenarios (Easy with Week 2 Helpers!)
 

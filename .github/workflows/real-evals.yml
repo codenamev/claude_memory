@@ -1,0 +1,154 @@
+name: Real Eval Validation
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: # Allow manual triggering
+    inputs:
+      scenarios:
+        description: 'Scenarios to run (comma-separated, or "all")'
+        required: false
+        default: 'all'
+
+jobs:
+  real-evals:
+    runs-on: ubuntu-latest
+    name: Real Claude Execution Tests
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.1'
+          bundler-cache: true
+
+      - name: Install Claude CLI
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+
+      - name: Run real eval tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVAL_MODE: real
+        run: |
+          echo "::group::Running real eval tests"
+
+          # Run with JSON formatter for structured output
+          if [ "${{ github.event.inputs.scenarios }}" = "" ] || [ "${{ github.event.inputs.scenarios }}" = "all" ]; then
+            bundle exec rspec spec/evals/ --tag eval_real --format json --out real-eval-results.json --format documentation
+          else
+            # Run specific scenarios
+            SCENARIOS="${{ github.event.inputs.scenarios }}"
+            for scenario in ${SCENARIOS//,/ }; do
+              echo "Running ${scenario}..."
+              bundle exec rspec "spec/evals/${scenario}_spec.rb" --tag eval_real --format documentation
+            done
+          fi
+
+          echo "::endgroup::"
+
+      - name: Parse and report costs
+        if: always()
+        run: |
+          if [ -f real-eval-results.json ]; then
+            echo "::group::Eval Results Summary"
+            ruby -e '
+              require "json"
+              results = JSON.parse(File.read("real-eval-results.json"))
+
+              total = results["summary"]["example_count"]
+              passed = total - results["summary"]["failure_count"] - results["summary"]["pending_count"]
+              failed = results["summary"]["failure_count"]
+              pending = results["summary"]["pending_count"]
+              duration = results["summary"]["duration"]
+
+              # Estimate costs (rough approximation)
+              # Assume ~$0.02 per test call
+              real_tests = total - pending
+              estimated_cost = real_tests * 0.02
+
+              puts "=" * 60
+              puts "REAL EVAL RESULTS"
+              puts "=" * 60
+              puts "Total Examples: #{total}"
+              puts "Passed: #{passed}"
+              puts "Failed: #{failed}"
+              puts "Pending: #{pending}"
+              puts "Duration: #{duration.round(2)}s"
+              puts ""
+              puts "Estimated Cost: $#{format("%.2f", estimated_cost)}"
+              puts "=" * 60
+
+              # Set outputs for GitHub Actions
+              puts ""
+              puts "::notice title=Real Eval Complete::Passed: #{passed}/#{total}, Cost: ~$#{format("%.2f", estimated_cost)}"
+
+              if failed > 0
+                puts "::error title=Real Eval Failures::#{failed} tests failed!"
+                exit 1
+              end
+            '
+            echo "::endgroup::"
+          else
+            echo "No results file found (tests may not have run)"
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-eval-results
+          path: |
+            real-eval-results.json
+          retention-days: 30
+
+      - name: Comment on release (if triggered by release)
+        if: github.event_name == 'release' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let body = '## 🧪 Real Eval Validation\n\n';
+
+            if (fs.existsSync('real-eval-results.json')) {
+              const results = JSON.parse(fs.readFileSync('real-eval-results.json', 'utf8'));
+              const total = results.summary.example_count;
+              const passed = total - results.summary.failure_count - results.summary.pending_count;
+              const failed = results.summary.failure_count;
+              const duration = results.summary.duration.toFixed(2);
+
+              const realTests = total - results.summary.pending_count;
+              const estimatedCost = (realTests * 0.02).toFixed(2);
+
+              body += `**Results:** ${passed}/${total} passed`;
+              if (failed > 0) {
+                body += ` ⚠️ ${failed} failed`;
+              } else {
+                body += ' ✅';
+              }
+              body += `\n**Duration:** ${duration}s\n`;
+              body += `**Estimated Cost:** ~$${estimatedCost}\n\n`;
+
+              if (failed > 0) {
+                body += '⚠️ Some real eval tests failed. Check the workflow logs for details.\n';
+              } else {
+                body += '✅ All real eval tests passed! Memory is working as expected.\n';
+              }
+            } else {
+              body += '⚠️ Real eval tests did not complete. Check workflow logs.\n';
+            }
+
+            body += `\n[View full results](${context.payload.release.html_url})`;
+
+            github.rest.issues.createComment({
+              issue_number: context.payload.release.id,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

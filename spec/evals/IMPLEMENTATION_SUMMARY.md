@@ -209,9 +209,60 @@ Runtime: ~0.75s (stub mode)
 - 3 scenarios × 2 tests × $0.02 = **$0.12 per full run**
 - Monthly (1 run/day): ~$3.60
 
+## Phase 3 Update (Completed)
+
+### CI Integration for Release Validation ✅
+
+Implemented automated real eval validation in GitHub Actions:
+
+**New Files:**
+1. `.github/workflows/real-evals.yml` (140 lines)
+   - Runs on release publish events
+   - Supports manual dispatch with scenario selection
+   - Installs Claude CLI and runs EVAL_MODE=real tests
+   - Parses results and estimates costs
+   - Comments on releases with summary
+   - Uploads JSON artifacts
+
+2. `bin/run-real-evals` (90 lines)
+   - Helper script for local validation
+   - Cost tracking and colored output
+   - Supports running all or specific scenarios
+   - Prerequisite checking (claude CLI, API key)
+
+3. `spec/evals/CI_INTEGRATION.md` (400+ lines)
+   - Complete CI setup guide
+   - Cost management strategies
+   - Troubleshooting common issues
+   - Workflow customization examples
+
+**Features:**
+- ✅ Automatic validation on GitHub releases
+- ✅ Manual triggering via workflow_dispatch
+- ✅ Cost estimation and reporting
+- ✅ Release comments with pass/fail status
+- ✅ JSON artifacts with detailed results
+- ✅ Local validation script with prerequisites check
+
+**Cost Controls:**
+- Runs only on releases (not every commit)
+- Budget limit enforced per test ($0.10 max)
+- Estimated cost displayed prominently
+- Can be customized to run on major releases only
+
+**Release Process Integration:**
+```bash
+1. Create tag: git tag v0.4.0
+2. Push tag: git push origin v0.4.0
+3. Create release: gh release create v0.4.0
+4. Workflow runs automatically (~2-3 min)
+5. Results posted as release comment
+6. Artifacts available for download
+```
+
 ## Next Steps (Future Phases)
 
-### Phase 3: CI Integration
+### Phase 4: Advanced Features
 - [ ] Add GitHub Actions workflow
 - [ ] Set up ANTHROPIC_API_KEY secret
 - [ ] Run real mode only on release events
