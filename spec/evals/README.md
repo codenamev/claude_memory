@@ -283,6 +283,23 @@ docs/
 └── eval_week2_summary.md              # Week 2 summary
 ```
 
+## DevMemBench (Retrieval + Resolution Benchmarks)
+
+For quantitative retrieval accuracy and truth maintenance benchmarks, see the **DevMemBench** suite:
+
+```bash
+# Run offline benchmarks ($0, ~8 seconds)
+bundle exec rspec spec/benchmarks/ --tag benchmark --format documentation
+```
+
+DevMemBench includes:
+- **105 developer-domain facts** across 5 simulated projects
+- **155 retrieval queries** at 6 difficulty levels with IR metrics (Recall@k, MRR, nDCG@10)
+- **100 truth maintenance cases** testing supersession, conflict, accumulation, corroboration
+- **31 end-to-end scenarios** across 5 LongMemEval ability categories
+
+See [`spec/benchmarks/README.md`](../benchmarks/README.md) for full documentation.
+
 ## References
 
 - **Plan Document**: Original implementation plan with expert reviews

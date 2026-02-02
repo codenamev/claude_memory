@@ -206,6 +206,49 @@ The uninstall command removes:
 - 🏗️ [Architecture](docs/architecture.md) - Technical deep dive
 - 📝 [Changelog](CHANGELOG.md) - Release notes
 
+## Benchmarks
+
+ClaudeMemory includes **DevMemBench**, a developer-domain benchmark suite that measures retrieval quality and truth maintenance accuracy. All offline benchmarks run locally at zero cost.
+
+### Latest Results
+
+| Benchmark | Metric | Score |
+|-----------|--------|-------|
+| **Truth Maintenance** | Accuracy (100 cases) | **100%** |
+| **FTS5 Retrieval** | Recall@5 (40 easy queries) | **97.5%** |
+| **Semantic Retrieval** | Recall@5 (85 queries aggregate) | **78.6%** |
+| **Semantic Retrieval** | Recall@5 (40 medium queries) | **69.6%** |
+| **Hybrid Retrieval** | Recall@5 (100 queries aggregate) | **72.7%** |
+| **Hybrid Retrieval** | Recall@10 (20 hard queries) | **62.8%** |
+| **Scope Ranking** | Queries returning expected facts | **5/5** |
+
+Semantic and hybrid retrieval use [fastembed-rb](https://github.com/khasinski/fastembed-rb) with the BAAI/bge-small-en-v1.5 model (384-dim, runs locally, no API key needed).
+
+### What the benchmarks measure
+
+**Retrieval accuracy** -- Given a database of ~105 developer-domain facts across 5 simulated projects, how well does search find the right facts? Measured with standard IR metrics (Recall@k, MRR, nDCG@10) across 155 queries at varying difficulty levels (exact keyword match, semantic paraphrase, cross-category synthesis, abstention, temporal).
+
+**Truth maintenance** -- Given pairs of existing and incoming facts, does the resolver correctly determine the outcome? 100 FEVER-inspired cases test four outcomes: supersession (new stated fact replaces old), conflict (inferred fact contradicts stated), accumulation (multi-value predicates coexist), and corroboration (same fact adds provenance).
+
+**End-to-end with Claude** -- 31 scenarios across 5 LongMemEval ability categories (information extraction, multi-session reasoning, temporal reasoning, knowledge updates, abstention). Requires `EVAL_MODE=real` and costs ~$2-8 per run.
+
+### Running benchmarks
+
+```bash
+# Offline benchmarks ($0, ~8 seconds)
+bundle exec rspec spec/benchmarks/ --tag benchmark --format documentation
+
+# Full evals + benchmarks
+./bin/run-evals --all
+
+# End-to-end with real Claude (~$2-8)
+EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/ --tag eval_real
+```
+
+The benchmark dataset draws from real CLAUDE.md patterns and is designed specifically for ClaudeMemory's 6 predicates and 8 entity types. Open IR datasets (BEIR, FEVER, LongMemEval) informed the methodology but don't cover developer-domain knowledge.
+
+👉 **[Benchmark Details →](spec/benchmarks/README.md)**
+
 ## For Developers
 
 - **Language:** Ruby 3.2+

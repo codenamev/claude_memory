@@ -2,7 +2,7 @@
 
 This document contains the improvements that have NOT yet been implemented from the episodic-memory and claude-mem analysis.
 
-**Note:** The "index" command to generate embeddings for existing facts has been completed (2026-01-23).
+**Note:** The "index" command to generate embeddings for existing facts has been completed (2026-01-23). FastEmbed integration (BAAI/bge-small-en-v1.5 via fastembed-rb) was added for high-quality local embeddings (2026-02-02), replacing TF-IDF as the primary embedding approach for benchmarks.
 
 ---
 
@@ -273,7 +273,7 @@ session_summaries: {
 - Embedding generation
 - Sync overhead
 
-**Alternative**: We've implemented lightweight TF-IDF embeddings without external dependencies.
+**Alternative**: We use [fastembed-rb](https://github.com/khasinski/fastembed-rb) with BAAI/bge-small-en-v1.5 for high-quality local embeddings (384-dim, no API key, ONNX runtime). Benchmark results: Recall@5=0.786 aggregate, 0.696 on semantic paraphrase queries.
 
 ### 2. Claude Agent SDK for Distillation
 

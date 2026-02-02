@@ -70,6 +70,23 @@ EVAL_MODE=real bundle exec rspec spec/evals/ --tag eval_real  # Real mode
 
 The eval framework tests ClaudeMemory's effectiveness by comparing baseline (no memory) vs memory-enabled responses. See `spec/evals/README.md` for details, `spec/evals/REAL_MODE.md` for real Claude execution, and `spec/evals/CI_INTEGRATION.md` for GitHub Actions integration.
 
+### Benchmarks (DevMemBench)
+```bash
+# Run offline benchmarks - retrieval accuracy + truth maintenance ($0, ~8s)
+bundle exec rspec spec/benchmarks/ --tag benchmark --format documentation
+
+# Run all evals + benchmarks together
+./bin/run-evals --all
+
+# Run only benchmarks (skip evals)
+./bin/run-evals --benchmarks-only
+
+# End-to-end with real Claude (~$2-8)
+EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/ --tag eval_real
+```
+
+DevMemBench measures retrieval accuracy (Recall@k, MRR, nDCG@10) across 155 queries, truth maintenance correctness across 100 cases, and end-to-end Claude response quality across 31 scenarios. Semantic and hybrid retrieval use [fastembed-rb](https://github.com/khasinski/fastembed-rb) (BAAI/bge-small-en-v1.5, local ONNX, no API key). See `spec/benchmarks/README.md` for full details.
+
 ## Architecture
 
 ### Dual-Database System

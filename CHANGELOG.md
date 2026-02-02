@@ -6,11 +6,23 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+**Semantic Search with FastEmbed**
+- Integrated [fastembed-rb](https://github.com/khasinski/fastembed-rb) for high-quality local embeddings
+  - Uses BAAI/bge-small-en-v1.5 model (384-dim, ~67MB ONNX, runs locally)
+  - No API key required -- model downloaded once to `~/.cache/fastembed/`
+  - Asymmetric query/passage encoding for better retrieval accuracy
+- `FastembedAdapter` class implementing the existing `Generator` interface for drop-in replacement
+- Benchmark retrieval scores jumped significantly with real embeddings:
+  - Semantic easy: Recall@5 = 0.900, medium: 0.696
+  - Hybrid aggregate: Recall@5 = 0.727 (was 0.266 with TF-IDF fallback)
+
 ### Changed
 
 ### Fixed
 
 ### Documentation
+- Updated benchmark results throughout README, spec/benchmarks/README, and architecture docs
+- Replaced TF-IDF embedding references with FastEmbed in architecture documentation
 
 ### Internal
 
@@ -41,9 +53,9 @@ All notable changes to this project will be documented in this file.
 - Configuration class for centralized ENV access and testability
 
 **Search & Recall**
-- `index` command to generate TF-IDF embeddings for semantic search
+- `index` command to generate embeddings for semantic search
 - Index command resumability with checkpoints (recover from interruption)
-- Semantic search capabilities using TF-IDF embeddings
+- Semantic search capabilities with embedding-based vector search
 - Improved full-text search with empty query handling
 
 **Session Intelligence**

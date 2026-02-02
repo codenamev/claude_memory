@@ -27,7 +27,7 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 Infrastructure Layer                         │
-│  Store (SQLite v6 + WAL) → FileSystem → Index (FTS5+TF-IDF)│
+│  Store (SQLite v6 + WAL) → FileSystem → Index (FTS5+Vector) │
 │  Templates                                                   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -155,10 +155,12 @@ end
 - Cleans up old content and expired facts
 
 #### Embeddings (`embeddings/`)
-- Lightweight TF-IDF embedding generation
-- 384-dimensional normalized vectors
-- Semantic similarity calculations
-- No heavy ML dependencies required
+- `Generator`: Built-in TF-IDF embedding generation (always available, no dependencies)
+- `FastembedAdapter`: High-quality local embeddings via [fastembed-rb](https://github.com/khasinski/fastembed-rb) (BAAI/bge-small-en-v1.5)
+- 384-dimensional normalized vectors (both generators produce same dimensionality)
+- Asymmetric query/passage encoding (FastEmbed) for better retrieval accuracy
+- `Similarity`: Cosine similarity calculations and top-k ranking
+- Dependency injection: `Recall.new(store, embedding_generator: adapter)`
 
 #### MCP (`mcp/`)
 - Model Context Protocol server
@@ -191,8 +193,8 @@ end
 
 #### Index (`index/`)
 - SQLite FTS5 for lexical full-text search
-- TF-IDF embeddings for semantic similarity (384-dimensional vectors)
-- Hybrid search modes: text-only, semantic-only, or both
+- Vector embeddings for semantic similarity (384-dimensional vectors)
+- Hybrid search modes: text-only, vector-only, or both (FTS5 + vector)
 
 #### Templates (`templates/`)
 - Hook configuration examples (`hooks.example.json`)
@@ -301,10 +303,10 @@ FileSystem (write)
 **Solution:** Enable Write-Ahead Logging (WAL) mode in SQLite
 **Impact:** MCP server and hooks can operate concurrently without blocking
 
-### 5. Lightweight Semantic Search
-**Problem:** Traditional semantic search requires heavy ML models and API calls
-**Solution:** TF-IDF embeddings with 384-dimensional vectors (no external dependencies)
-**Impact:** Fast semantic search without external API costs
+### 5. Local Semantic Search
+**Problem:** Traditional semantic search requires cloud API calls for embedding generation
+**Solution:** Local ONNX model via fastembed-rb (BAAI/bge-small-en-v1.5, 384-dimensional vectors)
+**Impact:** High-quality semantic search with no API costs, no network dependency after initial model download
 
 ## Testing Strategy
 
@@ -346,7 +348,7 @@ FileSystem (write)
 - 4 domain models with business logic
 - 20 command classes
 - 19 MCP tools
-- Semantic search with TF-IDF embeddings
+- Semantic search with local embeddings (FastEmbed + TF-IDF fallback)
 - Schema v6 with WAL mode
 
 ## Future Improvements
@@ -389,6 +391,6 @@ The refactored architecture provides:
 - ✅ Performance (batch queries, in-memory FS, WAL mode)
 - ✅ Maintainability (small, focused classes)
 - ✅ Extensibility (easy to add commands/tools)
-- ✅ Semantic search (lightweight TF-IDF embeddings)
+- ✅ Semantic search (local FastEmbed ONNX model, TF-IDF fallback)
 
 The codebase now follows best practices for Ruby applications and is well-positioned for future growth.

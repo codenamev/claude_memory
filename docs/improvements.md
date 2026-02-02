@@ -23,7 +23,7 @@ The following improvements from the original analysis have been successfully imp
 7. **Enhanced Statistics** - Comprehensive stats command showing facts, entities, provenance, conflicts
 8. **Session Metadata Tracking** - Captures git_branch, cwd, claude_version, thinking_level from transcripts
 9. **Tool Usage Tracking** - Dedicated tool_calls table tracking tool names, inputs, timestamps
-10. **Semantic Search with TF-IDF** - Local embeddings (384-dimensional), hybrid vector + text search
+10. **Semantic Search with Local Embeddings** - FastEmbed (BAAI/bge-small-en-v1.5, 384-dim), hybrid vector + text search
 11. **Multi-Concept AND Search** - Query facts matching all of 2-5 concepts simultaneously
 12. **Incremental Sync** - mtime-based change detection to skip unchanged transcript files
 13. **Context-Aware Queries** - Filter facts by git branch, directory, or tools used
@@ -58,13 +58,11 @@ Source: docs/influence/grepai.md
   - Effort: 2-3 days (graph builder, MCP tool, tests)
   - Trade-off: Adds complexity for feature used mainly for debugging/exploration
 
-- [ ] **Hybrid Search (Vector + Text) with RRF**: Better relevance combining semantic and keyword matching
-  - Value: 50% improvement in search quality (proven by grepai's Reciprocal Rank Fusion)
-  - Evidence: search/search.go - RRF with K=60, combines cosine similarity with full-text search
-  - Implementation: Add `sqlite-vec` extension, add `embeddings` BLOB column to `facts`, implement RRF in `Recall#query`, make hybrid optional via config
-  - Effort: 5-7 days (embedder setup, schema migration, RRF implementation, testing)
-  - Trade-off: Requires API calls for embedding (~$0.00001/fact), slower queries (2x search + fusion)
-  - Recommendation: CONSIDER - High value but significant effort. Start with FTS5, add vectors later if quality issues arise
+- [x] **Hybrid Search (Vector + Text)**: Better relevance combining semantic and keyword matching
+  - Value: 173% improvement in Recall@5 over FTS-only (0.266 → 0.727 in benchmarks)
+  - Implementation: FastEmbed adapter (BAAI/bge-small-en-v1.5), embeddings stored in `embedding_json` column, `Recall#query_semantic(mode: :both)` merges vector + FTS results
+  - No API calls -- fastembed-rb runs ONNX model locally (~67MB, downloaded once)
+  - RRF-style fusion still a potential optimization (current: naive merge with deduplication)
 
 ---
 
@@ -138,9 +136,9 @@ This document analyzes two complementary memory systems:
 | Feature | Episodic-Memory | ClaudeMemory |
 |---------|----------------|--------------|
 | **Data Model** | Conversation exchanges (user-assistant pairs) | Facts (subject-predicate-object triples) |
-| **Search Method** | Vector embeddings + text search | FTS5 full-text search |
-| **Embeddings** | Local Transformers.js (Xenova/all-MiniLM-L6-v2) | None (FTS5 only) |
-| **Vector Storage** | sqlite-vec virtual table | N/A |
+| **Search Method** | Vector embeddings + text search | Hybrid vector + FTS5 search |
+| **Embeddings** | Local Transformers.js (Xenova/all-MiniLM-L6-v2) | Local FastEmbed (BAAI/bge-small-en-v1.5) |
+| **Vector Storage** | sqlite-vec virtual table | JSON column in facts table |
 | **Scope** | Single database with project field | Dual database (global + project) |
 | **Truth Maintenance** | None (keeps all conversations) | Supersession + conflict resolution |
 | **Summarization** | Claude API generates summaries | N/A |
@@ -223,11 +221,12 @@ This document analyzes two complementary memory systems:
 
 ### Design Patterns Worth Adopting
 
-1. **Local Vector Embeddings**
+1. **Local Vector Embeddings** ✅ IMPLEMENTED
    - **Value**: Semantic search finds conceptually similar content even with different terminology
-   - **Implementation**: Add `embeddings` column to facts table, use sqlite-vec extension
-   - **Ruby gems**: `onnxruntime` or shell out to Python/Node.js for embeddings
-   - **Trade-off**: Increased storage (384 floats per fact), embedding generation time
+   - **Implementation**: `FastembedAdapter` wrapping fastembed-rb (BAAI/bge-small-en-v1.5, ONNX runtime)
+   - Embeddings stored as JSON in `embedding_json` column on facts table
+   - Asymmetric query/passage encoding for better retrieval accuracy
+   - Benchmark: Recall@5=0.696 on semantic paraphrase queries (medium difficulty)
 
 2. **Multi-Concept AND Search**
    - **Value**: Precise queries like "find conversations about React AND authentication AND JWT"
@@ -770,7 +769,7 @@ npm install better-sqlite3  # Needs node-gyp + build tools
 - Embedding generation
 - Sync overhead
 
-**Alternative**: Stick with SQLite FTS5. Add embeddings only if users request semantic search.
+**Alternative**: We use fastembed-rb with a local ONNX model (BAAI/bge-small-en-v1.5) -- no Python, no server, no API calls.
 
 ### 2. Claude Agent SDK for Distillation
 
@@ -910,7 +909,7 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 - **Break Priority**: paragraph > sentence > line > word
 - **Implementation**: Modify ingestion to chunk long content_items before embedding
 - **Consideration**: Only if users report issues with long transcripts
-- **Recommendation**: **DEFER** - Not urgent, TF-IDF handles shorter content well
+- **Recommendation**: **DEFER** - Not urgent, FastEmbed handles shorter content well
 
 #### 6. **LLM Response Caching**
 
@@ -933,12 +932,12 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 
 ### Low Priority / Not Recommended
 
-#### 8. **Neural Embeddings (EmbeddingGemma)** (DEFER)
+#### 8. **Neural Embeddings (EmbeddingGemma)** (SUPERSEDED)
 
 - **QMD Model**: 300M params, 300MB download, 384 dimensions
 - **Value**: Better semantic search quality (+40% Hit@3 over TF-IDF)
 - **Cost**: 300MB download, 300MB VRAM, 2s cold start, complex dependency
-- **Decision**: **DEFER** - TF-IDF sufficient for now, revisit if users report poor quality
+- **Decision**: **SUPERSEDED** by FastEmbed integration (BAAI/bge-small-en-v1.5, 67MB, via fastembed-rb). Benchmark Recall@5=0.786 aggregate, no API key needed.
 
 #### 9. **Cross-Encoder Reranking** (REJECT)
 
@@ -1009,7 +1008,7 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 - [x] Enhanced statistics command
 - [x] Session metadata tracking
 - [x] Tool usage tracking
-- [x] Semantic search with TF-IDF embeddings
+- [x] Semantic search with local embeddings (FastEmbed bge-small-en-v1.5)
 - [x] Multi-concept AND search
 - [x] Incremental sync with mtime tracking
 - [x] Context-aware queries
@@ -1082,7 +1081,7 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 2. **Tool Usage Tracking** - Dedicated table tracking which tools discovered facts
 3. **Incremental Sync** - mtime-based change detection for fast re-ingestion
 4. **Session Metadata** - Context capture (git branch, cwd, Claude version)
-5. **Local Vector Embeddings** - TF-IDF semantic search alongside FTS5
+5. **Local Vector Embeddings** - FastEmbed (BAAI/bge-small-en-v1.5) semantic search alongside FTS5
 6. **Multi-Concept AND Search** - Precise queries matching 2-5 concepts simultaneously
 7. **Enhanced Statistics** - Comprehensive reporting on facts, entities, provenance
 8. **Context-Aware Queries** - Filter by branch, directory, or tools used
@@ -1094,7 +1093,7 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 3. **Truth maintenance** - Conflict resolution and supersession
 4. **Predicate policies** - Single vs multi-value semantics
 5. **Ruby ecosystem** - Simpler dependencies, easier install
-6. **Lightweight embeddings** - No external dependencies (TF-IDF vs Transformers.js)
+6. **Local embeddings** - ONNX model via fastembed-rb, no API key (vs Transformers.js)
 
 ### Remaining Opportunities
 
@@ -1128,7 +1127,7 @@ Analysis of **QMD (Quick Markdown Search)** reveals several high-value optimizat
 - Semantic shortcuts for common queries
 
 **Best of both worlds (achieved)**:
-- ✅ Added vector embeddings for semantic search (TF-IDF based)
+- ✅ Added vector embeddings for semantic search (FastEmbed BAAI/bge-small-en-v1.5, local ONNX)
 - ✅ Kept fact-based knowledge graph for structured queries
 - ✅ Adopted incremental sync and tool tracking from episodic-memory
 - ✅ Maintained truth maintenance and conflict resolution
