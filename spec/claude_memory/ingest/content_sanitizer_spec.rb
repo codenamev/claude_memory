@@ -7,6 +7,19 @@ RSpec.describe ClaudeMemory::Ingest::ContentSanitizer do
     it "includes claude-memory-context" do
       expect(described_class::SYSTEM_TAGS).to include("claude-memory-context")
     end
+
+    it "includes system-reminder" do
+      expect(described_class::SYSTEM_TAGS).to include("system-reminder")
+    end
+
+    it "includes command tags" do
+      expect(described_class::SYSTEM_TAGS).to include(
+        "local-command-caveat",
+        "command-message",
+        "command-name",
+        "command-args"
+      )
+    end
   end
 
   describe "::USER_TAGS" do
@@ -40,6 +53,34 @@ RSpec.describe ClaudeMemory::Ingest::ContentSanitizer do
 
     it "strips claude-memory-context system tags" do
       text = "Before <claude-memory-context>Context</claude-memory-context> After"
+      result = described_class.strip_tags(text)
+
+      expect(result).to eq("Before  After")
+    end
+
+    it "strips system-reminder tags" do
+      text = "Before <system-reminder>You should do X</system-reminder> After"
+      result = described_class.strip_tags(text)
+
+      expect(result).to eq("Before  After")
+    end
+
+    it "strips system-reminder tags with multiline content" do
+      text = "Data\n<system-reminder>\nReminder line 1\nReminder line 2\n</system-reminder>\nMore data"
+      result = described_class.strip_tags(text)
+
+      expect(result).to eq("Data\n\nMore data")
+    end
+
+    it "strips command metadata tags" do
+      text = "Text <command-name>clear</command-name> <command-message>msg</command-message> end"
+      result = described_class.strip_tags(text)
+
+      expect(result).to eq("Text   end")
+    end
+
+    it "strips local-command-caveat tags" do
+      text = "Before <local-command-caveat>Caveat text here</local-command-caveat> After"
       result = described_class.strip_tags(text)
 
       expect(result).to eq("Before  After")
@@ -90,6 +131,11 @@ RSpec.describe ClaudeMemory::Ingest::ContentSanitizer::Pure do
       tag_names = tags.map(&:name)
 
       expect(tag_names).to include("claude-memory-context")
+      expect(tag_names).to include("system-reminder")
+      expect(tag_names).to include("local-command-caveat")
+      expect(tag_names).to include("command-message")
+      expect(tag_names).to include("command-name")
+      expect(tag_names).to include("command-args")
       expect(tag_names).to include("private")
       expect(tag_names).to include("no-memory")
       expect(tag_names).to include("secret")

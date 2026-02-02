@@ -9,7 +9,14 @@ module ClaudeMemory
     # Performance is O(n) and excellent even with 1000+ tags (~0.6ms).
     # Long Claude sessions legitimately accumulate many tags (100-200+).
     class ContentSanitizer
-      SYSTEM_TAGS = ["claude-memory-context"].freeze
+      SYSTEM_TAGS = [
+        "claude-memory-context",
+        "system-reminder",
+        "local-command-caveat",
+        "command-message",
+        "command-name",
+        "command-args"
+      ].freeze
       USER_TAGS = ["private", "no-memory", "secret"].freeze
 
       def self.strip_tags(text)
