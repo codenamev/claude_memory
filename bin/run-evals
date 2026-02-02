@@ -1,80 +1,194 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Run ClaudeMemory evals and display summary report
+# Run ClaudeMemory evals and benchmarks, display summary report
 
 require "json"
 
-puts "Running ClaudeMemory Evals...\n\n"
+# Determine what to run based on arguments
+run_benchmarks = ARGV.include?("--benchmarks") || ARGV.include?("--all")
+run_evals = !ARGV.include?("--benchmarks-only")
 
-# Run RSpec with JSON formatter for machine-readable output
-json_output = `bundle exec rspec spec/evals/ --format json`
-exit_code = $?.exitstatus
+eval_exit_code = 0
+benchmark_exit_code = 0
 
-# Parse results
-results = JSON.parse(json_output)
+# ============================================================
+# EVALS
+# ============================================================
 
-# Extract summary
-summary = results["summary"]
-examples = results["examples"]
+if run_evals
+  puts "Running ClaudeMemory Evals...\n\n"
 
-puts "=" * 60
-puts "EVAL SUMMARY"
-puts "=" * 60
+  json_output = `bundle exec rspec spec/evals/ --format json 2>/dev/null`
+  eval_exit_code = $?.exitstatus
 
-puts "\nTotal Examples: #{summary["example_count"]}"
-puts "Passed: #{summary["example_count"] - summary["failure_count"]} ✅"
-puts "Failed: #{summary["failure_count"]} ❌"
-puts "Duration: #{summary["duration"].round(2)}s"
+  begin
+    results = JSON.parse(json_output)
 
-# Group by scenario
-scenarios = examples.group_by { |e| e["file_path"].split("/").last.gsub("_spec.rb", "") }
+    summary = results["summary"]
+    examples = results["examples"]
 
-puts "\n" + "=" * 60
-puts "BY SCENARIO"
-puts "=" * 60
+    puts "=" * 60
+    puts "EVAL SUMMARY"
+    puts "=" * 60
 
-scenarios.each do |scenario, tests|
-  passed = tests.count { |t| t["status"] == "passed" }
-  total = tests.size
+    puts "\nTotal Examples: #{summary["example_count"]}"
+    puts "Passed: #{summary["example_count"] - summary["failure_count"]}"
+    puts "Failed: #{summary["failure_count"]}"
+    puts "Duration: #{summary["duration"].round(2)}s"
 
-  status = (passed == total) ? "✅" : "❌"
-  puts "\n#{scenario.gsub("_", " ").capitalize}: #{passed}/#{total} #{status}"
+    # Group by scenario
+    scenarios = examples.group_by { |e| e["file_path"].split("/").last.gsub("_spec.rb", "") }
 
-  if passed < total
-    tests.select { |t| t["status"] == "failed" }.each do |test|
-      puts "  ❌ #{test["description"]}"
+    puts "\n" + "=" * 60
+    puts "BY SCENARIO"
+    puts "=" * 60
+
+    scenarios.each do |scenario, tests|
+      passed = tests.count { |t| t["status"] == "passed" }
+      total = tests.size
+
+      status = (passed == total) ? "PASS" : "FAIL"
+      puts "\n#{scenario.gsub("_", " ").capitalize}: #{passed}/#{total} [#{status}]"
+
+      if passed < total
+        tests.select { |t| t["status"] == "failed" }.each do |test|
+          puts "  FAIL: #{test["description"]}"
+        end
+      end
     end
+
+    puts "\n" + "=" * 60
+    puts "BEHAVIORAL SCORES"
+    puts "=" * 60
+
+    convention_score = examples.any? { |e| e["description"].include?("calculates behavioral score") && e["status"] == "passed" } ? 1.0 : 0.0
+    decision_score = examples.any? { |e| e["description"].include?("decision adherence") && e["status"] == "passed" } ? 1.0 : 0.0
+    tech_score = examples.any? { |e| e["description"].include?("accuracy score") && e["status"] == "passed" } ? 1.0 : 0.0
+
+    puts "\nConvention Recall:"
+    puts "  With Memory:    #{convention_score} (100%)"
+    puts "  Baseline:       0.0 (0%)"
+    puts "  Improvement:    +#{(convention_score * 100).to_i}%"
+
+    puts "\nArchitectural Decision:"
+    puts "  With Memory:    #{decision_score} (100%)"
+    puts "  Baseline:       0.0 (0%)"
+    puts "  Improvement:    +#{(decision_score * 100).to_i}%"
+
+    puts "\nTech Stack Recall:"
+    puts "  With Memory:    #{tech_score} (100%)"
+    puts "  Baseline:       0.0 (0%)"
+    puts "  Improvement:    +#{(tech_score * 100).to_i}%"
+
+    avg_improvement = ((convention_score + decision_score + tech_score) / 3.0 * 100).to_i
+    puts "\nOVERALL: Memory improves responses by #{avg_improvement}% on average"
+  rescue JSON::ParserError => e
+    puts "ERROR: Failed to parse eval results: #{e.message}"
+    puts "Raw output (first 500 chars): #{json_output[0..500]}"
+    eval_exit_code = 1
   end
 end
 
+# ============================================================
+# BENCHMARKS
+# ============================================================
+
+if run_benchmarks || ARGV.empty?
+  puts "\n" + "=" * 60
+  puts "Running DevMemBench Benchmarks..."
+  puts "=" * 60
+
+  # Run offline benchmarks (retrieval + resolution) -- always $0
+  benchmark_json = `bundle exec rspec spec/benchmarks/ --tag benchmark --format json --format documentation 2>&1`
+  benchmark_exit_code = $?.exitstatus
+
+  begin
+    # Try to extract JSON from output (documentation format may be mixed in)
+    json_start = benchmark_json.index("{")
+    if json_start
+      json_str = benchmark_json[json_start..]
+      # Find the matching closing brace
+      brace_count = 0
+      json_end = nil
+      json_str.each_char.with_index do |char, idx|
+        brace_count += 1 if char == "{"
+        brace_count -= 1 if char == "}"
+        if brace_count == 0
+          json_end = idx
+          break
+        end
+      end
+
+      if json_end
+        bench_results = JSON.parse(json_str[0..json_end])
+        bench_summary = bench_results["summary"]
+        bench_examples = bench_results["examples"]
+
+        puts "\n" + "=" * 60
+        puts "BENCHMARK RESULTS"
+        puts "=" * 60
+
+        puts "\nTotal Benchmark Examples: #{bench_summary["example_count"]}"
+        puts "Passed: #{bench_summary["example_count"] - bench_summary["failure_count"]}"
+        puts "Failed: #{bench_summary["failure_count"]}"
+        puts "Duration: #{bench_summary["duration"].round(2)}s"
+
+        # Group by benchmark category
+        bench_categories = bench_examples.group_by do |e|
+          path = e["file_path"]
+          if path.include?("retrieval/")
+            "retrieval"
+          elsif path.include?("resolution/")
+            "resolution"
+          elsif path.include?("e2e/")
+            "e2e"
+          else
+            "other"
+          end
+        end
+
+        bench_categories.each do |category, tests|
+          passed = tests.count { |t| t["status"] == "passed" }
+          total = tests.size
+          puts "\n  #{category.upcase}: #{passed}/#{total}"
+          tests.select { |t| t["status"] == "failed" }.each do |test|
+            puts "    FAIL: #{test["full_description"]}"
+          end
+        end
+      end
+    end
+  rescue JSON::ParserError
+    # Benchmark output may not be parseable JSON if --format documentation is primary
+    # The documentation format output was already printed to stdout
+    puts "\n  (Benchmark metrics printed above in documentation format)"
+  end
+
+  # Check if e2e real mode was requested
+  if ENV["EVAL_MODE"] == "real"
+    puts "\n" + "=" * 60
+    puts "Running DevMemEval E2E (real Claude)..."
+    puts "=" * 60
+
+    e2e_output = `EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/ --tag eval_real --format documentation 2>&1`
+    e2e_exit_code = $?.exitstatus
+    puts e2e_output
+    benchmark_exit_code = e2e_exit_code if e2e_exit_code != 0
+  end
+end
+
+# ============================================================
+# FINAL SUMMARY
+# ============================================================
+
 puts "\n" + "=" * 60
-puts "BEHAVIORAL SCORES"
+final_exit = [eval_exit_code, benchmark_exit_code].max
+
+if final_exit == 0
+  puts "ALL CHECKS PASSED"
+else
+  puts "SOME CHECKS FAILED (exit code: #{final_exit})"
+end
 puts "=" * 60
 
-# Calculate behavioral scores from test names
-convention_score = examples.any? { |e| e["description"].include?("calculates behavioral score") && e["status"] == "passed" } ? 1.0 : 0.0
-decision_score = examples.any? { |e| e["description"].include?("decision adherence") && e["status"] == "passed" } ? 1.0 : 0.0
-tech_score = examples.any? { |e| e["description"].include?("accuracy score") && e["status"] == "passed" } ? 1.0 : 0.0
-
-puts "\nConvention Recall:"
-puts "  With Memory:    #{convention_score} (100%)"
-puts "  Baseline:       0.0 (0%)"
-puts "  Improvement:    +#{(convention_score * 100).to_i}%"
-
-puts "\nArchitectural Decision:"
-puts "  With Memory:    #{decision_score} (100%)"
-puts "  Baseline:       0.0 (0%)"
-puts "  Improvement:    +#{(decision_score * 100).to_i}%"
-
-puts "\nTech Stack Recall:"
-puts "  With Memory:    #{tech_score} (100%)"
-puts "  Baseline:       0.0 (0%)"
-puts "  Improvement:    +#{(tech_score * 100).to_i}%"
-
-avg_improvement = ((convention_score + decision_score + tech_score) / 3.0 * 100).to_i
-puts "\n" + "=" * 60
-puts "OVERALL: Memory improves responses by #{avg_improvement}% on average"
-puts "=" * 60
-
-exit exit_code
+exit final_exit
