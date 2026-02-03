@@ -17,32 +17,20 @@ module ClaudeMemory
         @db_path = db_path
         @db = connect_database(db_path)
 
-        configure_pragmas
-
         ensure_schema!
       end
 
       private
 
       def connect_database(db_path)
-        # Extralite adapter: Better performance and GVL release
-        Sequel.connect("extralite:#{db_path}")
-      end
-
-      def configure_pragmas
-        # Enable WAL mode for better concurrency
-        # - Multiple readers don't block each other
-        # - Writers don't block readers
-        # - Safer concurrent hook execution
-        @db.run("PRAGMA journal_mode = WAL")
-        @db.run("PRAGMA synchronous = NORMAL")
-
-        # Set busy timeout to 30 seconds (increased from 5s)
-        # - Allows much longer wait times before raising BusyException
-        # - Critical for concurrent hook execution with MCP server
-        # - Combined with ingester retry logic, provides ~5 minutes total wait
-        # - Extralite releases GVL for better threading performance
-        @db.run("PRAGMA busy_timeout = 30000")
+        Sequel.connect(
+          "extralite:#{db_path}",
+          connect_sqls: [
+            "PRAGMA journal_mode = WAL",
+            "PRAGMA synchronous = NORMAL",
+            "PRAGMA busy_timeout = 30000"
+          ]
+        )
       end
 
       public

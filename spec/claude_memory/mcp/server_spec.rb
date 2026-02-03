@@ -150,4 +150,27 @@ RSpec.describe ClaudeMemory::MCP::Server do
       expect(response["error"]["code"]).to eq(-32700)
     end
   end
+
+  describe "connection management across tool calls" do
+    def send_and_collect(requests)
+      requests.each { |r| input.puts(JSON.generate(r)) }
+      input.rewind
+      server.run
+      output.rewind
+      output.read.strip.split("\n").map { |line| JSON.parse(line) }
+    end
+
+    it "succeeds on second tool call after release_connections disconnects" do
+      responses = send_and_collect([
+        {jsonrpc: "2.0", id: 1, method: "tools/call",
+         params: {name: "memory.status", arguments: {}}},
+        {jsonrpc: "2.0", id: 2, method: "tools/call",
+         params: {name: "memory.status", arguments: {}}}
+      ])
+
+      expect(responses[0]["result"]["content"].first["text"]).to include("Memory status:")
+      expect(responses[1]["result"]["content"].first["text"]).to include("Memory status:")
+      expect(responses[1]["error"]).to be_nil
+    end
+  end
 end
