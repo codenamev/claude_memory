@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-02-03*
+*Updated: 2026-02-03 - Removed Fact Dependency Graph, Enhanced Snippet Extraction, Line-Range References (implemented)*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
@@ -21,7 +21,7 @@ This document contains only unimplemented improvements. Completed items are remo
 - **Current Issue**: JSON embedding storage requires loading all facts, O(n) Ruby similarity calculation
 - **Solution**: sqlite-vec extension with native C KNN queries
 - **Implementation**:
-  - Schema migration v8: Create `facts_vec` virtual table using `vec0`
+  - Schema migration v9: Create `facts_vec` virtual table using `vec0`
   - Two-step query pattern (avoid JOINs - they hang with vec tables!)
   - Update `Embeddings::Similarity` class
   - Backfill existing embeddings
@@ -84,15 +84,7 @@ Source: grepai study
 - **Effort**: 2-3 days
 - **Trade-off**: Background process ~10MB memory overhead
 
-### 7. Fact Dependency Graph Visualization
-
-Source: grepai study
-
-- **Value**: Invaluable for understanding why facts were superseded or conflicted
-- **Implementation**: Create `memory.fact_graph <fact_id> --depth 2` tool, query `fact_links` table with BFS traversal, return JSON with nodes (facts) and edges (supersedes/conflicts/supports)
-- **Effort**: 2-3 days
-
-### 8. Background Processing for Hooks
+### 7. Background Processing for Hooks
 
 Source: episodic-memory study
 
@@ -100,7 +92,7 @@ Source: episodic-memory study
 - **Implementation**: `--async` flag on hook commands, fork and detach
 - **Trade-off**: Background process management complexity, potential race conditions
 
-### 9. LLM Response Caching
+### 8. LLM Response Caching
 
 Source: QMD study
 
@@ -108,7 +100,7 @@ Source: QMD study
 - **Implementation**: Add `llm_cache` table (hash, result, created_at), cache key: `SHA256(operation + model + input)`
 - **Consideration**: Most valuable when distiller is fully implemented
 
-### 10. Document Chunking for Long Transcripts
+### 9. Document Chunking for Long Transcripts
 
 Source: QMD study
 
@@ -116,28 +108,14 @@ Source: QMD study
 - **Implementation**: 800 tokens, 15% overlap, semantic boundary detection
 - **Consideration**: Only if users report issues with long transcripts
 
-### 11. Enhanced Snippet Extraction
-
-Source: QMD study
-
-- **Value**: Better search result previews with query term highlighting
-- **Implementation**: Find line with most query term matches, extract 1 line before + 2 after
-
 ---
 
 ## Low Priority
 
-### 12. Structured Logging
+### 10. Structured Logging
 
 - **Value**: Better debugging with JSON logs
 - **Implementation**: Add `ClaudeMemory::Logging::Logger` with structured JSON output
-
-### 13. Background Processing Line-Range References
-
-Source: episodic-memory study
-
-- **Value**: Precise source linking for fact verification
-- **Implementation**: Store line_start and line_end in provenance table
 
 ---
 
@@ -184,4 +162,4 @@ Source: episodic-memory study
 
 ---
 
-*Last updated: 2026-02-03 - Removed RRF, Smart Expansion, Inline Status, Tool Filtering (implemented)*
+*Last updated: 2026-02-03 - Removed Fact Dependency Graph, Enhanced Snippet Extraction, Line-Range References (implemented)*
