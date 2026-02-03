@@ -80,8 +80,9 @@ module ClaudeMemory
         scope = extract_scope(args)
         limit = extract_limit(args)
         compact = args["compact"] == true
-        results = @recall.query(args["query"], limit: limit, scope: scope)
-        ResponseFormatter.format_recall_results(results, compact: compact)
+        query = args["query"]
+        results = @recall.query(query, limit: limit, scope: scope, include_raw_text: !compact)
+        ResponseFormatter.format_recall_results(results, compact: compact, query: query)
       rescue Sequel::DatabaseError, Sequel::DatabaseConnectionError, SQLite3::CantOpenException, Errno::ENOENT => e
         database_not_found_error(e)
       end

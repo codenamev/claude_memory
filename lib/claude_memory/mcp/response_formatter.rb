@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../core/relative_time"
+require_relative "../core/snippet_extractor"
 
 module ClaudeMemory
   module MCP
@@ -10,18 +11,20 @@ module ClaudeMemory
       # Format recall query results into MCP response
       # @param results [Array<Hash>] Recall results with :fact and :receipts
       # @param compact [Boolean] Omit receipts for smaller responses
+      # @param query [String, nil] Original query for snippet extraction
       # @return [Hash] MCP response with facts array
-      def self.format_recall_results(results, compact: false)
+      def self.format_recall_results(results, compact: false, query: nil)
         {
-          facts: results.map { |r| format_recall_fact(r, compact: compact) }
+          facts: results.map { |r| format_recall_fact(r, compact: compact, query: query) }
         }
       end
 
       # Format single recall fact result
       # @param result [Hash] Single result with :fact, :receipts, :source
       # @param compact [Boolean] Omit receipts
+      # @param query [String, nil] Original query for snippet extraction
       # @return [Hash] Formatted fact for MCP response
-      def self.format_recall_fact(result, compact: false)
+      def self.format_recall_fact(result, compact: false, query: nil)
         fact = {
           id: result[:fact][:id],
           subject: result[:fact][:subject_name],
@@ -30,7 +33,7 @@ module ClaudeMemory
           status: result[:fact][:status],
           source: result[:source]
         }
-        fact[:receipts] = result[:receipts].map { |p| format_receipt(p) } unless compact
+        fact[:receipts] = result[:receipts].map { |p| format_receipt(p, query: query) } unless compact
         fact
       end
 
@@ -120,22 +123,43 @@ module ClaudeMemory
 
       # Format receipt (provenance) with minimal fields
       # @param receipt [Hash] Receipt with :quote and :strength
+      # @param query [String, nil] Optional query for snippet extraction
       # @return [Hash] Formatted receipt
-      def self.format_receipt(receipt)
-        {quote: receipt[:quote], strength: receipt[:strength]}
+      def self.format_receipt(receipt, query: nil)
+        result = {quote: receipt[:quote], strength: receipt[:strength]}
+        append_snippet(result, receipt, query)
+        result
       end
 
       # Format detailed receipt with session and timestamp
       # @param receipt [Hash] Receipt with full fields
+      # @param query [String, nil] Optional query for snippet extraction
       # @return [Hash] Formatted detailed receipt
-      def self.format_detailed_receipt(receipt)
-        {
+      def self.format_detailed_receipt(receipt, query: nil)
+        result = {
           quote: receipt[:quote],
           strength: receipt[:strength],
           session_id: receipt[:session_id],
           occurred_at: receipt[:occurred_at],
           occurred_ago: Core::RelativeTime.format(receipt[:occurred_at])
         }
+        append_snippet(result, receipt, query)
+        result
+      end
+
+      # Extract and append snippet from raw_text if available
+      # @param result [Hash] Result hash to append to
+      # @param receipt [Hash] Receipt with optional :raw_text
+      # @param query [String, nil] Query for snippet extraction
+      def self.append_snippet(result, receipt, query)
+        return unless query && receipt[:raw_text]
+
+        extracted = Core::SnippetExtractor.extract_with_lines(receipt[:raw_text], query)
+        return unless extracted
+
+        result[:snippet] = extracted[:snippet]
+        result[:line_start] = extracted[:line_start]
+        result[:line_end] = extracted[:line_end]
       end
 
       # Format changes list into MCP response
@@ -215,15 +239,16 @@ module ClaudeMemory
           mode: mode,
           scope: scope,
           count: results.size,
-          facts: results.map { |r| format_semantic_fact(r, compact: compact) }
+          facts: results.map { |r| format_semantic_fact(r, compact: compact, query: query) }
         }
       end
 
       # Format single semantic search fact with similarity
       # @param result [Hash] Result with fact, receipts, and similarity
       # @param compact [Boolean] Omit receipts
+      # @param query [String, nil] Original query for snippet extraction
       # @return [Hash] Formatted fact with similarity
-      def self.format_semantic_fact(result, compact: false)
+      def self.format_semantic_fact(result, compact: false, query: nil)
         fact = {
           id: result[:fact][:id],
           subject: result[:fact][:subject_name],
@@ -233,7 +258,7 @@ module ClaudeMemory
           source: result[:source],
           similarity: result[:similarity]
         }
-        fact[:receipts] = result[:receipts].map { |r| format_receipt(r) } unless compact
+        fact[:receipts] = result[:receipts].map { |r| format_receipt(r, query: query) } unless compact
         fact
       end
 
@@ -244,19 +269,21 @@ module ClaudeMemory
       # @param compact [Boolean] Omit receipts for smaller responses
       # @return [Hash] Formatted concept search response
       def self.format_concept_results(concepts, scope, results, compact: false)
+        query = concepts.join(" ")
         {
           concepts: concepts,
           scope: scope,
           count: results.size,
-          facts: results.map { |r| format_concept_fact(r, compact: compact) }
+          facts: results.map { |r| format_concept_fact(r, compact: compact, query: query) }
         }
       end
 
       # Format single concept search fact with multi-concept similarity
       # @param result [Hash] Result with average and per-concept similarities
       # @param compact [Boolean] Omit receipts
+      # @param query [String, nil] Original query for snippet extraction
       # @return [Hash] Formatted fact with concept similarities
-      def self.format_concept_fact(result, compact: false)
+      def self.format_concept_fact(result, compact: false, query: nil)
         fact = {
           id: result[:fact][:id],
           subject: result[:fact][:subject_name],
@@ -267,7 +294,7 @@ module ClaudeMemory
           average_similarity: result[:similarity],
           concept_similarities: result[:concept_similarities]
         }
-        fact[:receipts] = result[:receipts].map { |r| format_receipt(r) } unless compact
+        fact[:receipts] = result[:receipts].map { |r| format_receipt(r, query: query) } unless compact
         fact
       end
 

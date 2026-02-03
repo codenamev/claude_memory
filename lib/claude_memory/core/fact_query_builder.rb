@@ -23,11 +23,12 @@ module ClaudeMemory
       # Build dataset for batch finding receipts (provenance) with content_items join
       # @param store [SQLiteStore] Database store
       # @param fact_ids [Array<Integer>] Fact IDs to find receipts for
+      # @param include_raw_text [Boolean] Include raw_text for snippet extraction
       # @return [Hash] Hash of fact_id => [receipt_rows]
-      def self.batch_find_receipts(store, fact_ids)
+      def self.batch_find_receipts(store, fact_ids, include_raw_text: false)
         return {} if fact_ids.empty?
 
-        results = build_receipts_dataset(store)
+        results = build_receipts_dataset(store, include_raw_text: include_raw_text)
           .where(Sequel[:provenance][:fact_id] => fact_ids)
           .all
 
@@ -50,9 +51,10 @@ module ClaudeMemory
       # Find receipts for a single fact
       # @param store [SQLiteStore] Database store
       # @param fact_id [Integer] Fact ID
+      # @param include_raw_text [Boolean] Include raw_text for snippet extraction
       # @return [Array<Hash>] Receipt rows
-      def self.find_receipts(store, fact_id)
-        build_receipts_dataset(store)
+      def self.find_receipts(store, fact_id, include_raw_text: false)
+        build_receipts_dataset(store, include_raw_text: include_raw_text)
           .where(Sequel[:provenance][:fact_id] => fact_id)
           .all
       end
@@ -136,18 +138,23 @@ module ClaudeMemory
 
       # Build standard receipts dataset with content_items join
       # @param store [SQLiteStore] Database store
+      # @param include_raw_text [Boolean] Include raw_text for snippet extraction
       # @return [Sequel::Dataset] Configured dataset
-      def self.build_receipts_dataset(store)
+      def self.build_receipts_dataset(store, include_raw_text: false)
+        columns = [
+          Sequel[:provenance][:id],
+          Sequel[:provenance][:fact_id],
+          Sequel[:provenance][:quote],
+          Sequel[:provenance][:strength],
+          Sequel[:content_items][:session_id],
+          Sequel[:content_items][:occurred_at]
+        ]
+
+        columns << Sequel[:content_items][:raw_text] if include_raw_text
+
         store.provenance
           .left_join(:content_items, id: :content_item_id)
-          .select(
-            Sequel[:provenance][:id],
-            Sequel[:provenance][:fact_id],
-            Sequel[:provenance][:quote],
-            Sequel[:provenance][:strength],
-            Sequel[:content_items][:session_id],
-            Sequel[:content_items][:occurred_at]
-          )
+          .select(*columns)
       end
     end
   end

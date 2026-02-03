@@ -39,11 +39,11 @@ module ClaudeMemory
       end
     end
 
-    def query(query_text, limit: 10, scope: SCOPE_ALL)
+    def query(query_text, limit: 10, scope: SCOPE_ALL, include_raw_text: false)
       if @legacy_mode
         query_legacy(query_text, limit: limit, scope: scope)
       else
-        query_dual(query_text, limit: limit, scope: scope)
+        query_dual(query_text, limit: limit, scope: scope, include_raw_text: include_raw_text)
       end
     end
 
@@ -125,10 +125,10 @@ module ClaudeMemory
 
     private
 
-    def query_dual(query_text, limit:, scope:)
+    def query_dual(query_text, limit:, scope:, include_raw_text: false)
       template = Recall::DualQueryTemplate.new(@manager)
       results = template.execute(scope: scope, limit: limit) do |store, source|
-        query_single_store(store, query_text, limit: limit, source: source)
+        query_single_store(store, query_text, limit: limit, source: source, include_raw_text: include_raw_text)
       end
       dedupe_and_sort(results, limit)
     end
@@ -157,7 +157,7 @@ module ClaudeMemory
       Core::FactRanker.dedupe_and_sort_index(results, limit)
     end
 
-    def query_single_store(store, query_text, limit:, source:)
+    def query_single_store(store, query_text, limit:, source:, include_raw_text: false)
       fts = Index::LexicalFTS.new(store)
       content_ids = fts.search(query_text, limit: limit * 3)
       return [] if content_ids.empty?
@@ -184,7 +184,7 @@ module ClaudeMemory
       facts_by_id = batch_find_facts(store, ordered_fact_ids)
 
       # Batch query all receipts at once
-      receipts_by_fact_id = batch_find_receipts(store, ordered_fact_ids)
+      receipts_by_fact_id = batch_find_receipts(store, ordered_fact_ids, include_raw_text: include_raw_text)
 
       # Build results maintaining order
       Core::ResultBuilder.build_results(
@@ -199,8 +199,8 @@ module ClaudeMemory
       Core::FactQueryBuilder.batch_find_facts(store, fact_ids)
     end
 
-    def batch_find_receipts(store, fact_ids)
-      Core::FactQueryBuilder.batch_find_receipts(store, fact_ids)
+    def batch_find_receipts(store, fact_ids, include_raw_text: false)
+      Core::FactQueryBuilder.batch_find_receipts(store, fact_ids, include_raw_text: include_raw_text)
     end
 
     def dedupe_and_sort(results, limit)
