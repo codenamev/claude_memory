@@ -5,12 +5,13 @@ require "digest"
 module ClaudeMemory
   module Ingest
     class Ingester
-      def initialize(store, fts: nil, env: ENV, metadata_extractor: nil, tool_extractor: nil)
+      def initialize(store, fts: nil, env: ENV, metadata_extractor: nil, tool_extractor: nil, tool_filter: nil)
         @store = store
         @fts = fts || Index::LexicalFTS.new(store)
         @config = Configuration.new(env)
         @metadata_extractor = metadata_extractor || MetadataExtractor.new
         @tool_extractor = tool_extractor || ToolExtractor.new
+        @tool_filter = tool_filter || ToolFilter.new
       end
 
       def ingest(source:, session_id:, transcript_path:, project_path: nil)
@@ -26,7 +27,7 @@ module ClaudeMemory
 
         # Extract session metadata and tool calls before sanitization
         metadata = @metadata_extractor.extract(delta)
-        tool_calls = @tool_extractor.extract(delta)
+        tool_calls = @tool_filter.filter(@tool_extractor.extract(delta))
 
         # Strip privacy tags before storing
         delta = ContentSanitizer.strip_tags(delta)
