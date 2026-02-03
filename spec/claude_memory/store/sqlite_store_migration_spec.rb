@@ -27,7 +27,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
 
       # Verify version was updated
-      expect(store.schema_version).to eq(7)
+      expect(store.schema_version).to eq(8)
 
       # Verify v2 schema changes exist
       columns = store.db.schema(:content_items).map(&:first)
@@ -52,7 +52,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       # Verify migration completed atomically:
       # - Version is at 6
       # - All v6 tables were created
-      expect(store.schema_version).to eq(7)
+      expect(store.schema_version).to eq(8)
 
       tables = store.db.tables
       expect(tables).to include(:operation_progress)
@@ -106,8 +106,8 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       # Open store to trigger full migration path
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
 
-      # Verify we reached v6
-      expect(store.schema_version).to eq(7)
+      # Verify we reached latest version
+      expect(store.schema_version).to eq(8)
 
       # Verify v2 additions exist
       columns = store.db.schema(:facts).map(&:first)
@@ -155,7 +155,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
 
       # Verify version updated
-      expect(store.schema_version).to eq(7)
+      expect(store.schema_version).to eq(8)
 
       # Verify existing data preserved
       expect(store.facts.count).to eq(initial_fact_count)
@@ -210,7 +210,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "migrations" do
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
 
       # Verify version updated
-      expect(store.schema_version).to eq(7)
+      expect(store.schema_version).to eq(8)
 
       # Verify existing data preserved
       expect(store.facts.count).to eq(initial_fact_count)

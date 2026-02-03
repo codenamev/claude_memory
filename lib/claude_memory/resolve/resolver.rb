@@ -151,7 +151,9 @@ module ClaudeMemory
           fact_id: fact_id,
           content_item_id: content_item_id,
           quote: fact_data[:quote],
-          strength: fact_data[:strength] || "stated"
+          strength: fact_data[:strength] || "stated",
+          line_start: fact_data[:line_start],
+          line_end: fact_data[:line_end]
         )
       end
     end

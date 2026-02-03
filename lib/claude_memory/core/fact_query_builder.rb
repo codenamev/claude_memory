@@ -146,6 +146,8 @@ module ClaudeMemory
           Sequel[:provenance][:fact_id],
           Sequel[:provenance][:quote],
           Sequel[:provenance][:strength],
+          Sequel[:provenance][:line_start],
+          Sequel[:provenance][:line_end],
           Sequel[:content_items][:session_id],
           Sequel[:content_items][:occurred_at]
         ]

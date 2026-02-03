@@ -325,7 +325,67 @@ RSpec.describe ClaudeMemory::Core::FactQueryBuilder do
       dataset = described_class.build_receipts_dataset(store)
       row = dataset.first
 
-      expect(row.keys).to include(:id, :fact_id, :quote, :strength, :session_id, :occurred_at)
+      expect(row.keys).to include(:id, :fact_id, :quote, :strength, :line_start, :line_end, :session_id, :occurred_at)
+    end
+
+    it "includes raw_text when requested" do
+      dataset = described_class.build_receipts_dataset(store, include_raw_text: true)
+      row = dataset.first
+
+      expect(row.keys).to include(:raw_text)
+    end
+
+    it "excludes raw_text by default" do
+      dataset = described_class.build_receipts_dataset(store)
+      row = dataset.first
+
+      expect(row.keys).not_to include(:raw_text)
+    end
+  end
+
+  describe ".batch_find_receipts with include_raw_text" do
+    it "includes raw_text when requested" do
+      content_with_text = store.upsert_content_item(
+        source: "test", text_hash: "hash_raw", byte_len: 50,
+        session_id: "sess_raw", occurred_at: Time.now.utc.iso8601,
+        raw_text: "Some raw content text"
+      )
+      fact_id_raw = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "test_raw",
+        object_literal: "value"
+      )
+      store.insert_provenance(fact_id: fact_id_raw, content_item_id: content_with_text, quote: "raw quote")
+
+      results = described_class.batch_find_receipts(store, [fact_id_raw], include_raw_text: true)
+
+      expect(results[fact_id_raw].first[:raw_text]).to eq("Some raw content text")
+    end
+  end
+
+  describe "line_start and line_end in receipts" do
+    it "includes line range when stored in provenance" do
+      fact_id_lines = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "test_lines",
+        object_literal: "value"
+      )
+      store.insert_provenance(
+        fact_id: fact_id_lines, content_item_id: content_id,
+        quote: "test quote", line_start: 10, line_end: 15
+      )
+
+      results = described_class.batch_find_receipts(store, [fact_id_lines])
+
+      expect(results[fact_id_lines].first[:line_start]).to eq(10)
+      expect(results[fact_id_lines].first[:line_end]).to eq(15)
+    end
+
+    it "returns nil line range when not stored" do
+      results = described_class.batch_find_receipts(store, [@fact_id_1])
+
+      expect(results[@fact_id_1].first[:line_start]).to be_nil
+      expect(results[@fact_id_1].first[:line_end]).to be_nil
     end
   end
 end

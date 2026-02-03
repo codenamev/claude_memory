@@ -9,7 +9,7 @@ require "sequel/adapters/extralite"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 7
+      SCHEMA_VERSION = 8
 
       attr_reader :db
 
@@ -241,13 +241,16 @@ module ClaudeMemory
           .all
       end
 
-      def insert_provenance(fact_id:, content_item_id: nil, quote: nil, attribution_entity_id: nil, strength: "stated")
+      def insert_provenance(fact_id:, content_item_id: nil, quote: nil, attribution_entity_id: nil, strength: "stated",
+        line_start: nil, line_end: nil)
         provenance.insert(
           fact_id: fact_id,
           content_item_id: content_item_id,
           quote: quote,
           attribution_entity_id: attribution_entity_id,
-          strength: strength
+          strength: strength,
+          line_start: line_start,
+          line_end: line_end
         )
       end
 

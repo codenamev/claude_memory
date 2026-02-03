@@ -127,6 +127,7 @@ module ClaudeMemory
       # @return [Hash] Formatted receipt
       def self.format_receipt(receipt, query: nil)
         result = {quote: receipt[:quote], strength: receipt[:strength]}
+        append_line_range(result, receipt)
         append_snippet(result, receipt, query)
         result
       end
@@ -143,8 +144,19 @@ module ClaudeMemory
           occurred_at: receipt[:occurred_at],
           occurred_ago: Core::RelativeTime.format(receipt[:occurred_at])
         }
+        append_line_range(result, receipt)
         append_snippet(result, receipt, query)
         result
+      end
+
+      # Append stored line range from provenance if available
+      # @param result [Hash] Result hash to append to
+      # @param receipt [Hash] Receipt with optional :line_start, :line_end
+      def self.append_line_range(result, receipt)
+        return unless receipt[:line_start]
+
+        result[:line_start] = receipt[:line_start]
+        result[:line_end] = receipt[:line_end]
       end
 
       # Extract and append snippet from raw_text if available
