@@ -11,7 +11,8 @@ Systematically implement feature improvements from `docs/improvements.md`, makin
 
 ## Process Overview
 
-1. **Read the improvements document** from `docs/improvements.md`
+1. **Check memory health** by calling `memory.check_setup` to verify the system is operational
+2. **Read the improvements document** from `docs/improvements.md`
 2. **Identify unimplemented features** from "Remaining Tasks" section
 3. **Prioritize by stated priority** (Medium → Low)
 4. **Assess feasibility** (skip if too complex or requires external services)
@@ -21,6 +22,16 @@ Systematically implement feature improvements from `docs/improvements.md`, makin
 8. **Update improvements.md** to mark features as implemented
 
 ## Detailed Steps
+
+### Step 0: Verify Memory Health
+
+Before starting, confirm the memory system is operational:
+
+```
+memory.check_setup
+```
+
+If status is not "healthy", address any issues before proceeding.
 
 ### Step 1: Read and Parse Improvements Document
 

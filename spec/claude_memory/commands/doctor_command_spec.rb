@@ -24,6 +24,101 @@ RSpec.describe ClaudeMemory::Commands::DoctorCommand do
   end
 
   describe "#call" do
+    context "with --brief flag" do
+      let(:hook_entry) do
+        {"hooks" => [{"type" => "command", "command" => "claude-memory hook ingest", "timeout" => 10}]}
+      end
+
+      context "healthy system" do
+        before do
+          manager = ClaudeMemory::Store::StoreManager.new(
+            global_db_path: File.join(test_dir, ".claude", "global.sqlite3"),
+            project_db_path: File.join(test_dir, ".claude", "memory.sqlite3")
+          )
+          manager.ensure_both!
+
+          # Insert content so project DB doesn't warn about empty ingestion
+          project_store = manager.project_store
+          project_store.content_items.insert(
+            session_id: "test-session",
+            source: "test",
+            raw_text: "test content",
+            text_hash: "abc123",
+            byte_len: 12,
+            ingested_at: Time.now.utc.iso8601
+          )
+
+          manager.close
+
+          File.write(".claude/rules/claude_memory.generated.md", "# Memory")
+          File.write(".claude/CLAUDE.md", "@.claude/rules/claude_memory.generated.md")
+          File.write(".claude/settings.json", JSON.generate({
+            hooks: {
+              "Stop" => [hook_entry],
+              "SessionStart" => [hook_entry],
+              "PreCompact" => [hook_entry],
+              "SessionEnd" => [hook_entry]
+            }
+          }))
+          File.write(".claude.json", JSON.generate({
+            mcpServers: {"claude-memory" => {command: "claude-memory", args: ["serve-mcp"]}}
+          }))
+        end
+
+        it "outputs single-line status" do
+          allow(ClaudeMemory::Store::StoreManager).to receive(:new).and_return(
+            ClaudeMemory::Store::StoreManager.new(
+              global_db_path: File.join(test_dir, ".claude", "global.sqlite3"),
+              project_db_path: File.join(test_dir, ".claude", "memory.sqlite3")
+            )
+          )
+
+          exit_code = command.call(["--brief"])
+          expect(exit_code).to eq(0)
+          expect(stdout.string.strip).to match(/^Memory OK: \d+ facts \(global\), \d+ facts \(project\)$/)
+        end
+      end
+
+      context "with errors" do
+        it "outputs error summary" do
+          allow(ClaudeMemory::Store::StoreManager).to receive(:new).and_return(
+            ClaudeMemory::Store::StoreManager.new(
+              global_db_path: File.join(test_dir, ".claude", "global.sqlite3"),
+              project_db_path: File.join(test_dir, ".claude", "memory.sqlite3")
+            )
+          )
+
+          exit_code = command.call(["--brief"])
+          expect(exit_code).to eq(1)
+          expect(stdout.string).to include("Memory ERROR:")
+        end
+      end
+
+      context "with warnings" do
+        before do
+          manager = ClaudeMemory::Store::StoreManager.new(
+            global_db_path: File.join(test_dir, ".claude", "global.sqlite3"),
+            project_db_path: File.join(test_dir, ".claude", "memory.sqlite3")
+          )
+          manager.ensure_both!
+          manager.close
+        end
+
+        it "outputs warning summary" do
+          allow(ClaudeMemory::Store::StoreManager).to receive(:new).and_return(
+            ClaudeMemory::Store::StoreManager.new(
+              global_db_path: File.join(test_dir, ".claude", "global.sqlite3"),
+              project_db_path: File.join(test_dir, ".claude", "memory.sqlite3")
+            )
+          )
+
+          exit_code = command.call(["--brief"])
+          expect(exit_code).to eq(0)
+          expect(stdout.string).to include("Memory WARNING:")
+        end
+      end
+    end
+
     context "with healthy system" do
       before do
         # Create databases

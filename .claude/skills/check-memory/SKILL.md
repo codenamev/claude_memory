@@ -16,6 +16,16 @@ The user is asking about: $ARGUMENTS
 
 ## Step-by-Step Workflow
 
+### 0. Verify Memory Health
+
+Before querying, confirm the memory system is operational:
+
+```
+memory.check_setup
+```
+
+If status is not "healthy", inform the user and suggest running `claude-memory doctor` for details.
+
 ### 1. Query Memory (REQUIRED FIRST STEP)
 
 Run multiple memory queries to find existing knowledge:
