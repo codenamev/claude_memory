@@ -27,19 +27,7 @@ This document contains only unimplemented improvements. Completed items are remo
   - Backfill existing embeddings
 - **Trade-off**: Adds native dependency (acceptable, well-maintained, cross-platform)
 
-### 2. Reciprocal Rank Fusion (RRF) Algorithm ⭐ HIGH VALUE
-
-- **Value**: 50% improvement in Hit@3 for medium-difficulty queries (QMD evaluation)
-- **Current Issue**: Naive deduplication doesn't properly fuse ranking signals
-- **Solution**: Mathematical fusion of FTS + vector ranked lists with position-aware scoring
-- **Formula**: `score = Σ(weight / (k + rank + 1))` with top-rank bonus
-- **Implementation**:
-  - Create `Recall::RRFusion` class
-  - Update `Recall#query_semantic_dual` to use RRF
-  - Apply weights: original query ×2, expanded queries ×1
-  - Add top-rank bonus: +0.05 for #1, +0.02 for #2-3
-
-### 3. Docid Short Hash System ⭐ MEDIUM VALUE
+### 2. Docid Short Hash System ⭐ MEDIUM VALUE
 
 - **Value**: Better UX, cross-database fact references
 - **Current Issue**: Integer IDs are database-specific, not user-friendly
@@ -51,22 +39,11 @@ This document contains only unimplemented improvements. Completed items are remo
   - Update MCP tools to accept docids
   - Update output formatting to show docids
 
-### 4. Smart Expansion Detection ⭐ MEDIUM VALUE
-
-- **Value**: Skip unnecessary vector search when FTS finds exact match
-- **QMD Proof**: Saves 2-3 seconds on 60% of queries (exact keyword matches)
-- **Current Issue**: Always runs both FTS and vector search, even for exact matches
-- **Solution**: Heuristic detection of strong FTS signal
-- **Thresholds**: `top_score >= 0.85` AND `gap >= 0.15`
-- **Implementation**:
-  - Create `Recall::ExpansionDetector` class
-  - Update `Recall#query_semantic_dual` to check before vector search
-
 ---
 
 ## High Priority (Study-Inspired)
 
-### 5. SessionStart Context Injection via Hook ⭐
+### 3. SessionStart Context Injection via Hook ⭐
 
 Source: claude-supermemory study
 
@@ -75,7 +52,7 @@ Source: claude-supermemory study
 - **Evidence**: `context-hook.js:72-74` — uses hook response to inject `<supermemory-context>` XML
 - **Effort**: 1-2 days (hook handler, context formatter, settings)
 
-### 6. Tool-Specific Observation Compression ⭐
+### 4. Tool-Specific Observation Compression ⭐
 
 Source: claude-supermemory study
 
@@ -84,7 +61,7 @@ Source: claude-supermemory study
 - **Evidence**: `compress.js:13-75` — 10 tool handlers with human-readable output
 - **Effort**: 4-6 hours (class + tests + ingest integration)
 
-### 7. Claude Code Plugin Distribution Format ⭐
+### 5. Claude Code Plugin Distribution Format ⭐
 
 Source: QMD study
 
@@ -93,20 +70,11 @@ Source: QMD study
 - **Evidence**: `.claude-plugin/marketplace.json` — complete plugin spec with MCP server bundling and skill definitions
 - **Effort**: 2-3 days
 
-### 8. Inline Status Check in Skills
-
-Source: QMD study
-
-- **Value**: Users see memory health before tool usage
-- **Implementation**: Run `claude-memory doctor --brief` on skill load for immediate health feedback
-- **Evidence**: `SKILL.md:18` — `!` prefix runs command during skill load
-- **Effort**: 1-2 hours
-
 ---
 
 ## Medium Priority
 
-### 9. Incremental Indexing with File Watching
+### 6. Incremental Indexing with File Watching
 
 Source: grepai study
 
@@ -116,7 +84,7 @@ Source: grepai study
 - **Effort**: 2-3 days
 - **Trade-off**: Background process ~10MB memory overhead
 
-### 10. Fact Dependency Graph Visualization
+### 7. Fact Dependency Graph Visualization
 
 Source: grepai study
 
@@ -124,16 +92,7 @@ Source: grepai study
 - **Implementation**: Create `memory.fact_graph <fact_id> --depth 2` tool, query `fact_links` table with BFS traversal, return JSON with nodes (facts) and edges (supersedes/conflicts/supports)
 - **Effort**: 2-3 days
 
-### 11. Configurable Tool Capture Filtering
-
-Source: claude-supermemory study
-
-- **Value**: Reduces noise from read-heavy tools (Read, Glob, Grep)
-- **Implementation**: Skip/capture lists for controlling which tool observations are ingested
-- **Evidence**: `settings.js:9-15` — `skipTools` and `captureTools` with whitelist/blacklist modes
-- **Effort**: 3-4 hours
-
-### 12. Background Processing for Hooks
+### 8. Background Processing for Hooks
 
 Source: episodic-memory study
 
@@ -141,7 +100,7 @@ Source: episodic-memory study
 - **Implementation**: `--async` flag on hook commands, fork and detach
 - **Trade-off**: Background process management complexity, potential race conditions
 
-### 13. LLM Response Caching
+### 9. LLM Response Caching
 
 Source: QMD study
 
@@ -149,7 +108,7 @@ Source: QMD study
 - **Implementation**: Add `llm_cache` table (hash, result, created_at), cache key: `SHA256(operation + model + input)`
 - **Consideration**: Most valuable when distiller is fully implemented
 
-### 14. Document Chunking for Long Transcripts
+### 10. Document Chunking for Long Transcripts
 
 Source: QMD study
 
@@ -157,7 +116,7 @@ Source: QMD study
 - **Implementation**: 800 tokens, 15% overlap, semantic boundary detection
 - **Consideration**: Only if users report issues with long transcripts
 
-### 15. Enhanced Snippet Extraction
+### 11. Enhanced Snippet Extraction
 
 Source: QMD study
 
@@ -168,12 +127,12 @@ Source: QMD study
 
 ## Low Priority
 
-### 16. Structured Logging
+### 12. Structured Logging
 
 - **Value**: Better debugging with JSON logs
 - **Implementation**: Add `ClaudeMemory::Logging::Logger` with structured JSON output
 
-### 17. Background Processing Line-Range References
+### 13. Background Processing Line-Range References
 
 Source: episodic-memory study
 
@@ -225,4 +184,4 @@ Source: episodic-memory study
 
 ---
 
-*Last updated: 2026-02-03 - Cleaned up completed items*
+*Last updated: 2026-02-03 - Removed RRF, Smart Expansion, Inline Status, Tool Filtering (implemented)*
