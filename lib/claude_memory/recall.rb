@@ -55,6 +55,16 @@ module ClaudeMemory
       end
     end
 
+    def fact_graph(fact_id, depth: 2, scope: nil)
+      if @legacy_mode
+        Core::FactGraph.build(@legacy_store, fact_id, depth: depth)
+      else
+        scope ||= SCOPE_PROJECT
+        store = @manager.store_for_scope(scope)
+        Core::FactGraph.build(store, fact_id, depth: depth)
+      end
+    end
+
     def explain(fact_id, scope: nil)
       if @legacy_mode
         explain_from_store(@legacy_store, fact_id)

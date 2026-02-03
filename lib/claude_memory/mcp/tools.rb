@@ -64,6 +64,8 @@ module ClaudeMemory
           recall_semantic(arguments)
         when "memory.search_concepts"
           search_concepts(arguments)
+        when "memory.fact_graph"
+          fact_graph(arguments)
         when "memory.check_setup"
           check_setup
         else
@@ -366,6 +368,18 @@ module ClaudeMemory
 
         results = @recall.query_concepts(concepts, limit: limit, scope: scope)
         ResponseFormatter.format_concept_results(concepts, scope, results, compact: compact)
+      end
+
+      def fact_graph(args)
+        fact_id = args["fact_id"]
+        depth = args["depth"] || 2
+        scope = args["scope"] || "project"
+
+        graph = @recall.fact_graph(fact_id, depth: depth, scope: scope)
+
+        return {error: "Fact #{fact_id} not found in #{scope} database"} if graph[:node_count] == 0
+
+        graph
       end
 
       def databases_exist?

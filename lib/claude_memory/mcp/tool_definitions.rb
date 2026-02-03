@@ -268,6 +268,19 @@ module ClaudeMemory
             }
           },
           {
+            name: "memory.fact_graph",
+            description: "Build a dependency graph showing how facts relate through supersession and conflict links. Returns nodes (facts) and edges (supersedes/conflicts).",
+            inputSchema: {
+              type: "object",
+              properties: {
+                fact_id: {type: "integer", description: "Root fact ID to start traversal from"},
+                depth: {type: "integer", description: "Maximum BFS traversal depth (1-5)", default: 2},
+                scope: {type: "string", enum: ["global", "project"], description: "Which database to search", default: "project"}
+              },
+              required: ["fact_id"]
+            }
+          },
+          {
             name: "memory.check_setup",
             description: "Check ClaudeMemory initialization status. Returns version info, issues found, and recommendations.",
             inputSchema: {

@@ -27,6 +27,7 @@ module ClaudeMemory
         when "memory.facts_by_context" then summarize_context_facts(result)
         when "memory.recall_semantic" then summarize_semantic(result)
         when "memory.search_concepts" then summarize_concepts(result)
+        when "memory.fact_graph" then summarize_fact_graph(result)
         when "memory.check_setup" then summarize_check_setup(result)
         else JSON.generate(result)
         end
@@ -208,6 +209,24 @@ module ClaudeMemory
         facts.each do |f|
           sim = f[:average_similarity] ? " (#{(f[:average_similarity] * 100).round}%)" : ""
           lines << "- [#{f[:id]}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}#{sim}"
+        end
+        lines.join("\n")
+      end
+
+      def self.summarize_fact_graph(result)
+        nodes = result[:nodes] || []
+        edges = result[:edges] || []
+        return "Fact #{result[:root_fact_id]} not found." if nodes.empty?
+
+        lines = ["Graph for fact ##{result[:root_fact_id]} (depth #{result[:depth]}): #{result[:node_count]} nodes, #{result[:edge_count]} edges"]
+        nodes.each do |n|
+          lines << "- [#{n[:id]}] #{n[:subject]}.#{n[:predicate]} = #{n[:object]} (#{n[:status]})"
+        end
+        if edges.any?
+          lines << "Edges:"
+          edges.each do |e|
+            lines << "  #{e[:from]} --#{e[:type]}--> #{e[:to]}"
+          end
         end
         lines.join("\n")
       end
