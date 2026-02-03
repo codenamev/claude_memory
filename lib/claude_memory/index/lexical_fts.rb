@@ -36,6 +36,24 @@ module ClaudeMemory
           .select_map(:content_item_id)
       end
 
+      # Search returning content IDs with FTS5 BM25 rank values
+      # @param query [String] Search query
+      # @param limit [Integer] Maximum results
+      # @return [Array<Hash>] Results with :content_item_id and :rank
+      def search_with_ranks(query, limit: 20)
+        ensure_fts_table!
+        return [] if query.nil? || query.strip.empty?
+        return [] if query.strip == "*"
+
+        escaped_query = escape_fts_query(query)
+        @db[:content_fts]
+          .where(Sequel.lit("text MATCH ?", escaped_query))
+          .order(:rank)
+          .limit(limit)
+          .select(Sequel.lit("content_item_id, rank"))
+          .all
+      end
+
       def escape_fts_query(query)
         words = query.split(/\s+/).map do |word|
           next word if word == "*"

@@ -465,14 +465,15 @@ module ClaudeMemory
       vector_results = []
       text_results = []
 
-      # Vector search mode
-      if mode == :vector || mode == :both
-        vector_results = search_by_vector(store, text, limit, source)
-      end
-
-      # Text search mode (FTS)
+      # Text search mode (FTS) - run first for expansion detection
       if mode == :text || mode == :both
         text_results = search_by_fts(store, text, limit, source)
+      end
+
+      # Vector search mode - skip if FTS already found strong match
+      if mode == :vector || mode == :both
+        skip_vector = mode == :both && strong_fts_signal?(store, text)
+        vector_results = search_by_vector(store, text, limit, source) unless skip_vector
       end
 
       # Merge and deduplicate
@@ -541,6 +542,12 @@ module ClaudeMemory
 
     def merge_search_results(vector_results, text_results, limit)
       Core::FactRanker.merge_search_results(vector_results, text_results, limit)
+    end
+
+    def strong_fts_signal?(store, query_text)
+      fts = Index::LexicalFTS.new(store)
+      ranked_results = fts.search_with_ranks(query_text, limit: 5)
+      Recall::ExpansionDetector.strong_fts_signal?(ranked_results)
     end
 
     # Multi-concept search helpers
