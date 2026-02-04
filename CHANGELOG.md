@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-02-04
+
+### Fixed
+
+- **Database Lock Errors**: Fixed "database is locked" and "database is busy" errors when
+  multiple Claude Code hooks run concurrently
+  - Added application-level retry with exponential backoff (5 retries, 0.1s base delay)
+  - Reduced SQLite busy_timeout from 30s to 1s for faster failure detection
+  - Added `with_retry` and `transaction_with_retry` methods for concurrent access handling
+  - SQLite's busy_timeout doesn't reliably detect lock release; app-level retry compensates
+
+- **MCP Server Auto-Registration**: Added `.mcp.json` at plugin root so MCP server is
+  automatically registered when plugin is installed (previously only worked in dev directory)
+
 ## [0.5.0] - 2026-02-04
 
 ### Added

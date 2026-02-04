@@ -1,6 +1,6 @@
 {
   "name": "claude-memory",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Long-term self-managed memory for Claude Code with fact extraction, truth maintenance, and provenance tracking",
   "author": {
     "name": "Valentino Stoll"
