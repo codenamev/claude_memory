@@ -7,6 +7,9 @@
 /spec/reports/
 /tmp/
 
+# mise artifacts
+mise.toml
+
 # rspec failure tracking
 .rspec_status
 .claude_memory.sqlite3

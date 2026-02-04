@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    claude_memory (0.5.0)
+    claude_memory (0.5.1)
       extralite (~> 2.14)
       sequel (~> 5.0)
 
@@ -17,6 +17,7 @@ GEM
     fastembed (1.1.0)
       onnxruntime (~> 0.9)
       tokenizers (~> 0.5)
+    ffi (1.17.3-arm64-darwin)
     ffi (1.17.3-x86_64-darwin)
     ffi (1.17.3-x86_64-linux-gnu)
     io-console (0.8.2)
@@ -28,6 +29,8 @@ GEM
     language_server-protocol (3.17.0.5)
     lefthook (1.13.6)
     lint_roller (1.1.0)
+    onnxruntime (0.10.1-arm64-darwin)
+      ffi
     onnxruntime (0.10.1-x86_64-darwin)
       ffi
     onnxruntime (0.10.1-x86_64-linux)
@@ -102,6 +105,7 @@ GEM
       lint_roller (~> 1.1)
       rubocop-performance (~> 1.26.0)
     stringio (3.2.0)
+    tokenizers (0.6.3-arm64-darwin)
     tokenizers (0.6.3-x86_64-darwin)
     tokenizers (0.6.3-x86_64-linux)
     tsort (0.2.0)
@@ -110,6 +114,7 @@ GEM
     unicode-emoji (4.2.0)
 
 PLATFORMS
+  arm64-darwin-24
   x86_64-darwin-25
   x86_64-linux
 
@@ -126,12 +131,13 @@ DEPENDENCIES
 CHECKSUMS
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
   bigdecimal (4.0.1) sha256=8b07d3d065a9f921c80ceaea7c9d4ae596697295b584c296fe599dd0ad01c4a7
-  claude_memory (0.5.0)
+  claude_memory (0.5.1)
   date (3.5.1) sha256=750d06384d7b9c15d562c76291407d89e368dda4d4fff957eb94962d325a0dc0
   diff-lcs (1.6.2) sha256=9ae0d2cba7d4df3075fe8cd8602a8604993efc0dfa934cff568969efb1909962
   erb (6.0.1) sha256=28ecdd99c5472aebd5674d6061e3c6b0a45c049578b071e5a52c2a7f13c197e5
   extralite (2.14) sha256=f40d2e1c83b34ede8039ef356427c0f619b0e81ddc8e5a80303d3383d0621ed5
   fastembed (1.1.0) sha256=0b59cd93cc6879bed599585404d3230103002b9fb966f1dfe0cc94c334ad168c
+  ffi (1.17.3-arm64-darwin) sha256=0c690555d4cee17a7f07c04d59df39b2fba74ec440b19da1f685c6579bb0717f
   ffi (1.17.3-x86_64-darwin) sha256=1f211811eb5cfaa25998322cdd92ab104bfbd26d1c4c08471599c511f2c00bb5
   ffi (1.17.3-x86_64-linux-gnu) sha256=3746b01f677aae7b16dc1acb7cb3cc17b3e35bdae7676a3f568153fb0e2c887f
   io-console (0.8.2) sha256=d6e3ae7a7cc7574f4b8893b4fca2162e57a825b223a177b7afa236c5ef9814cc
@@ -140,6 +146,7 @@ CHECKSUMS
   language_server-protocol (3.17.0.5) sha256=fd1e39a51a28bf3eec959379985a72e296e9f9acfce46f6a79d31ca8760803cc
   lefthook (1.13.6) sha256=87625da61ede93261eaa85e27181a96b4fd9666ba834b0ee8dcbde2b46f784e9
   lint_roller (1.1.0) sha256=2c0c845b632a7d172cb849cc90c1bce937a28c5c8ccccb50dfd46a485003cc87
+  onnxruntime (0.10.1-arm64-darwin) sha256=8afc0feaa03bd969c4c0f43379254106ac90dbb548c8bb2cae4cca25f19771b7
   onnxruntime (0.10.1-x86_64-darwin) sha256=9b416fb9c1b9062e084757805dfa2e42a60f0be9c16e1d897684a2effd2e71f5
   onnxruntime (0.10.1-x86_64-linux) sha256=378170c279ee83c772f7a27a739202d0162a5d40219621978f4787fabc4123a4
   parallel (1.27.0) sha256=4ac151e1806b755fb4e2dc2332cbf0e54f2e24ba821ff2d3dcf86bf6dc4ae130
@@ -169,6 +176,7 @@ CHECKSUMS
   standard-custom (1.0.2) sha256=424adc84179a074f1a2a309bb9cf7cd6bfdb2b6541f20c6bf9436c0ba22a652b
   standard-performance (1.9.0) sha256=49483d31be448292951d80e5e67cdcb576c2502103c7b40aec6f1b6e9c88e3f2
   stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
+  tokenizers (0.6.3-arm64-darwin) sha256=29a6a5582dce106d846a906ee9e4254c12db45a3855c3ff6881d4be8be03e6b6
   tokenizers (0.6.3-x86_64-darwin) sha256=4b71386cc08ceff5f86b448c74b2b297c00a280a1d502399b6cda23ef94e01fd
   tokenizers (0.6.3-x86_64-linux) sha256=77a45cbde59daac33bdda1a74d45c18080478992a00ee7d898e7b8d15d0b3149
   tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f

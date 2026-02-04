@@ -21,17 +21,65 @@ module ClaudeMemory
         ensure_schema!
       end
 
+      # Retry configuration for database operations
+      # SQLite's busy_timeout doesn't reliably detect lock release, so we use
+      # shorter timeouts with application-level retry for better responsiveness
+      MAX_RETRIES = 5
+      RETRY_BASE_DELAY = 0.1 # seconds, with exponential backoff
+
+      # Execute a block with retry logic for busy/locked errors
+      # This handles concurrent access from multiple hook processes
+      def with_retry(operation_name = "database operation")
+        retries = 0
+        begin
+          yield
+        rescue Sequel::DatabaseError, Extralite::Error, Extralite::BusyError => e
+          if retryable_error?(e) && retries < MAX_RETRIES
+            retries += 1
+            delay = RETRY_BASE_DELAY * (2**retries) # Exponential backoff
+            sleep(delay)
+            retry
+          end
+          raise
+        end
+      end
+
+      # Execute a transaction with retry logic for concurrent access
+      # Use this instead of @db.transaction when concurrent writes are expected
+      def transaction_with_retry(&block)
+        with_retry("transaction") do
+          @db.transaction(&block)
+        end
+      end
+
       private
 
+      def retryable_error?(error)
+        message = error.message.downcase
+        message.include?("busy") || message.include?("locked")
+      end
+
       def connect_database(db_path)
-        Sequel.connect(
-          "extralite:#{db_path}",
-          connect_sqls: [
-            "PRAGMA journal_mode = WAL",
-            "PRAGMA synchronous = NORMAL",
-            "PRAGMA busy_timeout = 30000"
-          ]
-        )
+        retries = 0
+        begin
+          Sequel.connect(
+            "extralite:#{db_path}",
+            # Use shorter busy_timeout since we handle retry at app level
+            # This allows faster detection of lock release between retries
+            connect_sqls: [
+              "PRAGMA busy_timeout = 1000",
+              "PRAGMA journal_mode = WAL",
+              "PRAGMA synchronous = NORMAL"
+            ]
+          )
+        rescue Sequel::DatabaseConnectionError, Extralite::Error => e
+          retries += 1
+          if retries <= MAX_RETRIES && retryable_error?(e)
+            sleep(RETRY_BASE_DELAY * (2**retries))
+            retry
+          end
+          raise
+        end
       end
 
       public
@@ -106,27 +154,29 @@ module ClaudeMemory
       def upsert_content_item(source:, text_hash:, byte_len:, session_id: nil, transcript_path: nil,
         project_path: nil, occurred_at: nil, raw_text: nil, metadata: nil,
         git_branch: nil, cwd: nil, claude_version: nil, thinking_level: nil, source_mtime: nil)
-        existing = content_items.where(text_hash: text_hash, session_id: session_id).get(:id)
-        return existing if existing
+        with_retry("upsert_content_item") do
+          existing = content_items.where(text_hash: text_hash, session_id: session_id).get(:id)
+          return existing if existing
 
-        now = Time.now.utc.iso8601
-        content_items.insert(
-          source: source,
-          session_id: session_id,
-          transcript_path: transcript_path,
-          project_path: project_path,
-          occurred_at: occurred_at || now,
-          ingested_at: now,
-          text_hash: text_hash,
-          byte_len: byte_len,
-          raw_text: raw_text,
-          metadata_json: metadata&.to_json,
-          git_branch: git_branch,
-          cwd: cwd,
-          claude_version: claude_version,
-          thinking_level: thinking_level,
-          source_mtime: source_mtime
-        )
+          now = Time.now.utc.iso8601
+          content_items.insert(
+            source: source,
+            session_id: session_id,
+            transcript_path: transcript_path,
+            project_path: project_path,
+            occurred_at: occurred_at || now,
+            ingested_at: now,
+            text_hash: text_hash,
+            byte_len: byte_len,
+            raw_text: raw_text,
+            metadata_json: metadata&.to_json,
+            git_branch: git_branch,
+            cwd: cwd,
+            claude_version: claude_version,
+            thinking_level: thinking_level,
+            source_mtime: source_mtime
+          )
+        end
       end
 
       def content_item_by_transcript_and_mtime(transcript_path, mtime_iso8601)

@@ -208,8 +208,9 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore do
   describe "PRAGMA persistence across reconnection" do
     it "preserves busy_timeout after disconnect and reconnect" do
       # Verify PRAGMA is set initially
+      # Note: busy_timeout is 1000ms (1s) to enable faster app-level retry
       initial_timeout = store.db["PRAGMA busy_timeout"].first[:timeout]
-      expect(initial_timeout).to eq(30_000)
+      expect(initial_timeout).to eq(1_000)
 
       # Simulate what MCP Server#release_connections does
       store.db.disconnect
@@ -217,7 +218,7 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore do
       # Next query triggers automatic reconnection —
       # busy_timeout must survive for concurrent session safety
       reconnected_timeout = store.db["PRAGMA busy_timeout"].first[:timeout]
-      expect(reconnected_timeout).to eq(30_000)
+      expect(reconnected_timeout).to eq(1_000)
     end
 
     it "preserves WAL journal mode after disconnect and reconnect" do
