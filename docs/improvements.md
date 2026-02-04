@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-02-03 - Removed Fact Dependency Graph, Enhanced Snippet Extraction, Line-Range References (implemented)*
+*Updated: 2026-02-03 - Removed Docid Short Hash System (implemented), Fact Dependency Graph, Enhanced Snippet Extraction, Line-Range References (implemented)*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
@@ -21,29 +21,17 @@ This document contains only unimplemented improvements. Completed items are remo
 - **Current Issue**: JSON embedding storage requires loading all facts, O(n) Ruby similarity calculation
 - **Solution**: sqlite-vec extension with native C KNN queries
 - **Implementation**:
-  - Schema migration v9: Create `facts_vec` virtual table using `vec0`
+  - Schema migration v10: Create `facts_vec` virtual table using `vec0`
   - Two-step query pattern (avoid JOINs - they hang with vec tables!)
   - Update `Embeddings::Similarity` class
   - Backfill existing embeddings
 - **Trade-off**: Adds native dependency (acceptable, well-maintained, cross-platform)
 
-### 2. Docid Short Hash System ⭐ MEDIUM VALUE
-
-- **Value**: Better UX, cross-database fact references
-- **Current Issue**: Integer IDs are database-specific, not user-friendly
-- **Solution**: 8-character hash IDs for facts (e.g., `#abc123de`)
-- **Implementation**:
-  - Schema migration: Add `docid` column (indexed, unique)
-  - Backfill existing facts with SHA256-based docids
-  - Update CLI commands (`explain`, `recall`) to accept docids
-  - Update MCP tools to accept docids
-  - Update output formatting to show docids
-
 ---
 
 ## High Priority (Study-Inspired)
 
-### 3. SessionStart Context Injection via Hook ⭐
+### 2. SessionStart Context Injection via Hook ⭐
 
 Source: claude-supermemory study
 
@@ -52,7 +40,7 @@ Source: claude-supermemory study
 - **Evidence**: `context-hook.js:72-74` — uses hook response to inject `<supermemory-context>` XML
 - **Effort**: 1-2 days (hook handler, context formatter, settings)
 
-### 4. Tool-Specific Observation Compression ⭐
+### 3. Tool-Specific Observation Compression ⭐
 
 Source: claude-supermemory study
 
@@ -61,7 +49,7 @@ Source: claude-supermemory study
 - **Evidence**: `compress.js:13-75` — 10 tool handlers with human-readable output
 - **Effort**: 4-6 hours (class + tests + ingest integration)
 
-### 5. Claude Code Plugin Distribution Format ⭐
+### 4. Claude Code Plugin Distribution Format ⭐
 
 Source: QMD study
 
@@ -74,7 +62,7 @@ Source: QMD study
 
 ## Medium Priority
 
-### 6. Incremental Indexing with File Watching
+### 5. Incremental Indexing with File Watching
 
 Source: grepai study
 
@@ -84,7 +72,7 @@ Source: grepai study
 - **Effort**: 2-3 days
 - **Trade-off**: Background process ~10MB memory overhead
 
-### 7. Background Processing for Hooks
+### 6. Background Processing for Hooks
 
 Source: episodic-memory study
 
@@ -92,7 +80,7 @@ Source: episodic-memory study
 - **Implementation**: `--async` flag on hook commands, fork and detach
 - **Trade-off**: Background process management complexity, potential race conditions
 
-### 8. LLM Response Caching
+### 7. LLM Response Caching
 
 Source: QMD study
 
@@ -100,7 +88,7 @@ Source: QMD study
 - **Implementation**: Add `llm_cache` table (hash, result, created_at), cache key: `SHA256(operation + model + input)`
 - **Consideration**: Most valuable when distiller is fully implemented
 
-### 9. Document Chunking for Long Transcripts
+### 8. Document Chunking for Long Transcripts
 
 Source: QMD study
 
@@ -112,7 +100,7 @@ Source: QMD study
 
 ## Low Priority
 
-### 10. Structured Logging
+### 9. Structured Logging
 
 - **Value**: Better debugging with JSON logs
 - **Implementation**: Add `ClaudeMemory::Logging::Logger` with structured JSON output
@@ -162,4 +150,4 @@ Source: QMD study
 
 ---
 
-*Last updated: 2026-02-03 - Removed Fact Dependency Graph, Enhanced Snippet Extraction, Line-Range References (implemented)*
+*Last updated: 2026-02-03 - Removed Docid Short Hash System (implemented). Renumbered items.*
