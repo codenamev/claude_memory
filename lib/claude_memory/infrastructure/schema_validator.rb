@@ -33,47 +33,15 @@ module ClaudeMemory
 
       def validate
         issues = []
-
-        # Check tables exist
         tables = @store.db.tables
-        missing_tables = EXPECTED_TABLES - tables
-        missing_tables.each do |table|
-          issues << {severity: "error", message: "Missing table: #{table}"}
-        end
 
-        # Check critical columns exist
-        CRITICAL_COLUMNS.each do |table, columns|
-          next unless tables.include?(table)
-
-          existing_columns = @store.db.schema(table).map(&:first)
-          missing_columns = columns - existing_columns
-          missing_columns.each do |column|
-            issues << {severity: "error", message: "Missing column #{table}.#{column}"}
-          end
-        end
-
-        # Check critical indexes exist
-        index_names = @store.db["SELECT name FROM sqlite_master WHERE type='index'"]
-          .all.map { |r| r[:name] }
-        missing_indexes = CRITICAL_INDEXES - index_names.map(&:to_sym)
-        missing_indexes.each do |index|
-          issues << {severity: "warning", message: "Missing index: #{index}"}
-        end
-
-        # Check for orphaned records
-        check_orphaned_provenance(issues)
-        check_orphaned_fact_links(issues)
-        check_orphaned_tool_calls(issues)
-
-        # Check for invalid enum values
-        check_invalid_fact_scopes(issues)
-        check_invalid_fact_status(issues)
-        check_invalid_operation_status(issues)
-
-        # Check embedding dimensions
+        check_tables(tables, issues)
+        check_columns(tables, issues)
+        check_indexes(issues)
+        check_orphaned_records(issues)
+        check_enum_values(issues)
         check_embedding_dimensions(issues)
 
-        # Record validation result
         record_health_check(issues)
 
         {
@@ -83,6 +51,43 @@ module ClaudeMemory
       end
 
       private
+
+      def check_tables(tables, issues)
+        (EXPECTED_TABLES - tables).each do |table|
+          issues << {severity: "error", message: "Missing table: #{table}"}
+        end
+      end
+
+      def check_columns(tables, issues)
+        CRITICAL_COLUMNS.each do |table, columns|
+          next unless tables.include?(table)
+
+          existing_columns = @store.db.schema(table).map(&:first)
+          (columns - existing_columns).each do |column|
+            issues << {severity: "error", message: "Missing column #{table}.#{column}"}
+          end
+        end
+      end
+
+      def check_indexes(issues)
+        index_names = @store.db["SELECT name FROM sqlite_master WHERE type='index'"]
+          .all.map { |r| r[:name] }
+        (CRITICAL_INDEXES - index_names.map(&:to_sym)).each do |index|
+          issues << {severity: "warning", message: "Missing index: #{index}"}
+        end
+      end
+
+      def check_orphaned_records(issues)
+        check_orphaned_provenance(issues)
+        check_orphaned_fact_links(issues)
+        check_orphaned_tool_calls(issues)
+      end
+
+      def check_enum_values(issues)
+        check_invalid_fact_scopes(issues)
+        check_invalid_fact_status(issues)
+        check_invalid_operation_status(issues)
+      end
 
       def check_orphaned_provenance(issues)
         orphaned = @store.db[:provenance]

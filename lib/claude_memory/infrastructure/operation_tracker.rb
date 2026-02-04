@@ -107,23 +107,7 @@ module ClaudeMemory
         count = stuck.count
         return 0 if count.zero?
 
-        now = Time.now.utc.iso8601
-        error_message = "Reset by recover command - operation exceeded 24h timeout"
-
-        # Fetch each stuck operation, update checkpoint in Ruby, then save
-        stuck.all.each do |op|
-          checkpoint = op[:checkpoint_data] ? JSON.parse(op[:checkpoint_data]) : {}
-          checkpoint["error"] = error_message
-
-          @store.db[:operation_progress]
-            .where(id: op[:id])
-            .update(
-              status: "failed",
-              completed_at: now,
-              checkpoint_data: JSON.generate(checkpoint)
-            )
-        end
-
+        fail_operations(stuck, "Reset by recover command - operation exceeded 24h timeout")
         count
       end
 
@@ -132,15 +116,17 @@ module ClaudeMemory
       # Mark stale operations as failed before starting new operation
       def cleanup_stale_operations!(operation_type, scope)
         threshold_time = (Time.now.utc - STALE_THRESHOLD_SECONDS).iso8601
-        now = Time.now.utc.iso8601
-        error_message = "Automatically marked as failed - operation exceeded 24h timeout"
 
         stale = @store.db[:operation_progress]
           .where(operation_type: operation_type, scope: scope, status: "running")
           .where { started_at < threshold_time }
 
-        # Fetch each stale operation, update checkpoint in Ruby, then save
-        stale.all.each do |op|
+        fail_operations(stale, "Automatically marked as failed - operation exceeded 24h timeout")
+      end
+
+      def fail_operations(dataset, error_message)
+        now = Time.now.utc.iso8601
+        dataset.all.each do |op|
           checkpoint = op[:checkpoint_data] ? JSON.parse(op[:checkpoint_data]) : {}
           checkpoint["error"] = error_message
 

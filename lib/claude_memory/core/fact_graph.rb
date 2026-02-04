@@ -35,46 +35,7 @@ module ClaudeMemory
 
           next if current_depth >= depth
 
-          # Find supersession links (outgoing)
-          supersedes = store.fact_links
-            .where(from_fact_id: fact_id, link_type: "supersedes")
-            .select_map(:to_fact_id)
-
-          supersedes.each do |target_id|
-            edges << {from: fact_id, to: target_id, type: "supersedes"}
-            queue << [target_id, current_depth + 1] unless visited.include?(target_id)
-          end
-
-          # Find supersession links (incoming - superseded_by)
-          superseded_by = store.fact_links
-            .where(to_fact_id: fact_id, link_type: "supersedes")
-            .select_map(:from_fact_id)
-
-          superseded_by.each do |source_id|
-            edges << {from: source_id, to: fact_id, type: "supersedes"}
-            queue << [source_id, current_depth + 1] unless visited.include?(source_id)
-          end
-
-          # Find conflicts (bidirectional)
-          conflicts_a = store.conflicts
-            .where(fact_a_id: fact_id)
-            .select(:fact_b_id, :status)
-            .all
-
-          conflicts_a.each do |conflict|
-            edges << {from: fact_id, to: conflict[:fact_b_id], type: "conflicts", status: conflict[:status]}
-            queue << [conflict[:fact_b_id], current_depth + 1] unless visited.include?(conflict[:fact_b_id])
-          end
-
-          conflicts_b = store.conflicts
-            .where(fact_b_id: fact_id)
-            .select(:fact_a_id, :status)
-            .all
-
-          conflicts_b.each do |conflict|
-            edges << {from: conflict[:fact_a_id], to: fact_id, type: "conflicts", status: conflict[:status]}
-            queue << [conflict[:fact_a_id], current_depth + 1] unless visited.include?(conflict[:fact_a_id])
-          end
+          discover_links(store, fact_id, current_depth, visited, queue, edges)
         end
 
         deduped = dedupe_edges(edges)
@@ -87,6 +48,52 @@ module ClaudeMemory
           nodes: nodes.values,
           edges: deduped
         }
+      end
+
+      def self.discover_links(store, fact_id, current_depth, visited, queue, edges)
+        discover_supersedes(store, fact_id, current_depth, visited, queue, edges)
+        discover_superseded_by(store, fact_id, current_depth, visited, queue, edges)
+        discover_conflicts(store, fact_id, current_depth, visited, queue, edges)
+      end
+
+      def self.discover_supersedes(store, fact_id, current_depth, visited, queue, edges)
+        store.fact_links
+          .where(from_fact_id: fact_id, link_type: "supersedes")
+          .select_map(:to_fact_id)
+          .each do |target_id|
+            edges << {from: fact_id, to: target_id, type: "supersedes"}
+            queue << [target_id, current_depth + 1] unless visited.include?(target_id)
+          end
+      end
+
+      def self.discover_superseded_by(store, fact_id, current_depth, visited, queue, edges)
+        store.fact_links
+          .where(to_fact_id: fact_id, link_type: "supersedes")
+          .select_map(:from_fact_id)
+          .each do |source_id|
+            edges << {from: source_id, to: fact_id, type: "supersedes"}
+            queue << [source_id, current_depth + 1] unless visited.include?(source_id)
+          end
+      end
+
+      def self.discover_conflicts(store, fact_id, current_depth, visited, queue, edges)
+        store.conflicts
+          .where(fact_a_id: fact_id)
+          .select(:fact_b_id, :status)
+          .all
+          .each do |conflict|
+            edges << {from: fact_id, to: conflict[:fact_b_id], type: "conflicts", status: conflict[:status]}
+            queue << [conflict[:fact_b_id], current_depth + 1] unless visited.include?(conflict[:fact_b_id])
+          end
+
+        store.conflicts
+          .where(fact_b_id: fact_id)
+          .select(:fact_a_id, :status)
+          .all
+          .each do |conflict|
+            edges << {from: conflict[:fact_a_id], to: fact_id, type: "conflicts", status: conflict[:status]}
+            queue << [conflict[:fact_a_id], current_depth + 1] unless visited.include?(conflict[:fact_a_id])
+          end
       end
 
       # Build a minimal node representation of a fact
