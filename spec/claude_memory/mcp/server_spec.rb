@@ -82,7 +82,7 @@ RSpec.describe ClaudeMemory::MCP::Server do
 
       structured = response["result"]["structuredContent"]
       expect(structured).to be_a(Hash)
-      expect(structured["databases"]["legacy"]["schema_version"]).to eq(8)
+      expect(structured["databases"]["legacy"]["schema_version"]).to eq(9)
     end
   end
 

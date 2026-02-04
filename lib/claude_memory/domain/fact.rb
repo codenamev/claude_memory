@@ -5,12 +5,13 @@ module ClaudeMemory
     # Domain model representing a fact in the memory system
     # Encapsulates business logic and validation
     class Fact
-      attr_reader :id, :subject_name, :predicate, :object_literal,
+      attr_reader :id, :docid, :subject_name, :predicate, :object_literal,
         :status, :confidence, :scope, :project_path,
         :valid_from, :valid_to, :created_at
 
       def initialize(attributes)
         @id = attributes[:id]
+        @docid = attributes[:docid]
         @subject_name = attributes[:subject_name]
         @predicate = attributes[:predicate]
         @object_literal = attributes[:object_literal]
@@ -45,6 +46,7 @@ module ClaudeMemory
       def to_h
         {
           id: id,
+          docid: docid,
           subject_name: subject_name,
           predicate: predicate,
           object_literal: object_literal,

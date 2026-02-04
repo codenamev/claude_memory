@@ -39,7 +39,7 @@ module ClaudeMemory
 
         lines = ["Found #{facts.size} fact(s):"]
         facts.each do |f|
-          lines << "- [#{f[:id]}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}"
+          lines << "- [#{fact_label(f)}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}"
         end
         lines.join("\n")
       end
@@ -50,7 +50,7 @@ module ClaudeMemory
 
         lines = ["#{result[:result_count]} fact(s) matching '#{result[:query]}' (~#{result[:total_estimated_tokens]} tokens):"]
         facts.each do |f|
-          lines << "- [#{f[:id]}] #{f[:subject]}.#{f[:predicate]}: #{f[:object_preview]} (#{f[:tokens]}t)"
+          lines << "- [#{fact_label(f)}] #{f[:subject]}.#{f[:predicate]}: #{f[:object_preview]} (#{f[:tokens]}t)"
         end
         lines.join("\n")
       end
@@ -62,14 +62,14 @@ module ClaudeMemory
         lines = ["#{result[:fact_count]} fact(s):"]
         facts.each do |f|
           fact = f[:fact]
-          lines << "- [#{fact[:id]}] #{fact[:subject]}.#{fact[:predicate]} = #{fact[:object]} (#{fact[:status]}, #{fact[:scope]})"
+          lines << "- [#{fact_label(fact)}] #{fact[:subject]}.#{fact[:predicate]} = #{fact[:object]} (#{fact[:status]}, #{fact[:scope]})"
         end
         lines.join("\n")
       end
 
       def self.summarize_explain(result)
         f = result[:fact]
-        lines = ["Fact [#{f[:id]}]: #{f[:subject]}.#{f[:predicate]} = #{f[:object]}"]
+        lines = ["Fact [#{fact_label(f)}]: #{f[:subject]}.#{f[:predicate]} = #{f[:object]}"]
         lines << "Status: #{f[:status]}, valid from: #{f[:valid_from_ago] || f[:valid_from] || "unknown"}"
         lines << "Source: #{result[:source]}"
 
@@ -88,7 +88,7 @@ module ClaudeMemory
         lines = ["#{changes.size} change(s) since #{result[:since]}:"]
         changes.each do |c|
           ago = c[:created_ago] ? " (#{c[:created_ago]})" : ""
-          lines << "- [#{c[:id]}] #{c[:predicate]}: #{c[:object]} [#{c[:status]}]#{ago}"
+          lines << "- [#{fact_label(c)}] #{c[:predicate]}: #{c[:object]} [#{c[:status]}]#{ago}"
         end
         lines.join("\n")
       end
@@ -161,7 +161,7 @@ module ClaudeMemory
 
         lines = ["#{result[:count]} #{result[:category]}:"]
         facts.each do |f|
-          lines << "- [#{f[:id]}] #{f[:object]}"
+          lines << "- [#{fact_label(f)}] #{f[:object]}"
         end
         lines.join("\n")
       end
@@ -172,7 +172,7 @@ module ClaudeMemory
 
         lines = ["#{result[:count]} fact(s) from #{result[:tool_name]}:"]
         facts.each do |f|
-          lines << "- [#{f[:id]}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}"
+          lines << "- [#{fact_label(f)}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}"
         end
         lines.join("\n")
       end
@@ -183,7 +183,7 @@ module ClaudeMemory
 
         lines = ["#{result[:count]} fact(s) for #{result[:context_type]}=#{result[:context_value]}:"]
         facts.each do |f|
-          lines << "- [#{f[:id]}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}"
+          lines << "- [#{fact_label(f)}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}"
         end
         lines.join("\n")
       end
@@ -195,7 +195,7 @@ module ClaudeMemory
         lines = ["#{result[:count]} match(es) for '#{result[:query]}' (#{result[:mode]}):"]
         facts.each do |f|
           sim = f[:similarity] ? " (#{(f[:similarity] * 100).round}%)" : ""
-          lines << "- [#{f[:id]}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}#{sim}"
+          lines << "- [#{fact_label(f)}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}#{sim}"
         end
         lines.join("\n")
       end
@@ -208,7 +208,7 @@ module ClaudeMemory
         lines = ["#{result[:count]} fact(s) matching #{concepts_str}:"]
         facts.each do |f|
           sim = f[:average_similarity] ? " (#{(f[:average_similarity] * 100).round}%)" : ""
-          lines << "- [#{f[:id]}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}#{sim}"
+          lines << "- [#{fact_label(f)}] #{f[:subject]}.#{f[:predicate]} = #{f[:object]}#{sim}"
         end
         lines.join("\n")
       end
@@ -220,7 +220,8 @@ module ClaudeMemory
 
         lines = ["Graph for fact ##{result[:root_fact_id]} (depth #{result[:depth]}): #{result[:node_count]} nodes, #{result[:edge_count]} edges"]
         nodes.each do |n|
-          lines << "- [#{n[:id]}] #{n[:subject]}.#{n[:predicate]} = #{n[:object]} (#{n[:status]})"
+          label = n[:docid] || n[:id]
+          lines << "- [#{label}] #{n[:subject]}.#{n[:predicate]} = #{n[:object]} (#{n[:status]})"
         end
         if edges.any?
           lines << "Edges:"
@@ -245,6 +246,11 @@ module ClaudeMemory
         warnings.each { |w| lines << "Warning: #{w}" }
 
         lines.join("\n")
+      end
+
+      # Format fact identifier: prefer docid if available, fall back to integer id
+      def self.fact_label(fact)
+        fact[:docid] || fact[:id]
       end
     end
   end

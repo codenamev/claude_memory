@@ -48,6 +48,16 @@ module ClaudeMemory
           .first
       end
 
+      # Find single fact by docid with entity join
+      # @param store [SQLiteStore] Database store
+      # @param docid [String] 8-character docid
+      # @return [Hash, nil] Fact row or nil
+      def self.find_fact_by_docid(store, docid)
+        build_facts_dataset(store)
+          .where(Sequel[:facts][:docid] => docid)
+          .first
+      end
+
       # Find receipts for a single fact
       # @param store [SQLiteStore] Database store
       # @param fact_id [Integer] Fact ID
@@ -97,7 +107,7 @@ module ClaudeMemory
       # @return [Array<Hash>] Fact rows
       def self.fetch_changes(store, since, limit)
         store.facts
-          .select(:id, :subject_entity_id, :predicate, :object_literal, :status, :created_at, :scope, :project_path)
+          .select(:id, :docid, :subject_entity_id, :predicate, :object_literal, :status, :created_at, :scope, :project_path)
           .where { created_at >= since }
           .order(Sequel.desc(:created_at))
           .limit(limit)
@@ -123,6 +133,7 @@ module ClaudeMemory
           .left_join(:entities, id: :subject_entity_id)
           .select(
             Sequel[:facts][:id],
+            Sequel[:facts][:docid],
             Sequel[:facts][:predicate],
             Sequel[:facts][:object_literal],
             Sequel[:facts][:status],

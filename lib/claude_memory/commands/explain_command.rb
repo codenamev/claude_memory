@@ -5,11 +5,14 @@ module ClaudeMemory
     # Explains a fact with provenance and relationships
     class ExplainCommand < BaseCommand
       def call(args)
-        fact_id = args.first&.to_i
-        unless fact_id && fact_id > 0
-          stderr.puts "Usage: claude-memory explain <fact_id> [--scope project|global]"
+        identifier = args.first
+        unless identifier && !identifier.empty?
+          stderr.puts "Usage: claude-memory explain <fact_id|docid> [--scope project|global]"
           return 1
         end
+
+        # Accept integer IDs or 8-char docid strings
+        fact_ref = identifier.match?(/\A\d+\z/) ? identifier.to_i : identifier
 
         opts = parse_options(args[1..] || [], {scope: "project"}) do |o|
           OptionParser.new do |parser|
@@ -21,14 +24,16 @@ module ClaudeMemory
         manager = ClaudeMemory::Store::StoreManager.new
         recall = ClaudeMemory::Recall.new(manager)
 
-        explanation = recall.explain(fact_id, scope: opts[:scope])
+        explanation = recall.explain(fact_ref, scope: opts[:scope])
         if explanation.is_a?(ClaudeMemory::Core::NullExplanation)
-          stderr.puts "Fact #{fact_id} not found in #{opts[:scope]} database."
+          stderr.puts "Fact #{identifier} not found in #{opts[:scope]} database."
           manager.close
           return 1
         end
 
-        stdout.puts "Fact ##{fact_id} (#{opts[:scope]}):"
+        docid = explanation[:fact][:docid]
+        label = docid ? "##{docid}" : "##{explanation[:fact][:id]}"
+        stdout.puts "Fact #{label} (#{opts[:scope]}):"
         print_fact(explanation[:fact])
         print_receipts(explanation[:receipts])
 

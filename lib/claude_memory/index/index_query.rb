@@ -55,6 +55,7 @@ module ClaudeMemory
           .left_join(:entities, id: :subject_entity_id)
           .select(
             Sequel[:facts][:id],
+            Sequel[:facts][:docid],
             Sequel[:facts][:predicate],
             Sequel[:facts][:object_literal],
             Sequel[:facts][:status],
@@ -67,6 +68,7 @@ module ClaudeMemory
           .map do |fact|
             {
               id: fact[:id],
+              docid: fact[:docid],
               subject: fact[:subject_name],
               predicate: fact[:predicate],
               object_preview: truncate_preview(fact[:object_literal]),

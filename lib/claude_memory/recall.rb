@@ -65,12 +65,14 @@ module ClaudeMemory
       end
     end
 
-    def explain(fact_id, scope: nil)
+    def explain(fact_id_or_docid, scope: nil)
       if @legacy_mode
+        fact_id = resolve_fact_identifier(@legacy_store, fact_id_or_docid)
         explain_from_store(@legacy_store, fact_id)
       else
         scope ||= SCOPE_PROJECT
         store = @manager.store_for_scope(scope)
+        fact_id = resolve_fact_identifier(store, fact_id_or_docid)
         explain_from_store(store, fact_id)
       end
     end
@@ -240,6 +242,20 @@ module ClaudeMemory
       end
     end
 
+    # Resolve a fact identifier to an integer ID
+    # Accepts either an integer ID or an 8-char docid string
+    def resolve_fact_identifier(store, identifier)
+      return identifier if identifier.is_a?(Integer)
+
+      str = identifier.to_s
+      # If it looks like a pure integer, use as ID
+      return str.to_i if str.match?(/\A\d+\z/)
+
+      # Otherwise treat as docid
+      fact = Core::FactQueryBuilder.find_fact_by_docid(store, str)
+      fact ? fact[:id] : nil
+    end
+
     def explain_from_store(store, fact_id)
       fact = find_fact_from_store(store, fact_id)
       return Core::NullExplanation.new unless fact
@@ -323,7 +339,7 @@ module ClaudeMemory
 
     def changes_legacy(since:, limit:, scope:)
       ds = @legacy_store.facts
-        .select(:id, :subject_entity_id, :predicate, :object_literal, :status, :created_at, :scope, :project_path)
+        .select(:id, :docid, :subject_entity_id, :predicate, :object_literal, :status, :created_at, :scope, :project_path)
         .where { created_at >= since }
         .order(Sequel.desc(:created_at))
         .limit(limit)

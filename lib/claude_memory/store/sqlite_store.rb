@@ -2,6 +2,7 @@
 
 require "sequel"
 require "sequel/extensions/migration"
+require "digest"
 require "json"
 require "extralite"
 require "sequel/adapters/extralite"
@@ -9,7 +10,7 @@ require "sequel/adapters/extralite"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 8
+      SCHEMA_VERSION = 9
 
       attr_reader :db
 
@@ -182,6 +183,7 @@ module ClaudeMemory
         datatype: nil, polarity: "positive", valid_from: nil, status: "active",
         confidence: 1.0, created_from: nil, scope: "project", project_path: nil)
         now = Time.now.utc.iso8601
+        docid = generate_docid(subject_entity_id, predicate, object_literal, now)
         facts.insert(
           subject_entity_id: subject_entity_id,
           predicate: predicate,
@@ -195,8 +197,13 @@ module ClaudeMemory
           created_from: created_from,
           created_at: now,
           scope: scope,
-          project_path: project_path
+          project_path: project_path,
+          docid: docid
         )
+      end
+
+      def find_fact_by_docid(docid)
+        facts.where(docid: docid).first
       end
 
       def update_fact(fact_id, status: nil, valid_to: nil, scope: nil, project_path: nil, embedding: nil)
@@ -387,6 +394,20 @@ module ClaudeMemory
 
       def get_meta(key)
         @db[:meta].where(key: key).get(:value)
+      end
+
+      def generate_docid(subject_entity_id, predicate, object_literal, created_at)
+        input = "#{subject_entity_id}:#{predicate}:#{object_literal}:#{created_at}"
+        docid = Digest::SHA256.hexdigest(input)[0, 8]
+
+        # Handle unlikely collisions by rehashing with a counter
+        counter = 0
+        while facts.where(docid: docid).any?
+          counter += 1
+          docid = Digest::SHA256.hexdigest("#{input}:#{counter}")[0, 8]
+        end
+
+        docid
       end
 
       def slugify(type, name)

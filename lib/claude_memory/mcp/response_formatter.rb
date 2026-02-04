@@ -27,6 +27,7 @@ module ClaudeMemory
       def self.format_recall_fact(result, compact: false, query: nil)
         fact = {
           id: result[:fact][:id],
+          docid: result[:fact][:docid],
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
@@ -60,6 +61,7 @@ module ClaudeMemory
       def self.format_index_fact(result)
         {
           id: result[:id],
+          docid: result[:docid],
           subject: result[:subject],
           predicate: result[:predicate],
           object_preview: result[:object_preview],
@@ -79,6 +81,7 @@ module ClaudeMemory
         {
           fact: {
             id: explanation[:fact][:id],
+            docid: explanation[:fact][:docid],
             subject: explanation[:fact][:subject_name],
             predicate: explanation[:fact][:predicate],
             object: explanation[:fact][:object_literal],
@@ -102,6 +105,7 @@ module ClaudeMemory
         {
           fact: {
             id: explanation[:fact][:id],
+            docid: explanation[:fact][:docid],
             subject: explanation[:fact][:subject_name],
             predicate: explanation[:fact][:predicate],
             object: explanation[:fact][:object_literal],
@@ -191,6 +195,7 @@ module ClaudeMemory
       def self.format_change(change)
         {
           id: change[:id],
+          docid: change[:docid],
           predicate: change[:predicate],
           object: change[:object_literal],
           status: change[:status],
@@ -263,6 +268,7 @@ module ClaudeMemory
       def self.format_semantic_fact(result, compact: false, query: nil)
         fact = {
           id: result[:fact][:id],
+          docid: result[:fact][:docid],
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
@@ -298,6 +304,7 @@ module ClaudeMemory
       def self.format_concept_fact(result, compact: false, query: nil)
         fact = {
           id: result[:fact][:id],
+          docid: result[:fact][:docid],
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
@@ -328,6 +335,7 @@ module ClaudeMemory
       def self.format_shortcut_fact(result)
         {
           id: result[:fact][:id],
+          docid: result[:fact][:docid],
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
@@ -372,6 +380,7 @@ module ClaudeMemory
       def self.format_generic_fact(result)
         {
           id: result[:fact][:id],
+          docid: result[:fact][:docid],
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],

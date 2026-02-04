@@ -54,7 +54,7 @@ module ClaudeMemory
             inputSchema: {
               type: "object",
               properties: {
-                fact_id: {type: "integer", description: "Fact ID to explain"},
+                fact_id: {description: "Fact ID (integer) or docid (8-char hex string) to explain"},
                 scope: {type: "string", enum: ["global", "project"], description: "Which database to look in", default: "project"}
               },
               required: ["fact_id"]

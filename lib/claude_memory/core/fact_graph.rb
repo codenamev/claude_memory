@@ -95,6 +95,7 @@ module ClaudeMemory
       def self.build_node(fact)
         {
           id: fact[:id],
+          docid: fact[:docid],
           subject: fact[:subject_name],
           predicate: fact[:predicate],
           object: fact[:object_literal],

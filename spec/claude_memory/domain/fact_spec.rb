@@ -153,6 +153,7 @@ RSpec.describe ClaudeMemory::Domain::Fact do
       hash = fact.to_h
       expect(hash).to eq({
         id: 1,
+        docid: nil,
         subject_name: "repo",
         predicate: "uses_database",
         object_literal: "PostgreSQL",
