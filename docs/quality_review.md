@@ -636,12 +636,12 @@ Consider a `BaseCommand.with_manager` helper.
 | # | Issue | File:Line | Expert | Status |
 |---|-------|-----------|--------|--------|
 | 9 | Fix RRFusion mutation | `core/rr_fusion.rb:53-56` | Avdi Grimm | ✅ Done |
-| 10 | Extract OperationTracker dupe | `infrastructure/operation_tracker.rb:114-125` | Gary Bernhardt | 0.25d |
+| 10 | Extract OperationTracker dupe | `infrastructure/operation_tracker.rb:114-125` | Gary Bernhardt | ✅ Done |
 | 11 | Fix ToolExtractor bare rescue | `ingest/tool_extractor.rb:28-30` | Avdi Grimm | ✅ Done |
 | 12 | Fix databases_exist? logic | `mcp/tools.rb:385-398` | Kent Beck | ✅ Done |
 | 13 | Fix stats_command bare rescue | `commands/stats_command.rb:87` | Gary Bernhardt | ✅ Done |
-| 14 | SchemaValidator.validate extract | `infrastructure/schema_validator.rb:34-83` | Sandi Metz | 0.5d |
-| 15 | FactGraph.build decompose | `core/fact_graph.rb:17-90` | Sandi Metz | 0.5d |
+| 14 | SchemaValidator.validate extract | `infrastructure/schema_validator.rb:34-83` | Sandi Metz | ✅ Done |
+| 15 | FactGraph.build decompose | `core/fact_graph.rb:17-90` | Sandi Metz | ✅ Done |
 | 16 | Resolver mutable state | `resolve/resolver.rb:10-13` | Gary Bernhardt | 0.5d |
 
 ### Low Priority (Later)
