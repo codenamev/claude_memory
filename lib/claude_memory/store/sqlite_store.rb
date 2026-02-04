@@ -10,7 +10,7 @@ require "sequel/adapters/extralite"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 9
+      SCHEMA_VERSION = 10
 
       attr_reader :db
 
@@ -97,6 +97,10 @@ module ClaudeMemory
 
       def ingestion_metrics
         @db[:ingestion_metrics]
+      end
+
+      def llm_cache
+        @db[:llm_cache]
       end
 
       def upsert_content_item(source:, text_hash:, byte_len:, session_id: nil, transcript_path: nil,
@@ -339,6 +343,65 @@ module ClaudeMemory
           total_operations: total_ops,
           avg_facts_per_1k_input_tokens: efficiency
         }
+      end
+
+      # Look up a cached LLM response by cache key
+      #
+      # @param cache_key [String] SHA256 hex digest of operation+model+input
+      # @return [Hash, nil] Cached result row or nil
+      def llm_cache_lookup(cache_key)
+        llm_cache.where(cache_key: cache_key).first
+      end
+
+      # Store an LLM response in the cache
+      #
+      # @param operation [String] Operation type (e.g., "distill", "extract")
+      # @param model [String] Model identifier
+      # @param input_hash [String] SHA256 of input content
+      # @param result_json [String] JSON response to cache
+      # @param input_tokens [Integer, nil] Tokens in request
+      # @param output_tokens [Integer, nil] Tokens in response
+      # @return [Integer] The created cache entry ID
+      def llm_cache_store(operation:, model:, input_hash:, result_json:, input_tokens: nil, output_tokens: nil)
+        cache_key = Digest::SHA256.hexdigest("#{operation}:#{model}:#{input_hash}")
+
+        llm_cache
+          .insert_conflict(target: :cache_key, update: {
+            result_json: result_json,
+            input_tokens: input_tokens,
+            output_tokens: output_tokens,
+            created_at: Time.now.utc.iso8601
+          })
+          .insert(
+            cache_key: cache_key,
+            operation: operation,
+            model: model,
+            input_hash: input_hash,
+            result_json: result_json,
+            input_tokens: input_tokens,
+            output_tokens: output_tokens,
+            created_at: Time.now.utc.iso8601
+          )
+      end
+
+      # Generate a cache key for LLM response lookup
+      #
+      # @param operation [String] Operation type
+      # @param model [String] Model identifier
+      # @param input [String] Raw input content
+      # @return [String] SHA256 hex digest cache key
+      def llm_cache_key(operation, model, input)
+        input_hash = Digest::SHA256.hexdigest(input)
+        Digest::SHA256.hexdigest("#{operation}:#{model}:#{input_hash}")
+      end
+
+      # Prune cache entries older than the given age
+      #
+      # @param max_age_seconds [Integer] Maximum age in seconds (default: 7 days)
+      # @return [Integer] Number of entries pruned
+      def llm_cache_prune(max_age_seconds: 604_800)
+        cutoff = (Time.now - max_age_seconds).utc.iso8601
+        llm_cache.where { created_at < cutoff }.delete
       end
 
       private
