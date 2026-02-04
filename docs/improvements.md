@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-02-03 - Removed Docid Short Hash System, LLM Response Caching (implemented)*
+*Updated: 2026-02-03 - Removed Docid Short Hash System, LLM Response Caching, Structured Logging (implemented)*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
@@ -90,13 +90,6 @@ Source: QMD study
 
 ---
 
-## Low Priority
-
-### 8. Structured Logging
-
-- **Value**: Better debugging with JSON logs
-- **Implementation**: Add `ClaudeMemory::Logging::Logger` with structured JSON output
-
 ---
 
 ## Features to Avoid
@@ -142,4 +135,4 @@ Source: QMD study
 
 ---
 
-*Last updated: 2026-02-03 - Removed Docid Short Hash System, LLM Response Caching (implemented). Renumbered items.*
+*Last updated: 2026-02-03 - Removed Docid, LLM Cache, Structured Logging (implemented). Renumbered items.*
