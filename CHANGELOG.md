@@ -4,6 +4,76 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-02-04
+
+### Added
+
+**MCP Structured Content & Compact Mode**
+- Dual content (text summary) + structuredContent (JSON) for all MCP tools
+  - `TextSummary` module generates human-readable summaries alongside structured data
+  - Compact mode (`compact: true`) omits provenance receipts for ~60% smaller responses
+- MCP query guide prompt registered via `prompts/list` and `prompts/get` endpoints
+  - `QueryGuide` module provides tool selection guidance to Claude
+
+**Search & Retrieval Improvements**
+- Reciprocal Rank Fusion (RRF) replacing naive merge for hybrid search
+  - Better result ordering when combining FTS5 and semantic search results
+- Smart expansion detection to skip unnecessary vector search
+  - Reduces latency when FTS5 already provides strong matches
+- Enhanced snippet extraction for search results
+  - Better context windows around matched terms
+
+**Provenance & Traceability**
+- Line-range references in provenance for precise source linking
+  - Facts now track exact line ranges in source transcripts
+- Fact dependency graph visualization via BFS traversal
+  - Trace supersession and conflict chains between facts
+
+**User-Friendly Identifiers**
+- Docid short hash system for user-friendly fact references
+  - Short, memorable identifiers instead of raw integer IDs
+
+**Caching & Performance**
+- LLM response caching schema and store methods
+  - Cache layer for expensive extraction operations
+- Structured JSON logging with level filtering
+  - Configurable log levels (debug, info, warn, error)
+  - JSON format for machine-parseable log output
+
+**Ingestion & Content Processing**
+- Configurable tool capture filtering for ingestion
+  - Control which tool outputs are captured during transcript processing
+- ContentSanitizer now strips `system-reminder`, `local-command-caveat`, `command-message`,
+  `command-name`, and `command-args` tags in addition to privacy tags
+- Relative time formatting in MCP recall output
+  - Progressive format: just now → Xm ago → Xh ago → Xd ago → YYYY-MM-DD
+
+**Developer Tools**
+- `--brief` flag for doctor command and health checks in skills
+  - Quick pass/fail output for automated workflows
+
+### Fixed
+- Preserve SQLite PRAGMAs across connection reconnects
+  - WAL mode and other pragmas now survive reconnection cycles
+- Timestamp-only churn in publish output
+  - Publish no longer regenerates files when only the timestamp changed
+
+### Internal
+
+**Code Quality Improvements**
+- Extract duplicates and decompose long methods across codebase
+- Extract ingester transaction body into focused methods
+- Decompose `resolve_fact` into intention-revealing methods
+- Extract `check_setup` and `detailed_stats` into focused helpers
+- Fix N+1 query patterns in `recall.rb`
+- Fix 6 quick wins from quality review (frozen strings, method sizes, naming)
+
+**Research & Studies**
+- QMD restudy (2026-02-02): adopt Claude Code plugin format, MCP structured content pattern,
+  MCP query guide prompt, inline status checks
+- claude-supermemory study: adopt SessionStart hook context injection, tool-specific observation
+  compression, and relative time formatting
+
 ## [0.4.0] - 2026-02-02
 
 ### Added

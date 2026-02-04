@@ -193,7 +193,7 @@ RSpec.describe ClaudeMemory::MCP::TextSummary do
     it "summarizes setup status" do
       result = {
         status: "ok",
-        version: {current: "0.4.0", latest: "0.4.0"},
+        version: {current: "0.5.0", latest: "0.5.0"},
         components: {global_database: true, project_database: true, hooks_configured: true},
         issues: [],
         warnings: []
@@ -201,7 +201,7 @@ RSpec.describe ClaudeMemory::MCP::TextSummary do
       summary = described_class.summarize_check_setup(result)
 
       expect(summary).to include("Setup status: ok")
-      expect(summary).to include("0.4.0")
+      expect(summary).to include("0.5.0")
     end
   end
 end
