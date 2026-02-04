@@ -35,6 +35,12 @@ module ClaudeMemory
 
         @stats[:elapsed_seconds] = Time.now - @start_time
         @stats[:budget_honored] = @stats[:elapsed_seconds] <= budget
+        ClaudeMemory.logger.info("sweep",
+          message: "Sweep complete",
+          elapsed_seconds: @stats[:elapsed_seconds].round(3),
+          budget_honored: @stats[:budget_honored],
+          proposed_expired: @stats[:proposed_facts_expired],
+          disputed_expired: @stats[:disputed_facts_expired])
         @stats
       end
 

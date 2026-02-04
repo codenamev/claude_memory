@@ -82,6 +82,7 @@ require_relative "claude_memory/ingest/tool_extractor"
 require_relative "claude_memory/ingest/tool_filter"
 require_relative "claude_memory/ingest/ingester"
 require_relative "claude_memory/ingest/transcript_reader"
+require_relative "claude_memory/logging/logger"
 require_relative "claude_memory/infrastructure/file_system"
 require_relative "claude_memory/infrastructure/in_memory_file_system"
 require_relative "claude_memory/infrastructure/operation_tracker"
@@ -110,5 +111,17 @@ module ClaudeMemory
 
   def self.project_db_path(project_path = Dir.pwd)
     Configuration.new.project_db_path(project_path)
+  end
+
+  # Module-level logger instance, shared across components
+  # @return [Logging::Logger, Logging::NullLogger]
+  def self.logger
+    @logger ||= Logging::Logger.new
+  end
+
+  # Replace the module-level logger (useful for testing)
+  # @param logger [Logging::Logger, Logging::NullLogger]
+  def self.logger=(logger)
+    @logger = logger
   end
 end

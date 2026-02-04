@@ -17,6 +17,7 @@ module ClaudeMemory
       def ingest(source:, session_id:, transcript_path:, project_path: nil)
         # Check if file has been modified since last ingestion (incremental sync)
         unless should_ingest?(transcript_path)
+          ClaudeMemory.logger.debug("ingest", message: "Skipped unchanged file", transcript_path: transcript_path)
           return {status: :skipped, bytes_read: 0, reason: "unchanged"}
         end
 
@@ -81,6 +82,12 @@ module ClaudeMemory
           raise StandardError, "Ingestion failed for session #{session_id}: #{e.message}"
         end
 
+        ClaudeMemory.logger.info("ingest",
+          message: "Ingested content",
+          content_id: content_id,
+          bytes_read: delta.bytesize,
+          session_id: session_id,
+          tool_calls: tool_calls.size)
         {status: :ingested, content_id: content_id, bytes_read: delta.bytesize, project_path: resolved_project}
       end
 
@@ -106,6 +113,11 @@ module ClaudeMemory
             exponential_delay = [base_delay * (2**(attempt - 1)), max_delay].min
             jitter = rand * exponential_delay * 0.5
             total_delay = exponential_delay + jitter
+            ClaudeMemory.logger.warn("ingest",
+              message: "Database busy, retrying",
+              attempt: attempt,
+              max_attempts: max_attempts,
+              delay_seconds: total_delay.round(3))
             sleep(total_delay)
             retry
           elsif is_busy
