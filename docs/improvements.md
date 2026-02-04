@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-02-03 - Removed Docid Short Hash System (implemented), Fact Dependency Graph, Enhanced Snippet Extraction, Line-Range References (implemented)*
+*Updated: 2026-02-03 - Removed Docid Short Hash System, LLM Response Caching (implemented)*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
@@ -21,7 +21,7 @@ This document contains only unimplemented improvements. Completed items are remo
 - **Current Issue**: JSON embedding storage requires loading all facts, O(n) Ruby similarity calculation
 - **Solution**: sqlite-vec extension with native C KNN queries
 - **Implementation**:
-  - Schema migration v10: Create `facts_vec` virtual table using `vec0`
+  - Schema migration v11: Create `facts_vec` virtual table using `vec0`
   - Two-step query pattern (avoid JOINs - they hang with vec tables!)
   - Update `Embeddings::Similarity` class
   - Backfill existing embeddings
@@ -80,15 +80,7 @@ Source: episodic-memory study
 - **Implementation**: `--async` flag on hook commands, fork and detach
 - **Trade-off**: Background process management complexity, potential race conditions
 
-### 7. LLM Response Caching
-
-Source: QMD study
-
-- **Value**: Reduce API costs for repeated distillation
-- **Implementation**: Add `llm_cache` table (hash, result, created_at), cache key: `SHA256(operation + model + input)`
-- **Consideration**: Most valuable when distiller is fully implemented
-
-### 8. Document Chunking for Long Transcripts
+### 7. Document Chunking for Long Transcripts
 
 Source: QMD study
 
@@ -100,7 +92,7 @@ Source: QMD study
 
 ## Low Priority
 
-### 9. Structured Logging
+### 8. Structured Logging
 
 - **Value**: Better debugging with JSON logs
 - **Implementation**: Add `ClaudeMemory::Logging::Logger` with structured JSON output
@@ -150,4 +142,4 @@ Source: QMD study
 
 ---
 
-*Last updated: 2026-02-03 - Removed Docid Short Hash System (implemented). Renumbered items.*
+*Last updated: 2026-02-03 - Removed Docid Short Hash System, LLM Response Caching (implemented). Renumbered items.*
