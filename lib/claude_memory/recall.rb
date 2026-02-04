@@ -174,14 +174,12 @@ module ClaudeMemory
       content_ids = fts.search(query_text, limit: limit * 3)
       return [] if content_ids.empty?
 
-      # Build provenance map for ordered collection
-      provenance_by_content = {}
-      content_ids.each do |content_id|
-        provenance_by_content[content_id] = store.provenance
-          .select(:fact_id)
-          .where(content_item_id: content_id)
-          .all
-      end
+      # Batch query: fetch ALL provenance records at once using WHERE IN
+      provenance_by_content = store.provenance
+        .select(:fact_id, :content_item_id)
+        .where(content_item_id: content_ids)
+        .all
+        .group_by { |p| p[:content_item_id] }
 
       # Collect fact IDs in content order, deduplicated
       ordered_fact_ids = Core::FactCollector.collect_ordered_fact_ids(
@@ -291,26 +289,49 @@ module ClaudeMemory
       content_ids = @legacy_fts.search(query_text, limit: limit * 3)
       return [] if content_ids.empty?
 
-      facts_with_provenance = []
+      # Batch query: fetch ALL provenance records at once using WHERE IN
+      provenance_by_content = @legacy_store.provenance
+        .select(:fact_id, :content_item_id)
+        .where(content_item_id: content_ids)
+        .all
+        .group_by { |p| p[:content_item_id] }
+
+      # Collect ordered unique fact IDs from provenance
+      all_fact_ids = []
       seen_fact_ids = Set.new
-
       content_ids.each do |content_id|
-        provenance_records = find_provenance_by_content(content_id)
-        provenance_records.each do |prov|
+        (provenance_by_content[content_id] || []).each do |prov|
           next if seen_fact_ids.include?(prov[:fact_id])
-
-          fact = find_fact(prov[:fact_id])
-          next unless fact
-          next unless fact_matches_scope?(fact, scope)
-
           seen_fact_ids.add(prov[:fact_id])
-          facts_with_provenance << {
-            fact: fact,
-            receipts: find_receipts(prov[:fact_id])
-          }
-          break if facts_with_provenance.size >= limit
+          all_fact_ids << prov[:fact_id]
         end
-        break if facts_with_provenance.size >= limit
+      end
+
+      return [] if all_fact_ids.empty?
+
+      # Batch query: fetch ALL facts at once
+      facts_by_id = batch_find_facts(@legacy_store, all_fact_ids)
+
+      # Filter by scope and apply limit
+      selected_fact_ids = []
+      all_fact_ids.each do |fact_id|
+        fact = facts_by_id[fact_id]
+        next unless fact
+        next unless fact_matches_scope?(fact, scope)
+        selected_fact_ids << fact_id
+        break if selected_fact_ids.size >= limit
+      end
+
+      return [] if selected_fact_ids.empty?
+
+      # Batch query: fetch ALL receipts at once
+      receipts_by_fact_id = batch_find_receipts(@legacy_store, selected_fact_ids)
+
+      facts_with_provenance = selected_fact_ids.map do |fact_id|
+        {
+          fact: facts_by_id[fact_id],
+          receipts: receipts_by_fact_id[fact_id] || []
+        }
       end
 
       sort_by_scope_priority(facts_with_provenance)
