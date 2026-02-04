@@ -415,70 +415,76 @@ module ClaudeMemory
         warnings = []
         config = Configuration.new
 
-        # Check global database
-        global_db_exists = File.exist?(config.global_db_path)
-        unless global_db_exists
-          issues << "Global database not found at #{config.global_db_path}"
-        end
+        global_db_exists = check_global_database(config, issues)
+        project_db_exists = check_project_database(config, warnings)
+        current_version, version_status, claude_md_exists = check_claude_md_version(warnings)
+        hooks_configured = check_hooks_configuration(warnings)
 
-        # Check project database
-        project_db_exists = File.exist?(config.project_db_path)
-        unless project_db_exists
-          warnings << "Project database not found at #{config.project_db_path}"
-        end
+        build_setup_result(
+          global_db_exists, project_db_exists, claude_md_exists,
+          hooks_configured, current_version, version_status,
+          issues, warnings
+        )
+      end
 
-        # Check for CLAUDE.md and version
+      def check_global_database(config, issues)
+        exists = File.exist?(config.global_db_path)
+        issues << "Global database not found at #{config.global_db_path}" unless exists
+        exists
+      end
+
+      def check_project_database(config, warnings)
+        exists = File.exist?(config.project_db_path)
+        warnings << "Project database not found at #{config.project_db_path}" unless exists
+        exists
+      end
+
+      def check_claude_md_version(warnings)
         claude_md_path = ".claude/CLAUDE.md"
-        claude_md_exists = File.exist?(claude_md_path)
-        current_version = nil
-        version_status = nil
-
-        if claude_md_exists
-          content = File.read(claude_md_path)
-          if content.include?("ClaudeMemory")
-            current_version = SetupStatusAnalyzer.extract_version(content)
-            if current_version
-              version_status = SetupStatusAnalyzer.determine_version_status(current_version, ClaudeMemory::VERSION)
-              if version_status == "outdated"
-                warnings << "Configuration version (v#{current_version}) is older than ClaudeMemory (v#{ClaudeMemory::VERSION}). Consider running upgrade."
-              end
-            else
-              version_status = "no_version_marker"
-              warnings << "CLAUDE.md has ClaudeMemory section but no version marker"
-            end
-          else
-            warnings << "CLAUDE.md exists but no ClaudeMemory configuration found"
-          end
-        else
+        unless File.exist?(claude_md_path)
           warnings << "No .claude/CLAUDE.md found"
+          return [nil, nil, false]
         end
 
-        # Check hooks configuration
-        hooks_configured = false
+        content = File.read(claude_md_path)
+        unless content.include?("ClaudeMemory")
+          warnings << "CLAUDE.md exists but no ClaudeMemory configuration found"
+          return [nil, nil, true]
+        end
+
+        current_version = SetupStatusAnalyzer.extract_version(content)
+        unless current_version
+          warnings << "CLAUDE.md has ClaudeMemory section but no version marker"
+          return [nil, "no_version_marker", true]
+        end
+
+        version_status = SetupStatusAnalyzer.determine_version_status(current_version, ClaudeMemory::VERSION)
+        if version_status == "outdated"
+          warnings << "Configuration version (v#{current_version}) is older than ClaudeMemory (v#{ClaudeMemory::VERSION}). Consider running upgrade."
+        end
+
+        [current_version, version_status, true]
+      end
+
+      def check_hooks_configuration(warnings)
         settings_paths = [".claude/settings.json", ".claude/settings.local.json"]
         settings_paths.each do |path|
-          if File.exist?(path)
-            begin
-              config_data = JSON.parse(File.read(path))
-              if config_data["hooks"]&.any?
-                hooks_configured = true
-                break
-              end
-            rescue JSON::ParserError
-              warnings << "Invalid JSON in #{path}"
-            end
+          next unless File.exist?(path)
+          begin
+            config_data = JSON.parse(File.read(path))
+            return true if config_data["hooks"]&.any?
+          rescue JSON::ParserError
+            warnings << "Invalid JSON in #{path}"
           end
         end
 
-        unless hooks_configured
-          warnings << "No hooks configured for automatic ingestion"
-        end
+        warnings << "No hooks configured for automatic ingestion"
+        false
+      end
 
-        # Determine overall status using analyzer
+      def build_setup_result(global_db_exists, project_db_exists, claude_md_exists, hooks_configured, current_version, version_status, issues, warnings)
         initialized = global_db_exists && claude_md_exists
         status = SetupStatusAnalyzer.determine_status(global_db_exists, claude_md_exists, version_status)
-
-        # Generate recommendations using analyzer
         recommendations = SetupStatusAnalyzer.generate_recommendations(initialized, version_status, warnings.any?)
 
         {
@@ -513,97 +519,86 @@ module ClaudeMemory
       end
 
       def detailed_stats(store)
-        result = {exists: true}
-
-        # Facts statistics
-        total_facts = store.facts.count
         active_facts = store.facts.where(status: "active").count
-        superseded_facts = store.facts.where(status: "superseded").count
 
-        result[:facts] = {
-          total: total_facts,
+        {
+          exists: true,
+          facts: fact_stats(store, active_facts),
+          entities: entity_stats(store),
+          content_items: content_stats(store),
+          provenance: provenance_stats(store, active_facts),
+          conflicts: conflict_stats(store),
+          schema_version: store.schema_version
+        }
+      end
+
+      def fact_stats(store, active_facts)
+        stats = {
+          total: store.facts.count,
           active: active_facts,
-          superseded: superseded_facts
+          superseded: store.facts.where(status: "superseded").count
         }
 
-        # Top predicates
         if active_facts > 0
-          top_predicates = store.db[:facts]
+          stats[:top_predicates] = store.db[:facts]
             .where(status: "active")
             .group_and_count(:predicate)
             .order(Sequel.desc(:count))
             .limit(10)
             .all
             .map { |row| {predicate: row[:predicate], count: row[:count]} }
-
-          result[:facts][:top_predicates] = top_predicates
         end
 
-        # Entities by type
-        entity_counts = store.db[:entities]
-          .group_and_count(:type)
-          .order(Sequel.desc(:count))
-          .all
-          .map { |row| {type: row[:type], count: row[:count]} }
+        stats
+      end
 
-        result[:entities] = {
+      def entity_stats(store)
+        {
           total: store.entities.count,
-          by_type: entity_counts
+          by_type: store.db[:entities]
+            .group_and_count(:type)
+            .order(Sequel.desc(:count))
+            .all
+            .map { |row| {type: row[:type], count: row[:count]} }
         }
+      end
 
-        # Content items
-        content_count = store.content_items.count
-        result[:content_items] = {
-          total: content_count
-        }
+      def content_stats(store)
+        count = store.content_items.count
+        stats = {total: count}
 
-        if content_count > 0
-          first_date = store.content_items.min(:occurred_at)
-          last_date = store.content_items.max(:occurred_at)
-          result[:content_items][:date_range] = {
-            first: first_date,
-            last: last_date
+        if count > 0
+          stats[:date_range] = {
+            first: store.content_items.min(:occurred_at),
+            last: store.content_items.max(:occurred_at)
           }
         end
 
-        # Provenance coverage
-        if active_facts > 0
-          facts_with_provenance = store.db[:provenance]
-            .join(:facts, id: :fact_id)
-            .where(Sequel[:facts][:status] => "active")
-            .select(Sequel[:provenance][:fact_id])
-            .distinct
-            .count
+        stats
+      end
 
-          coverage_percentage = (facts_with_provenance * 100.0 / active_facts).round(1)
+      def provenance_stats(store, active_facts)
+        return {facts_with_sources: 0, total_active_facts: 0, coverage_percentage: 0} if active_facts == 0
 
-          result[:provenance] = {
-            facts_with_sources: facts_with_provenance,
-            total_active_facts: active_facts,
-            coverage_percentage: coverage_percentage
-          }
-        else
-          result[:provenance] = {
-            facts_with_sources: 0,
-            total_active_facts: 0,
-            coverage_percentage: 0
-          }
-        end
+        facts_with_provenance = store.db[:provenance]
+          .join(:facts, id: :fact_id)
+          .where(Sequel[:facts][:status] => "active")
+          .select(Sequel[:provenance][:fact_id])
+          .distinct
+          .count
 
-        # Conflicts
-        open_conflicts = store.conflicts.where(status: "open").count
-        resolved_conflicts = store.conflicts.where(status: "resolved").count
-
-        result[:conflicts] = {
-          open: open_conflicts,
-          resolved: resolved_conflicts,
-          total: open_conflicts + resolved_conflicts
+        {
+          facts_with_sources: facts_with_provenance,
+          total_active_facts: active_facts,
+          coverage_percentage: (facts_with_provenance * 100.0 / active_facts).round(1)
         }
+      end
 
-        # Schema version
-        result[:schema_version] = store.schema_version
+      def conflict_stats(store)
+        open = store.conflicts.where(status: "open").count
+        resolved = store.conflicts.where(status: "resolved").count
 
-        result
+        {open: open, resolved: resolved, total: open + resolved}
       end
     end
   end
