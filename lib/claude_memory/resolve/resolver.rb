@@ -50,61 +50,91 @@ module ClaudeMemory
       end
 
       def resolve_fact(fact_data, entity_ids, content_item_id, occurred_at)
-        subject_id = entity_ids[fact_data[:subject]] ||
+        subject_id = resolve_subject(fact_data, entity_ids)
+        existing_facts = @store.facts_for_slot(subject_id, fact_data[:predicate])
+        resolution = determine_resolution(existing_facts, fact_data, entity_ids)
+
+        apply_resolution(resolution, fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts)
+      end
+
+      def resolve_subject(fact_data, entity_ids)
+        entity_ids[fact_data[:subject]] ||
           @store.find_or_create_entity(type: "repo", name: fact_data[:subject])
+      end
 
-        predicate = fact_data[:predicate]
-        object_val = fact_data[:object]
-        object_entity_id = entity_ids[object_val]
+      def determine_resolution(existing_facts, fact_data, entity_ids)
+        return :insert unless PredicatePolicy.single?(fact_data[:predicate]) && existing_facts.any?
 
-        outcome = {created: 0, superseded: 0, conflicts: 0, provenance: 0}
+        object_entity_id = entity_ids[fact_data[:object]]
+        matching = existing_facts.find { |f| values_match?(f, fact_data[:object], object_entity_id) }
 
-        existing_facts = @store.facts_for_slot(subject_id, predicate)
+        if matching
+          :reinforce
+        elsif supersession_signal?(fact_data)
+          :supersede
+        else
+          :conflict
+        end
+      end
 
-        # No transaction wrapper needed - handled by apply method
-        # This allows all facts to be processed in a single transaction
-        if PredicatePolicy.single?(predicate) && existing_facts.any?
-          matching = existing_facts.find { |f| values_match?(f, object_val, object_entity_id) }
-          if matching
-            add_provenance(matching[:id], content_item_id, fact_data)
-            outcome[:provenance] = 1
-            return outcome
-          elsif supersession_signal?(fact_data)
-            supersede_facts(existing_facts, occurred_at)
-            outcome[:superseded] = existing_facts.size
-          else
-            create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at)
-            outcome[:conflicts] = 1
-            return outcome
-          end
+      def apply_resolution(resolution, fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts)
+        case resolution
+        when :reinforce
+          apply_reinforcement(existing_facts, fact_data, entity_ids, content_item_id)
+        when :conflict
+          apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at)
+        else
+          apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution)
+        end
+      end
+
+      def apply_reinforcement(existing_facts, fact_data, entity_ids, content_item_id)
+        object_entity_id = entity_ids[fact_data[:object]]
+        matching = existing_facts.find { |f| values_match?(f, fact_data[:object], object_entity_id) }
+        add_provenance(matching[:id], content_item_id, fact_data)
+        {created: 0, superseded: 0, conflicts: 0, provenance: 1}
+      end
+
+      def apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at)
+        create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at)
+        {created: 0, superseded: 0, conflicts: 1, provenance: 0}
+      end
+
+      def apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution)
+        superseded_count = 0
+        if resolution == :supersede
+          supersede_facts(existing_facts, occurred_at)
+          superseded_count = existing_facts.size
         end
 
+        fact_id = insert_new_fact(fact_data, subject_id, entity_ids, occurred_at)
+        link_superseded_facts(fact_id, existing_facts) if superseded_count > 0
+        add_provenance(fact_id, content_item_id, fact_data)
+
+        {created: 1, superseded: superseded_count, conflicts: 0, provenance: 1}
+      end
+
+      def insert_new_fact(fact_data, subject_id, entity_ids, occurred_at)
         fact_scope = fact_data[:scope_hint] || @current_scope
         fact_project = (fact_scope == "global") ? nil : @current_project_path
 
-        fact_id = @store.insert_fact(
+        @store.insert_fact(
           subject_entity_id: subject_id,
-          predicate: predicate,
-          object_entity_id: object_entity_id,
-          object_literal: object_val,
+          predicate: fact_data[:predicate],
+          object_entity_id: entity_ids[fact_data[:object]],
+          object_literal: fact_data[:object],
           polarity: fact_data[:polarity] || "positive",
           confidence: fact_data[:confidence] || 1.0,
           valid_from: occurred_at,
           scope: fact_scope,
           project_path: fact_project
         )
-        outcome[:created] = 1
+      end
 
-        if existing_facts.any? && outcome[:superseded] > 0
-          existing_facts.each do |old_fact|
-            @store.insert_fact_link(from_fact_id: fact_id, to_fact_id: old_fact[:id], link_type: "supersedes")
-          end
+      def link_superseded_facts(new_fact_id, old_facts)
+        old_facts.each do |old_fact|
+          @store.insert_fact_link(from_fact_id: new_fact_id, to_fact_id: old_fact[:id], link_type: "supersedes")
         end
-
-        add_provenance(fact_id, content_item_id, fact_data)
-        outcome[:provenance] = 1
-
-        outcome
       end
 
       def supersession_signal?(fact_data)
