@@ -154,7 +154,7 @@ module ClaudeMemory
           # Release single store connection (legacy)
           @store_or_manager.db.disconnect
         end
-      rescue
+      rescue Sequel::DatabaseError, Extralite::Error
         # Silently ignore disconnect errors
         # Connection will be reopened automatically on next use
       end

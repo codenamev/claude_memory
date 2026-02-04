@@ -121,10 +121,10 @@ RSpec.describe ClaudeMemory::Core::ResultSorter do
         {id: 2, predicate: "prefers"}
       ]
 
-      described_class.annotate_source(results, :project)
+      annotated = described_class.annotate_source(results, :project)
 
-      expect(results[0][:source]).to eq(:project)
-      expect(results[1][:source]).to eq(:project)
+      expect(annotated[0][:source]).to eq(:project)
+      expect(annotated[1][:source]).to eq(:project)
     end
 
     it "overwrites existing source" do
@@ -132,44 +132,49 @@ RSpec.describe ClaudeMemory::Core::ResultSorter do
         {id: 1, source: :old}
       ]
 
-      described_class.annotate_source(results, :new)
+      annotated = described_class.annotate_source(results, :new)
 
-      expect(results[0][:source]).to eq(:new)
+      expect(annotated[0][:source]).to eq(:new)
     end
 
     it "handles empty array" do
       results = []
 
-      described_class.annotate_source(results, :project)
+      annotated = described_class.annotate_source(results, :project)
 
-      expect(results).to eq([])
+      expect(annotated).to eq([])
     end
 
     it "handles different source symbols" do
       results = [{id: 1}]
 
-      described_class.annotate_source(results, :global)
+      annotated = described_class.annotate_source(results, :global)
 
-      expect(results[0][:source]).to eq(:global)
+      expect(annotated[0][:source]).to eq(:global)
     end
 
-    it "mutates original array in place" do
+    it "returns new array without mutating originals" do
       results = [{id: 1}, {id: 2}]
       original_object_ids = results.map(&:object_id)
 
-      described_class.annotate_source(results, :project)
+      annotated = described_class.annotate_source(results, :project)
 
-      expect(results.map(&:object_id)).to eq(original_object_ids)
-      expect(results[0][:source]).to eq(:project)
-      expect(results[1][:source]).to eq(:project)
+      # Original hashes are not mutated
+      expect(results[0]).not_to have_key(:source)
+      expect(results[1]).not_to have_key(:source)
+      # Returned hashes are new objects
+      expect(annotated.map(&:object_id)).not_to eq(original_object_ids)
+      expect(annotated[0][:source]).to eq(:project)
+      expect(annotated[1][:source]).to eq(:project)
     end
 
-    it "returns the mutated array" do
+    it "returns a new array" do
       results = [{id: 1}]
 
       return_value = described_class.annotate_source(results, :project)
 
-      expect(return_value).to equal(results)
+      expect(return_value).not_to equal(results)
+      expect(return_value[0][:source]).to eq(:project)
     end
 
     it "preserves other fields" do
@@ -177,12 +182,12 @@ RSpec.describe ClaudeMemory::Core::ResultSorter do
         {id: 1, predicate: "uses", object_literal: "Ruby"}
       ]
 
-      described_class.annotate_source(results, :project)
+      annotated = described_class.annotate_source(results, :project)
 
-      expect(results[0][:id]).to eq(1)
-      expect(results[0][:predicate]).to eq("uses")
-      expect(results[0][:object_literal]).to eq("Ruby")
-      expect(results[0][:source]).to eq(:project)
+      expect(annotated[0][:id]).to eq(1)
+      expect(annotated[0][:predicate]).to eq("uses")
+      expect(annotated[0][:object_literal]).to eq("Ruby")
+      expect(annotated[0][:source]).to eq(:project)
     end
   end
 end

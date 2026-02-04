@@ -224,7 +224,6 @@ module ClaudeMemory
       results = template.execute(scope: scope, limit: limit) do |store, source|
         changes = fetch_changes(store, since, limit)
         Core::ResultSorter.annotate_source(changes, source)
-        changes
       end
       Core::ResultSorter.sort_by_timestamp(results, limit)
     end
@@ -238,7 +237,6 @@ module ClaudeMemory
       template.execute(scope: scope) do |store, source|
         conflicts = store.open_conflicts
         Core::ResultSorter.annotate_source(conflicts, source)
-        conflicts
       end
     end
 

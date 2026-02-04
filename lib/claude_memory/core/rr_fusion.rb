@@ -50,11 +50,7 @@ module ClaudeMemory
         scores
           .sort_by { |_id, score| -score }
           .take(limit)
-          .map do |fact_id, score|
-            result = fact_data[fact_id].dup
-            result[:similarity] = score
-            result
-          end
+          .map { |fact_id, score| fact_data[fact_id].merge(similarity: score) }
       end
     end
   end

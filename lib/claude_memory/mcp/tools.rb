@@ -384,9 +384,9 @@ module ClaudeMemory
 
       def databases_exist?
         if @manager
-          # For dual-database mode, at least global database should exist
+          # For dual-database mode, check if either database exists
           config = Configuration.new
-          File.exist?(config.global_db_path)
+          File.exist?(config.global_db_path) || File.exist?(config.project_db_path)
         elsif @legacy_store
           # For legacy mode, check if the database file exists
           # Extract the database path from the store's connection

@@ -16,9 +16,9 @@ module ClaudeMemory
       # Add source annotation to each result in collection
       # @param results [Array<Hash>] Results to annotate
       # @param source [Symbol] Source identifier (:project, :global, :legacy)
-      # @return [Array<Hash>] Results with :source key added (mutates in place)
+      # @return [Array<Hash>] New array of results with :source key added
       def self.annotate_source(results, source)
-        results.each { |r| r[:source] = source }
+        results.map { |r| r.merge(source: source) }
       end
     end
   end

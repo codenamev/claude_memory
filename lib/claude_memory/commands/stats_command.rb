@@ -84,7 +84,7 @@ module ClaudeMemory
           stdout.puts
 
           db.disconnect
-        rescue => e
+        rescue Sequel::DatabaseError, Extralite::Error => e
           stderr.puts "Error reading database: #{e.message}"
         end
       end

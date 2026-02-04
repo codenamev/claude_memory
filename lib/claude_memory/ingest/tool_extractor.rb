@@ -25,7 +25,7 @@ module ClaudeMemory
         end
 
         tools
-      rescue
+      rescue JSON::ParserError
         # If we encounter any parsing errors, return what we've collected so far
         tools
       end
