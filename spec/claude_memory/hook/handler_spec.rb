@@ -3,6 +3,7 @@
 require "tmpdir"
 require "fileutils"
 require "json"
+require "digest"
 
 RSpec.describe ClaudeMemory::Hook::Handler do
   let(:db_path) { File.join(Dir.tmpdir, "hook_handler_#{Process.pid}.sqlite3") }
@@ -148,6 +149,73 @@ RSpec.describe ClaudeMemory::Hook::Handler do
       result = handler.publish(payload)
 
       expect(result[:path]).to include("local")
+    end
+  end
+
+  describe "#context" do
+    let(:tmpdir) { Dir.mktmpdir("hook_context_#{Process.pid}") }
+    let(:global_db_path) { File.join(tmpdir, "global.sqlite3") }
+    let(:project_db_path) { File.join(tmpdir, "project.sqlite3") }
+
+    let(:manager) do
+      ClaudeMemory::Store::StoreManager.new(
+        global_db_path: global_db_path,
+        project_db_path: project_db_path,
+        project_path: tmpdir
+      )
+    end
+
+    let(:handler_with_manager) { described_class.new(store, manager: manager) }
+    let(:payload) { {"hook_event_name" => "SessionStart"} }
+
+    after do
+      manager.close
+      FileUtils.rm_rf(tmpdir)
+    end
+
+    it "returns ok status" do
+      result = handler_with_manager.context(payload)
+      expect(result[:status]).to eq(:ok)
+    end
+
+    it "returns nil context when no facts exist" do
+      result = handler_with_manager.context(payload)
+      expect(result[:context]).to be_nil
+    end
+
+    it "returns context with facts when they exist" do
+      manager.ensure_both!
+      project_store = manager.project_store
+
+      text = "decision constraint Use Redis for caching"
+      content_id = project_store.upsert_content_item(
+        source: "test",
+        session_id: "sess-1",
+        text_hash: Digest::SHA256.hexdigest(text),
+        byte_len: text.bytesize,
+        raw_text: text
+      )
+      fts = ClaudeMemory::Index::LexicalFTS.new(project_store)
+      fts.index_content_item(content_id, text)
+      entity_id = project_store.find_or_create_entity(type: "repo", name: "myapp")
+      fact_id = project_store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "decision",
+        object_literal: "Use Redis for caching",
+        status: "active",
+        scope: "project",
+        project_path: tmpdir
+      )
+      project_store.insert_provenance(
+        fact_id: fact_id,
+        content_item_id: content_id,
+        quote: text,
+        strength: "stated"
+      )
+
+      result = handler_with_manager.context(payload)
+      expect(result[:status]).to eq(:ok)
+      expect(result[:context]).to include("Redis")
     end
   end
 end

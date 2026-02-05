@@ -18,6 +18,11 @@
             "type": "command",
             "command": "claude-memory hook ingest",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "claude-memory hook context",
+            "timeout": 5
           }
         ]
       }

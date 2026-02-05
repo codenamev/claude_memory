@@ -3,6 +3,7 @@
 require "tmpdir"
 require "fileutils"
 require "json"
+require "digest"
 
 RSpec.describe ClaudeMemory::Commands::HookCommand do
   let(:tmpdir) { Dir.mktmpdir("hook_command_test_#{Process.pid}") }
@@ -120,6 +121,67 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
         exit_code = command.call(["publish", "--db", db_path])
 
         expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      end
+    end
+
+    describe "context subcommand" do
+      it "returns SUCCESS (0) for context query" do
+        payload = {"hook_event_name" => "SessionStart"}
+        stdin.string = JSON.generate(payload)
+
+        exit_code = command.call(["context", "--db", db_path])
+
+        expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      end
+
+      it "outputs JSON with hookSpecificOutput when facts exist" do
+        # Create a fact first
+        store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+        text = "decision constraint Use Docker for deployment"
+        content_id = store.upsert_content_item(
+          source: "test",
+          session_id: "sess-1",
+          text_hash: Digest::SHA256.hexdigest(text),
+          byte_len: text.bytesize,
+          raw_text: text
+        )
+        fts = ClaudeMemory::Index::LexicalFTS.new(store)
+        fts.index_content_item(content_id, text)
+        entity_id = store.find_or_create_entity(type: "repo", name: "myapp")
+        fact_id = store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "decision",
+          object_literal: "Use Docker for deployment",
+          status: "active",
+          scope: "project"
+        )
+        store.insert_provenance(
+          fact_id: fact_id,
+          content_item_id: content_id,
+          quote: text,
+          strength: "stated"
+        )
+        store.close
+
+        payload = {"hook_event_name" => "SessionStart"}
+        stdin.string = JSON.generate(payload)
+
+        exit_code = command.call(["context", "--db", db_path])
+
+        expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+        output = JSON.parse(stdout.string)
+        expect(output.dig("hookSpecificOutput", "hookEventName")).to eq("SessionStart")
+        expect(output.dig("hookSpecificOutput", "additionalContext")).to include("Docker")
+      end
+
+      it "outputs nothing when no facts exist" do
+        payload = {"hook_event_name" => "SessionStart"}
+        stdin.string = JSON.generate(payload)
+
+        exit_code = command.call(["context", "--db", db_path])
+
+        expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+        expect(stdout.string.strip).to be_empty
       end
     end
 

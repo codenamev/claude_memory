@@ -10,14 +10,14 @@ module ClaudeMemory
         subcommand = args.first
 
         unless subcommand
-          stderr.puts "Usage: claude-memory hook <ingest|sweep|publish> [options]"
+          stderr.puts "Usage: claude-memory hook <ingest|sweep|publish|context> [options]"
           stderr.puts "\nReads hook payload JSON from stdin."
           return Hook::ExitCodes::ERROR
         end
 
-        unless %w[ingest sweep publish].include?(subcommand)
+        unless %w[ingest sweep publish context].include?(subcommand)
           stderr.puts "Unknown hook command: #{subcommand}"
-          stderr.puts "Available: ingest, sweep, publish"
+          stderr.puts "Available: ingest, sweep, publish, context"
           return Hook::ExitCodes::ERROR
         end
 
@@ -41,6 +41,8 @@ module ClaudeMemory
           hook_sweep(handler, payload)
         when "publish"
           hook_publish(handler, payload)
+        when "context"
+          hook_context(payload, opts[:db])
         end
 
         store.close
@@ -106,6 +108,33 @@ module ClaudeMemory
           stdout.puts "No changes - #{result[:path]} is up to date"
         end
 
+        Hook::ExitCodes::SUCCESS
+      end
+
+      def hook_context(payload, db_path)
+        project_path = payload["project_path"] || payload["cwd"]
+        manager = ClaudeMemory::Store::StoreManager.new(
+          project_db_path: db_path,
+          project_path: project_path
+        )
+        manager.ensure_both!
+
+        injector = ClaudeMemory::Hook::ContextInjector.new(manager)
+        context_text = injector.generate_context
+
+        if context_text
+          response = {
+            hookSpecificOutput: {
+              hookEventName: "SessionStart",
+              additionalContext: context_text
+            }
+          }
+          stdout.puts JSON.generate(response)
+        end
+
+        manager.close
+        Hook::ExitCodes::SUCCESS
+      rescue => _e
         Hook::ExitCodes::SUCCESS
       end
     end

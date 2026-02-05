@@ -7,8 +7,9 @@ module ClaudeMemory
 
       DEFAULT_SWEEP_BUDGET = 5
 
-      def initialize(store, env: ENV)
+      def initialize(store, env: ENV, manager: nil)
         @store = store
+        @manager = manager
         @config = Configuration.new(env)
         @env = env
       end
@@ -49,6 +50,25 @@ module ClaudeMemory
 
         publisher = Publish.new(@store)
         publisher.publish!(mode: mode, since: since, rules_dir: rules_dir)
+      end
+
+      def context(payload)
+        manager = @manager || build_manager(payload)
+        manager.ensure_both!
+
+        injector = ContextInjector.new(manager)
+        context_text = injector.generate_context
+
+        {status: :ok, context: context_text}
+      rescue => e
+        {status: :error, context: nil, message: e.message}
+      end
+
+      private
+
+      def build_manager(payload)
+        project_path = payload["project_path"] || @config.project_dir
+        Store::StoreManager.new(project_path: project_path, env: @env)
       end
     end
   end
