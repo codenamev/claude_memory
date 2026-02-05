@@ -5,13 +5,14 @@ require "digest"
 module ClaudeMemory
   module Ingest
     class Ingester
-      def initialize(store, fts: nil, env: ENV, metadata_extractor: nil, tool_extractor: nil, tool_filter: nil)
+      def initialize(store, fts: nil, env: ENV, metadata_extractor: nil, tool_extractor: nil, tool_filter: nil, observation_compressor: nil)
         @store = store
         @fts = fts || Index::LexicalFTS.new(store)
         @config = Configuration.new(env)
         @metadata_extractor = metadata_extractor || MetadataExtractor.new
         @tool_extractor = tool_extractor || ToolExtractor.new
         @tool_filter = tool_filter || ToolFilter.new
+        @observation_compressor = observation_compressor || ObservationCompressor.new
       end
 
       def ingest(source:, session_id:, transcript_path:, project_path: nil)
@@ -38,6 +39,7 @@ module ClaudeMemory
 
         metadata = @metadata_extractor.extract(delta)
         tool_calls = @tool_filter.filter(@tool_extractor.extract(delta))
+        tool_calls = compress_tool_calls(tool_calls)
         delta = ContentSanitizer.strip_tags(delta)
 
         {
@@ -125,6 +127,13 @@ module ClaudeMemory
             # Not a busy/locked error, re-raise immediately
             raise
           end
+        end
+      end
+
+      def compress_tool_calls(tool_calls)
+        tool_calls.map do |tc|
+          summary = @observation_compressor.compress(tc[:tool_name], tc[:tool_input])
+          tc.merge(compressed_summary: summary)
         end
       end
 

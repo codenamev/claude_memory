@@ -82,7 +82,7 @@ RSpec.describe ClaudeMemory::MCP::Server do
 
       structured = response["result"]["structuredContent"]
       expect(structured).to be_a(Hash)
-      expect(structured["databases"]["legacy"]["schema_version"]).to eq(10)
+      expect(structured["databases"]["legacy"]["schema_version"]).to eq(ClaudeMemory::Store::SQLiteStore::SCHEMA_VERSION)
     end
   end
 

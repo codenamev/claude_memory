@@ -10,7 +10,7 @@ require "sequel/adapters/extralite"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 10
+      SCHEMA_VERSION = 11
 
       attr_reader :db
 
@@ -192,6 +192,7 @@ module ClaudeMemory
             tool_name: tc[:tool_name],
             tool_input: tc[:tool_input],
             tool_result: tc[:tool_result],
+            compressed_summary: tc[:compressed_summary],
             is_error: tc[:is_error] || false,
             timestamp: tc[:timestamp]
           )
