@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-02-03 - Removed Docid Short Hash System, LLM Response Caching, Structured Logging (implemented)*
+*Updated: 2026-02-05 - Removed SessionStart Context Injection, Tool-Specific Observation Compression (implemented)*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search*
@@ -21,7 +21,7 @@ This document contains only unimplemented improvements. Completed items are remo
 - **Current Issue**: JSON embedding storage requires loading all facts, O(n) Ruby similarity calculation
 - **Solution**: sqlite-vec extension with native C KNN queries
 - **Implementation**:
-  - Schema migration v11: Create `facts_vec` virtual table using `vec0`
+  - Schema migration v12: Create `facts_vec` virtual table using `vec0`
   - Two-step query pattern (avoid JOINs - they hang with vec tables!)
   - Update `Embeddings::Similarity` class
   - Backfill existing embeddings
@@ -31,25 +31,7 @@ This document contains only unimplemented improvements. Completed items are remo
 
 ## High Priority (Study-Inspired)
 
-### 2. SessionStart Context Injection via Hook ⭐
-
-Source: claude-supermemory study
-
-- **Value**: Guarantees Claude sees memory context immediately, supplements existing `.claude/rules/` publish
-- **Implementation**: Inject recalled facts into Claude's context at session start using `hookSpecificOutput.additionalContext`
-- **Evidence**: `context-hook.js:72-74` — uses hook response to inject `<supermemory-context>` XML
-- **Effort**: 1-2 days (hook handler, context formatter, settings)
-
-### 3. Tool-Specific Observation Compression ⭐
-
-Source: claude-supermemory study
-
-- **Value**: ~70% token reduction vs raw tool I/O in provenance descriptions
-- **Implementation**: Compact per-tool summarization for provenance (e.g., `Edited auth.js: "login()" → "async login()"`)
-- **Evidence**: `compress.js:13-75` — 10 tool handlers with human-readable output
-- **Effort**: 4-6 hours (class + tests + ingest integration)
-
-### 4. Claude Code Plugin Distribution Format ⭐
+### 2. Claude Code Plugin Distribution Format
 
 Source: QMD study
 
@@ -62,7 +44,7 @@ Source: QMD study
 
 ## Medium Priority
 
-### 5. Incremental Indexing with File Watching
+### 3. Incremental Indexing with File Watching
 
 Source: grepai study
 
@@ -72,7 +54,7 @@ Source: grepai study
 - **Effort**: 2-3 days
 - **Trade-off**: Background process ~10MB memory overhead
 
-### 6. Background Processing for Hooks
+### 4. Background Processing for Hooks
 
 Source: episodic-memory study
 
@@ -80,7 +62,7 @@ Source: episodic-memory study
 - **Implementation**: `--async` flag on hook commands, fork and detach
 - **Trade-off**: Background process management complexity, potential race conditions
 
-### 7. Document Chunking for Long Transcripts
+### 5. Document Chunking for Long Transcripts
 
 Source: QMD study
 
@@ -135,4 +117,4 @@ Source: QMD study
 
 ---
 
-*Last updated: 2026-02-03 - Removed Docid, LLM Cache, Structured Logging (implemented). Renumbered items.*
+*Last updated: 2026-02-05 - Removed SessionStart Context Injection, Observation Compression (implemented). Renumbered items.*
