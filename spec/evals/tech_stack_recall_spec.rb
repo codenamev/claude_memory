@@ -164,12 +164,15 @@ RSpec.describe "Tech Stack Recall Eval", :eval do
 
       expect(result[:success]).to be(true), "Claude CLI should succeed"
 
-      evaluation = acceptance_criteria.evaluate(result[:result])
+      response = result[:result].downcase
 
-      # Baseline likely won't identify project-specific tech stack
-      expect(evaluation.score).to be < 0.5,
-        "Baseline should not know project tech stack\n" \
-        "Details: #{evaluation.details}"
+      # Baseline may mention generic tools (RSpec, SQLite) from general knowledge,
+      # but should NOT know project-specific choice of Sequel over ActiveRecord
+      knows_sequel = response.include?("sequel")
+
+      expect(knows_sequel).to be(false),
+        "Baseline should not know project uses Sequel (project-specific knowledge)\n" \
+        "Response: #{result[:result]}"
     end
   end
 

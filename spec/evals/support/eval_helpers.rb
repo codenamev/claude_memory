@@ -36,7 +36,17 @@ module EvalHelpers
         end
 
         def memory_runner
-          @memory_runner ||= CliRunnerFactory.memory_enabled_runner(project_root)
+          # Run Claude in tmpdir where fixture database is created
+          # Copy MCP config so Claude loads the memory server
+          setup_mcp_config_in_tmpdir
+          @memory_runner ||= CliRunnerFactory.memory_enabled_runner(tmpdir)
+        end
+
+        def setup_mcp_config_in_tmpdir
+          # Copy actual MCP config from project root to keep it in sync
+          source_config = File.join(project_root, ".mcp.json")
+          dest_config = File.join(tmpdir, ".mcp.json")
+          FileUtils.cp(source_config, dest_config) if File.exist?(source_config)
         end
 
         def project_root
