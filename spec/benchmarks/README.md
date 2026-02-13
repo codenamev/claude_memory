@@ -2,10 +2,11 @@
 
 ## Overview
 
-DevMemBench is a benchmark suite purpose-built for evaluating ClaudeMemory's retrieval quality and truth maintenance correctness. It serves two purposes:
+DevMemBench is a benchmark suite purpose-built for evaluating ClaudeMemory's retrieval quality and truth maintenance correctness. It serves three purposes:
 
 1. **Offline retrieval accuracy** -- Measure FTS5, embedding, and hybrid search quality ($0/run)
-2. **End-to-end Claude evaluation** -- Measure whether memory actually improves responses (~$2-8/run)
+2. **Comparative benchmarks** -- Head-to-head retrieval against competitor tools (QMD, grepai)
+3. **End-to-end Claude evaluation** -- Measure whether memory actually improves responses (~$2-8/run)
 
 ## Why a Custom Dataset?
 
@@ -129,6 +130,58 @@ E2E DEVMEMEVAL (31 scenarios, requires EVAL_MODE=real):
   Real mode: requires claude CLI + EVAL_MODE=real
 ```
 
+### Comparative Results (50 queries, 6 adapters)
+
+Head-to-head retrieval comparison against competitor memory tools using a 50-query subset (20 easy, 20 medium, 10 hard) from the benchmark dataset.
+
+```
+COMPARATIVE RETRIEVAL (50 queries, 117 active facts):
+
+  Aggregate:
+    Adapter              Recall@5   MRR      nDCG@10
+    QMD-Vector           0.835      0.877    0.848
+    grepai               0.707      0.734    0.709
+    FTS-only             0.703      0.696    0.674
+    ClaudeMemory (hybrid) 0.409     0.405    0.410
+    QMD-BM25             0.390      0.390    0.382
+    No memory            0.000      0.000    0.000
+
+  Easy (20 queries):
+    QMD-Vector           1.000      1.000    1.000
+    FTS-only             0.950      0.883    0.866
+    QMD-BM25             0.850      0.850    0.850
+    grepai               0.850      0.855    0.818
+    ClaudeMemory (hybrid) 0.550     0.538    0.544
+
+  Medium (20 queries):
+    QMD-Vector           0.833      0.867    0.846
+    grepai               0.667      0.679    0.672
+    FTS-only             0.633      0.605    0.583
+    ClaudeMemory (hybrid) 0.300     0.292    0.298
+    QMD-BM25             0.125      0.125    0.116
+
+  Hard (10 queries):
+    QMD-Vector           0.557      0.950    0.620
+    grepai               0.500      0.734    0.543
+    FTS-only             0.347      0.578    0.400
+    ClaudeMemory (hybrid) 0.343     0.740    0.400
+    QMD-BM25             0.000      0.000    0.000
+```
+
+**Competitor tools tested:**
+- **QMD-Vector**: On-device vector search with query expansion via local GGUF models (~2GB). Uses Bun runtime.
+- **QMD-BM25**: QMD's keyword-only mode (BM25 with AND semantics, stopword stripping).
+- **grepai**: Local vector DB using Ollama embeddings (nomic-embed-text, ~274MB).
+- **FTS-only**: ClaudeMemory's FTS5 keyword search without embeddings.
+- **ClaudeMemory (hybrid)**: Full hybrid retrieval (FTS5 + bge-small-en-v1.5 embeddings + RRF).
+- **No memory**: Baseline returning empty results.
+
+**Key takeaways:**
+- QMD-Vector leads across all difficulties thanks to local GGUF query expansion and vector search.
+- grepai outperforms ClaudeMemory's hybrid mode, suggesting room for improvement in our embedding/RRF pipeline.
+- FTS-only outperforms ClaudeMemory hybrid on easy/medium queries, indicating the vector component may be hurting ranking for keyword-heavy queries.
+- QMD-BM25 is strong on easy queries (0.85) but collapses on medium/hard due to AND semantics requiring all terms to match.
+
 ### Interpreting the results
 
 **FTS5 performs well on easy queries** (Recall@5=0.975) because these queries share keywords with the stored fact text. FTS5 is the always-available baseline (no model download needed).
@@ -166,6 +219,27 @@ bundle exec rspec spec/benchmarks/resolution/ --tag benchmark --format documenta
 ./bin/run-evals --benchmarks-only
 ```
 
+### Comparative ($0, ~60 minutes with all competitors)
+
+Requires competitor tools installed via `bin/setup-competitors` (~3GB total download).
+
+```bash
+# Install competitor tools (idempotent, safe to re-run)
+bin/setup-competitors              # Install QMD + grepai + all dependencies
+bin/setup-competitors --check      # Just show what's installed
+bin/setup-competitors --qmd-only   # Only QMD + Bun
+bin/setup-competitors --grepai-only # Only grepai + Ollama
+
+# Run comparative benchmarks
+bundle exec rspec spec/benchmarks/comparative/ --tag comparative --format documentation
+
+# Via run-evals
+./bin/run-evals --comparative
+./bin/run-evals --comparative --setup-competitors  # Install + run
+```
+
+Unavailable adapters are skipped gracefully. The suite always runs with the internal adapters (ClaudeMemory, FTS-only, No memory) even without competitor tools installed.
+
 ### End-to-end with Claude (~$2-8)
 
 ```bash
@@ -202,6 +276,24 @@ spec/benchmarks/
 │   └── scope_ranking_spec.rb           # Project vs global ranking
 ├── resolution/
 │   └── truth_maintenance_spec.rb       # Supersession/conflict correctness
+├── comparative/
+│   ├── comparative_helper.rb           # Adapter discovery, shared setup
+│   ├── adapters/
+│   │   ├── base_adapter.rb             # Abstract interface
+│   │   ├── claude_memory_adapter.rb    # Full hybrid retrieval
+│   │   ├── fts_only_adapter.rb         # FTS5 keyword-only baseline
+│   │   ├── no_memory_adapter.rb        # Empty baseline
+│   │   ├── claude_md_adapter.rb        # Static CLAUDE.md (E2E only)
+│   │   ├── qmd_adapter.rb             # QMD (BM25/Vector/Hybrid modes)
+│   │   └── grepai_adapter.rb          # grepai + Ollama embeddings
+│   ├── retrieval/
+│   │   └── comparative_retrieval_spec.rb  # Head-to-head retrieval
+│   ├── efficiency/
+│   │   └── resource_efficiency_spec.rb    # Setup time, index size, latency
+│   ├── e2e/
+│   │   └── comparative_e2e_spec.rb        # E2E with real Claude
+│   └── reporting/
+│       └── comparative_reporter.rb        # Terminal + markdown reports
 └── e2e/
     └── devmemeval_spec.rb              # End-to-end with real Claude
 ```

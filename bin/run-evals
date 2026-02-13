@@ -8,9 +8,12 @@ require "json"
 # Determine what to run based on arguments
 run_benchmarks = ARGV.include?("--benchmarks") || ARGV.include?("--all")
 run_evals = !ARGV.include?("--benchmarks-only")
+run_comparative = ARGV.include?("--comparative") || ARGV.include?("--all")
+run_setup = ARGV.include?("--setup-competitors")
 
 eval_exit_code = 0
 benchmark_exit_code = 0
+comparative_exit_code = 0
 
 # ============================================================
 # EVALS
@@ -178,11 +181,43 @@ if run_benchmarks || ARGV.empty?
 end
 
 # ============================================================
+# COMPARATIVE BENCHMARKS
+# ============================================================
+
+if run_comparative
+  if run_setup
+    puts "\n" + "=" * 60
+    puts "Setting up competitor tools..."
+    puts "=" * 60
+    system("#{__dir__}/setup-competitors", "--yes")
+  end
+
+  puts "\n" + "=" * 60
+  puts "Running Comparative Benchmarks..."
+  puts "=" * 60
+
+  comparative_output = `bundle exec rspec spec/benchmarks/comparative/ --tag comparative --format documentation 2>&1`
+  comparative_exit_code = $?.exitstatus
+  puts comparative_output
+
+  if ENV["EVAL_MODE"] == "real"
+    puts "\n" + "=" * 60
+    puts "Running Comparative E2E (real Claude)..."
+    puts "=" * 60
+
+    comp_e2e_output = `EVAL_MODE=real bundle exec rspec spec/benchmarks/comparative/e2e/ --tag comparative --tag eval_real --format documentation 2>&1`
+    comp_e2e_exit_code = $?.exitstatus
+    puts comp_e2e_output
+    comparative_exit_code = comp_e2e_exit_code if comp_e2e_exit_code != 0
+  end
+end
+
+# ============================================================
 # FINAL SUMMARY
 # ============================================================
 
 puts "\n" + "=" * 60
-final_exit = [eval_exit_code, benchmark_exit_code].max
+final_exit = [eval_exit_code, benchmark_exit_code, comparative_exit_code].max
 
 if final_exit == 0
   puts "ALL CHECKS PASSED"

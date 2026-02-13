@@ -87,6 +87,16 @@ EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/ --tag eval_real
 
 DevMemBench measures retrieval accuracy (Recall@k, MRR, nDCG@10) across 155 queries, truth maintenance correctness across 100 cases, and end-to-end Claude response quality across 31 scenarios. Semantic and hybrid retrieval use [fastembed-rb](https://github.com/khasinski/fastembed-rb) (BAAI/bge-small-en-v1.5, local ONNX, no API key). See `spec/benchmarks/README.md` for full details.
 
+### Comparative Benchmarks
+```bash
+bin/setup-competitors              # Install QMD + grepai + dependencies (~3GB)
+bin/setup-competitors --check      # Show what's installed
+bin/setup-competitors --qmd-only   # Only install QMD + Bun
+bin/setup-competitors --grepai-only # Only install grepai + Ollama
+bin/run-evals --comparative        # Run benchmarks with available tools
+bin/run-evals --comparative --setup-competitors  # Install + run in one step
+```
+
 ## Architecture
 
 ### Dual-Database System

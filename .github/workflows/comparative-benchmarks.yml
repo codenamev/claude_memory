@@ -1,0 +1,41 @@
+name: Comparative Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      tools:
+        description: "Which competitor tools to install"
+        type: choice
+        default: all
+        options:
+          - all
+          - qmd-only
+          - grepai-only
+
+jobs:
+  benchmark:
+    runs-on: macos-latest
+    name: Comparative (${{ inputs.tools }})
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.1'
+          bundler-cache: true
+
+      - name: Set up Bun
+        if: inputs.tools != 'grepai-only'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install competitor tools
+        run: ./bin/setup-competitors --${{ inputs.tools }} --yes
+
+      - name: Check installation status
+        run: ./bin/setup-competitors --check
+
+      - name: Run comparative benchmarks
+        run: ./bin/run-evals --comparative
