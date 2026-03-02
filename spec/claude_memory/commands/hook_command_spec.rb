@@ -344,4 +344,92 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
       expect(stdout.string).to include("Skipped")
     end
   end
+
+  describe "--async flag" do
+    it "returns SUCCESS immediately with --async for ingest" do
+      File.write(transcript_path, "Test content")
+
+      payload = {
+        "session_id" => "sess-123",
+        "transcript_path" => transcript_path
+      }
+      stdin.string = JSON.generate(payload)
+
+      allow(Process).to receive(:fork).and_return(42)
+      allow(Process).to receive(:detach)
+
+      exit_code = command.call(["ingest", "--db", db_path, "--async"])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      expect(stdout.string).to include("background")
+      expect(stdout.string).to include("42")
+      expect(Process).to have_received(:detach).with(42)
+    end
+
+    it "returns SUCCESS immediately with --async for sweep" do
+      payload = {"budget_seconds" => 2}
+      stdin.string = JSON.generate(payload)
+
+      allow(Process).to receive(:fork).and_return(99)
+      allow(Process).to receive(:detach)
+
+      exit_code = command.call(["sweep", "--db", db_path, "--async"])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      expect(stdout.string).to include("background")
+    end
+
+    it "returns SUCCESS immediately with --async for publish" do
+      rules_dir = File.join(tmpdir, ".claude", "rules")
+      FileUtils.mkdir_p(rules_dir)
+
+      payload = {"rules_dir" => rules_dir, "mode" => "shared"}
+      stdin.string = JSON.generate(payload)
+
+      allow(Process).to receive(:fork).and_return(77)
+      allow(Process).to receive(:detach)
+
+      exit_code = command.call(["publish", "--db", db_path, "--async"])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      expect(stdout.string).to include("background")
+    end
+
+    it "ignores --async for context subcommand (runs synchronously)" do
+      payload = {"hook_event_name" => "SessionStart"}
+      stdin.string = JSON.generate(payload)
+
+      exit_code = command.call(["context", "--db", db_path, "--async"])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      # Context runs synchronously even with --async
+      expect(stdout.string).not_to include("background")
+    end
+
+    it "falls back to synchronous execution when fork is unavailable" do
+      File.write(transcript_path, "Test content")
+
+      payload = {
+        "session_id" => "sess-123",
+        "transcript_path" => transcript_path
+      }
+      stdin.string = JSON.generate(payload)
+
+      allow(Process).to receive(:fork).and_raise(NotImplementedError)
+
+      exit_code = command.call(["ingest", "--db", db_path, "--async"])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      expect(stderr.string).to include("falling back")
+      expect(stdout.string).to include("Ingested")
+    end
+
+    it "still returns ERROR for invalid payload with --async" do
+      stdin.string = "invalid json{{"
+
+      exit_code = command.call(["ingest", "--db", db_path, "--async"])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::ERROR)
+    end
+  end
 end

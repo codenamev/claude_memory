@@ -5,13 +5,17 @@ require "json"
 module ClaudeMemory
   module Commands
     # Handles hook entrypoints (ingest, sweep, publish)
+    # Supports --async flag to fork and run in background
     class HookCommand < BaseCommand
+      ASYNC_SUBCOMMANDS = %w[ingest sweep publish].freeze
+
       def call(args)
         subcommand = args.first
 
         unless subcommand
           stderr.puts "Usage: claude-memory hook <ingest|sweep|publish|context> [options]"
           stderr.puts "\nReads hook payload JSON from stdin."
+          stderr.puts "Options: --async  Run in background (ingest, sweep, publish only)"
           return Hook::ExitCodes::ERROR
         end
 
@@ -21,9 +25,10 @@ module ClaudeMemory
           return Hook::ExitCodes::ERROR
         end
 
-        opts = parse_options(args[1..] || [], {db: ClaudeMemory.project_db_path}) do |o|
+        opts = parse_options(args[1..] || [], {db: ClaudeMemory.project_db_path, async: false}) do |o|
           OptionParser.new do |parser|
             parser.on("--db PATH", "Database path") { |v| o[:db] = v }
+            parser.on("--async", "Run in background (non-blocking)") { o[:async] = true }
           end
         end
         return Hook::ExitCodes::ERROR if opts.nil?
@@ -31,6 +36,21 @@ module ClaudeMemory
         payload = parse_hook_payload
         return Hook::ExitCodes::ERROR unless payload
 
+        if opts[:async] && ASYNC_SUBCOMMANDS.include?(subcommand)
+          return run_async(subcommand, payload, opts)
+        end
+
+        execute_sync(subcommand, payload, opts)
+      rescue ClaudeMemory::Hook::Handler::PayloadError => e
+        stderr.puts "Payload error: #{e.message}"
+        Hook::ExitCodes::ERROR
+      rescue => e
+        classify_error(e)
+      end
+
+      private
+
+      def execute_sync(subcommand, payload, opts)
         store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
         handler = ClaudeMemory::Hook::Handler.new(store)
 
@@ -47,14 +67,46 @@ module ClaudeMemory
 
         store.close
         exit_code
-      rescue ClaudeMemory::Hook::Handler::PayloadError => e
-        stderr.puts "Payload error: #{e.message}"
-        Hook::ExitCodes::ERROR
-      rescue => e
-        classify_error(e)
       end
 
-      private
+      def run_async(subcommand, payload, opts)
+        pid = fork_background(subcommand, payload, opts)
+
+        if pid
+          Process.detach(pid)
+          stdout.puts "Running #{subcommand} in background (pid: #{pid})"
+          Hook::ExitCodes::SUCCESS
+        else
+          stderr.puts "Fork not available, falling back to synchronous execution"
+          execute_sync(subcommand, payload, opts)
+        end
+      end
+
+      def fork_background(subcommand, payload, opts)
+        Process.fork do
+          # Detach from parent I/O
+          $stdin.reopen(File::NULL, "r")
+          $stdout.reopen(File::NULL, "w")
+          $stderr.reopen(File::NULL, "w")
+
+          store = ClaudeMemory::Store::SQLiteStore.new(opts[:db])
+          handler = ClaudeMemory::Hook::Handler.new(store)
+
+          case subcommand
+          when "ingest" then handler.ingest(payload)
+          when "sweep" then handler.sweep(payload)
+          when "publish" then handler.publish(payload)
+          end
+
+          store.close
+        rescue
+          # Background process must not propagate errors
+          nil
+        end
+      rescue NotImplementedError
+        # Process.fork not available (e.g., JRuby)
+        nil
+      end
 
       def parse_hook_payload
         input = stdin.read
