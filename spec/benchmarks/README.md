@@ -40,18 +40,20 @@ Simulated projects: `acme_api` (Ruby/Rails), `dataflow` (Python), `shopfront` (T
 
 Includes temporal variants (superseded facts with `valid_from`/`valid_to`), inferred facts (lower confidence), and edge cases for deduplication testing.
 
-### retrieval_queries.yml (~155 queries)
+### retrieval_queries.yml (~140 queries)
 
 Queries organized by difficulty level, each with expected and excluded fact IDs:
 
 | Difficulty | Count | What It Tests | Example |
 |------------|-------|---------------|---------|
-| **Easy** | 40 | Direct keyword overlap -- FTS5 should handle these | "What database does the Acme API use?" |
-| **Medium** | 40 | Semantic paraphrase -- different words, same meaning | "How do we persist data in the API?" |
+| **Easy** | 40 | Natural language questions with some keyword overlap | "What is the primary database for the Acme API?" |
+| **Medium** | 40 | Semantic paraphrase -- different words, same meaning | "How do we persist data in the Acme API?" |
 | **Hard** | 20 | Cross-category synthesis -- requires multi-fact reasoning | "Describe the complete technology stack" |
 | **Abstention** | 20 | No relevant facts exist -- should return nothing useful | "What mobile framework does the team use?" |
 | **Temporal** | 15 | Newer fact should rank above superseded one | "What database does the API currently use?" |
 | **Scope** | 5 | Project vs global ranking behavior | "What indentation should be used?" |
+
+Easy queries use natural language questions (not keyword fragments) and include `excluded_facts` for cross-project contamination detection. Many easy and medium queries include decision companion facts in their expected sets — e.g., both the `auth_method` fact and the corresponding `decision` about JWT adoption are expected when asking about authentication.
 
 ### resolution_cases.yml (100 cases)
 
@@ -102,19 +104,19 @@ Per-ability pass rate (keyword matching with threshold), overall pass rate, and 
 ## Latest Results
 
 ```
-RETRIEVAL (105 facts, 155 queries):
+RETRIEVAL (105 facts, 140 queries):
   FTS5:
-    Easy:       Recall@5=0.975  MRR=0.851  (40 queries)
-    Aggregate:  Recall@5=0.933  MRR=0.832  (45 queries)
+    Easy:       Recall@5=0.950  MRR=0.863  (40 queries)
+    Aggregate:  Recall@5=0.911  MRR=0.843  (45 queries)
   Semantic (FastEmbed bge-small-en-v1.5):
-    Easy:       Recall@5=0.900  Recall@10=0.950  MRR=0.776  (40 queries)
-    Medium:     Recall@5=0.696  Recall@10=0.846  MRR=0.653  (40 queries)
-    Aggregate:  Recall@5=0.786  MRR=0.721  nDCG@10=0.730  (85 queries)
+    Easy:       Recall@5=0.888  Recall@10=0.925  MRR=0.791  (40 queries)
+    Medium:     Recall@5=0.719  Recall@10=0.881  MRR=0.700  (40 queries)
+    Aggregate:  Recall@5=0.791  MRR=0.750  nDCG@10=0.746  (85 queries)
   Hybrid (Vector + FTS5):
-    Easy:       Recall@5=0.900  Recall@10=0.950  MRR=0.776  (40 queries)
-    Medium:     Recall@5=0.696  Recall@10=0.846  MRR=0.653  (40 queries)
-    Hard:       Recall@5=0.441  Recall@10=0.628  MRR=0.748  (20 queries)
-    Aggregate:  Recall@5=0.727  MRR=0.721  nDCG@10=0.702  (100 queries)
+    Easy:       Recall@5=0.400  Recall@10=0.725  MRR=0.305  (40 queries)
+    Medium:     Recall@5=0.379  Recall@10=0.581  MRR=0.340  (40 queries)
+    Hard:       Recall@5=0.379  Recall@10=0.563  MRR=0.599  (20 queries)
+    Aggregate:  Recall@5=0.387  MRR=0.378  nDCG@10=0.396  (100 queries)
 
 SCOPE RANKING:  5/5 queries returned expected facts
 
@@ -184,11 +186,13 @@ COMPARATIVE RETRIEVAL (50 queries, 117 active facts):
 
 ### Interpreting the results
 
-**FTS5 performs well on easy queries** (Recall@5=0.975) because these queries share keywords with the stored fact text. FTS5 is the always-available baseline (no model download needed).
+**FTS5 performs well on easy queries** (Recall@5=0.950) because these queries share keywords with the stored fact text. FTS5 is the always-available baseline (no model download needed).
 
-**Semantic retrieval excels on medium queries** (Recall@5=0.696) where the query uses different vocabulary than the stored fact. For example, "How do we persist data?" finds facts about PostgreSQL even though the word "persist" doesn't appear in the fact text. This demonstrates the value of transformer-based embeddings over keyword matching.
+**Semantic retrieval excels on medium queries** (Recall@5=0.719) where the query uses different vocabulary than the stored fact. For example, "How do we persist data?" finds facts about PostgreSQL even though the word "persist" doesn't appear in the fact text. This demonstrates the value of transformer-based embeddings over keyword matching.
 
-**Hybrid retrieval combines both strengths.** For easy queries it matches FTS5 performance; for medium/hard queries it leverages vector similarity. Hard queries (cross-category synthesis requiring multiple facts) achieve Recall@10=0.628.
+**Hybrid retrieval (RRF) underperforms semantic-only.** The RRF combination of FTS5 + vector results currently hurts ranking quality: Hybrid easy Recall@5=0.400 vs Semantic easy Recall@5=0.888. This is because FTS5's wrong-project results (e.g., returning the Python linter when asked about Go's linter) get boosted by RRF, displacing correct semantic results. This is a known issue to investigate — possible fixes include project-aware filtering or adjusting RRF weights.
+
+**Hard queries require multi-fact retrieval.** Queries like "Describe the complete technology stack" expect 5-8 facts. Recall@5 is structurally capped for these queries (max Recall@5 = 5/8 = 0.625 for an 8-fact query). Recall@10 is the more meaningful metric for hard queries.
 
 **Resolution accuracy is 100%** because the predicate policy logic (single-value supersession, multi-value accumulation, strength-based conflict detection) is deterministic and well-defined.
 

@@ -14,13 +14,13 @@
 # ============================================================
 
 - id: q_easy_001
-  query: "What database does the Acme API use?"
+  query: "What is the primary database for the Acme API?"
   expected_facts: [ts_db_001]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_002
-  query: "What framework does the Acme API use?"
+  query: "What web framework does the Acme API use?"
   expected_facts: [ts_fw_001]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
@@ -32,7 +32,7 @@
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_004
-  query: "What is the data pipeline orchestration tool?"
+  query: "What orchestration tool does the dataflow pipeline use?"
   expected_facts: [ts_fw_003]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
@@ -46,6 +46,7 @@
 - id: q_easy_006
   query: "What linter does ClaudeMemory use?"
   expected_facts: [ts_fw_012]
+  excluded_facts: [cv_python_003, cv_go_004]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
@@ -57,19 +58,19 @@
 
 - id: q_easy_008
   query: "What CSS framework does shopfront use?"
-  expected_facts: [ts_fw_007]
+  expected_facts: [ts_fw_007, cv_ts_005]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_009
-  query: "frozen_string_literal convention"
+  query: "What is the frozen_string_literal convention?"
   expected_facts: [cv_ruby_001]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_010
   query: "What indentation does Ruby code use?"
-  expected_facts: [cv_ruby_002]
+  expected_facts: [cv_ruby_002, cv_global_009]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
@@ -81,12 +82,12 @@
 
 - id: q_easy_012
   query: "How does ClaudeMemory handle errors?"
-  expected_facts: [dc_001]
+  expected_facts: [dc_001, cv_ruby_013]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_013
-  query: "dual database architecture"
+  query: "What is the dual database architecture decision?"
   expected_facts: [dc_002]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
@@ -94,6 +95,7 @@
 - id: q_easy_014
   query: "What search engine does ClaudeMemory use?"
   expected_facts: [dc_003]
+  excluded_facts: [ts_db_008]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
@@ -104,14 +106,14 @@
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_016
-  query: "What authentication method does the API use?"
-  expected_facts: [au_001]
+  query: "What authentication method does the Acme API use?"
+  expected_facts: [au_001, dc_020]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_017
   query: "Where is the shopfront deployed?"
-  expected_facts: [dp_003]
+  expected_facts: [dp_003, dc_022]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
@@ -122,7 +124,7 @@
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_019
-  query: "TypeScript strict mode convention"
+  query: "Is TypeScript strict mode used in shopfront?"
   expected_facts: [cv_ts_002]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
@@ -134,7 +136,7 @@
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_021
-  query: "table-driven tests Go convention"
+  query: "How should Go tests be structured?"
   expected_facts: [cv_go_001]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
@@ -146,20 +148,21 @@
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_023
-  query: "What data processing library does the pipeline use?"
-  expected_facts: [ts_fw_004]
+  query: "What data processing library does the dataflow pipeline use?"
+  expected_facts: [ts_fw_004, dc_009]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_024
   query: "How does shopfront validate API responses?"
   expected_facts: [cv_ts_003]
+  excluded_facts: [cv_python_002]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_025
   query: "What inter-service communication does infracore use?"
-  expected_facts: [ts_fw_009]
+  expected_facts: [ts_fw_009, dc_015]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
@@ -170,13 +173,13 @@
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_027
-  query: "What is the background job processor?"
-  expected_facts: [ts_fw_002]
+  query: "What is the background job processor for the Acme API?"
+  expected_facts: [ts_fw_002, dc_006]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_028
-  query: "Sequel dataset methods convention"
+  query: "Should we use raw SQL or Sequel dataset methods?"
   expected_facts: [cv_ruby_004]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
@@ -184,6 +187,7 @@
 - id: q_easy_029
   query: "What logging library does Go use?"
   expected_facts: [cv_go_007]
+  excluded_facts: [cv_python_006]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
@@ -194,20 +198,22 @@
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_031
-  query: "Pydantic validation convention"
+  query: "How should data models be validated in the Python project?"
   expected_facts: [cv_python_002]
+  excluded_facts: [cv_ts_003]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_032
-  query: "What is the Python linter?"
+  query: "What is the Python linter for dataflow?"
   expected_facts: [cv_python_003]
+  excluded_facts: [ts_fw_012, cv_go_004]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_033
   query: "How does shopfront handle server state?"
-  expected_facts: [ts_fw_006]
+  expected_facts: [ts_fw_006, dc_013]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
@@ -230,25 +236,25 @@
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_037
-  query: "service objects convention Rails"
+  query: "How should business logic be organized in Rails?"
   expected_facts: [cv_ruby_005]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_038
   query: "What database does ClaudeMemory use?"
-  expected_facts: [ts_db_007]
+  expected_facts: [ts_db_007, dc_018]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_039
-  query: "null object pattern convention"
+  query: "How do we avoid nil checks in the codebase?"
   expected_facts: [cv_ruby_010]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
 
 - id: q_easy_040
-  query: "WAL mode SQLite decision"
+  query: "Why does ClaudeMemory use WAL mode for SQLite?"
   expected_facts: [dc_025]
   difficulty: easy
   tests: [fts5, semantic, hybrid]
@@ -258,13 +264,13 @@
 # ============================================================
 
 - id: q_med_001
-  query: "How do we persist data in the API?"
+  query: "How do we persist data in the Acme API?"
   expected_facts: [ts_db_001]
   difficulty: medium
   tests: [semantic, hybrid]
 
 - id: q_med_002
-  query: "What ORM layer is used for database access?"
+  query: "What ORM layer does ClaudeMemory use for database access?"
   expected_facts: [ts_fw_010]
   difficulty: medium
   tests: [semantic, hybrid]
@@ -306,14 +312,14 @@
   tests: [semantic, hybrid]
 
 - id: q_med_009
-  query: "Where does the application run in production?"
+  query: "Where does the Acme API run in production?"
   expected_facts: [dp_001]
   difficulty: medium
   tests: [semantic, hybrid]
 
 - id: q_med_010
   query: "How do we make sure code quality stays high?"
-  expected_facts: [ts_fw_012, cv_python_003, cv_go_004]
+  expected_facts: [ts_fw_012, cv_python_003, cv_go_004, cv_global_002]
   difficulty: medium
   tests: [semantic, hybrid]
 
@@ -391,7 +397,7 @@
 
 - id: q_med_023
   query: "How is the system observable in production?"
-  expected_facts: [dc_016]
+  expected_facts: [dc_016, cv_python_006, cv_go_007]
   difficulty: medium
   tests: [semantic, hybrid]
 
@@ -439,7 +445,7 @@
 
 - id: q_med_031
   query: "How should test code be organized?"
-  expected_facts: [cv_ts_004, cv_python_004]
+  expected_facts: [cv_ts_004, cv_python_004, cv_ruby_003, cv_go_001]
   difficulty: medium
   tests: [semantic, hybrid]
 
@@ -450,7 +456,7 @@
   tests: [semantic, hybrid]
 
 - id: q_med_033
-  query: "What approach prevents excessive method decomposition?"
+  query: "What rules exist for method and function length?"
   expected_facts: [edge_overlap_001, edge_overlap_002]
   difficulty: medium
   tests: [semantic, hybrid]
@@ -503,13 +509,13 @@
 
 - id: q_hard_001
   query: "Describe the complete technology stack for the Acme API"
-  expected_facts: [ts_db_001, ts_fw_001, ts_fw_002, ts_fw_013, au_001, dp_001]
+  expected_facts: [ts_db_001, ts_db_002, ts_db_008, ts_fw_001, ts_fw_002, ts_fw_013, au_001, dp_001]
   difficulty: hard
   tests: [hybrid]
 
 - id: q_hard_002
   query: "What technology choices has the dataflow team made?"
-  expected_facts: [dc_009, dc_010, dc_011, dc_021]
+  expected_facts: [dc_009, dc_010, dc_011, dc_021, ts_db_003, ts_fw_003]
   difficulty: hard
   tests: [hybrid]
 
@@ -526,8 +532,8 @@
   tests: [hybrid]
 
 - id: q_hard_005
-  query: "What are all the Ruby-related conventions and decisions?"
-  expected_facts: [cv_ruby_001, cv_ruby_002, cv_ruby_003, cv_ruby_004, cv_ruby_005]
+  query: "What are the core Ruby conventions for ClaudeMemory?"
+  expected_facts: [cv_ruby_001, cv_ruby_002, cv_ruby_003, cv_ruby_004, cv_ruby_008, cv_ruby_009, cv_ruby_010]
   difficulty: hard
   tests: [hybrid]
 
@@ -539,12 +545,12 @@
 
 - id: q_hard_007
   query: "What is the full architecture of ClaudeMemory?"
-  expected_facts: [ts_db_007, ts_fw_010, ts_fw_011, dc_002, dc_003, dc_004]
+  expected_facts: [ts_db_007, ts_fw_010, ts_fw_011, dc_002, dc_003, dc_004, dc_018, dc_019, dc_025]
   difficulty: hard
   tests: [hybrid]
 
 - id: q_hard_008
-  query: "What databases are used across all projects?"
+  query: "What is the primary database for each project?"
   expected_facts: [ts_db_001, ts_db_003, ts_db_005, ts_db_006, ts_db_007]
   difficulty: hard
   tests: [hybrid]
@@ -586,7 +592,7 @@
   tests: [hybrid]
 
 - id: q_hard_015
-  query: "How do projects handle dependency injection?"
+  query: "How do the Ruby and Go projects handle dependency injection differently?"
   expected_facts: [cv_ruby_008, cv_go_005, cv_go_008]
   difficulty: hard
   tests: [hybrid]
