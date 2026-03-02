@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require_relative "instructions_builder"
 require_relative "query_guide"
 require_relative "text_summary"
 
@@ -85,7 +86,8 @@ module ClaudeMemory
             serverInfo: {
               name: "claude-memory",
               version: ClaudeMemory::VERSION
-            }
+            },
+            instructions: InstructionsBuilder.build(@store_or_manager)
           }
         }
       end

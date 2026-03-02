@@ -37,6 +37,20 @@ RSpec.describe ClaudeMemory::MCP::Server do
       expect(response["result"]["protocolVersion"]).to eq(described_class::PROTOCOL_VERSION)
       expect(response["result"]["serverInfo"]["name"]).to eq("claude-memory")
     end
+
+    it "includes dynamic instructions" do
+      response = send_request({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {}
+      })
+
+      instructions = response["result"]["instructions"]
+      expect(instructions).to be_a(String)
+      expect(instructions).to include("ClaudeMemory")
+      expect(instructions).to include("memory.recall")
+    end
   end
 
   describe "tools/list" do
