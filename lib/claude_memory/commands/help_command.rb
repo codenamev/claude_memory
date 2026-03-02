@@ -12,10 +12,12 @@ module ClaudeMemory
 
           Commands:
             changes    Show recent fact changes
+            compact    Compact databases (VACUUM + integrity check)
             conflicts  Show open conflicts
             db:init    Initialize the SQLite database
             doctor     Check system health
             explain    Explain a fact with receipts
+            export     Export facts to JSON for backup
             help       Show this help message
             hook       Run hook entrypoints (ingest|sweep|publish)
             init       Initialize ClaudeMemory in a project
