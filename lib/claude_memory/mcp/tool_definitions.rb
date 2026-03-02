@@ -287,6 +287,14 @@ module ClaudeMemory
               type: "object",
               properties: {}
             }
+          },
+          {
+            name: "memory.list_projects",
+            description: "List all known memory databases with fact counts and status. Shows global database, current project, and other projects discovered from promoted facts. Helps discover available search scopes before querying.",
+            inputSchema: {
+              type: "object",
+              properties: {}
+            }
           }
         ]
       end

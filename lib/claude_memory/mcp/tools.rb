@@ -68,6 +68,8 @@ module ClaudeMemory
           fact_graph(arguments)
         when "memory.check_setup"
           check_setup
+        when "memory.list_projects"
+          list_projects
         else
           {error: "Unknown tool: #{name}"}
         end
@@ -504,6 +506,110 @@ module ClaudeMemory
           issues: issues,
           warnings: warnings,
           recommendations: recommendations
+        }
+      end
+
+      def list_projects
+        result = {global: nil, current_project: nil, other_projects: []}
+
+        if @manager
+          result[:global] = list_global_database
+          result[:current_project] = list_current_project
+          result[:other_projects] = discover_other_projects
+        elsif @legacy_store
+          result[:global] = {
+            exists: true,
+            path: @legacy_store.db.opts[:database],
+            facts_active: @legacy_store.facts.where(status: "active").count,
+            entities: @legacy_store.entities.count
+          }
+        end
+
+        result[:project_count] = 1 + result[:other_projects].size
+        result
+      end
+
+      def list_global_database
+        if @manager.global_exists?
+          @manager.ensure_global!
+          store = @manager.global_store
+          {
+            exists: true,
+            path: @manager.global_db_path,
+            facts_active: store.facts.where(status: "active").count,
+            facts_total: store.facts.count,
+            entities: store.entities.count
+          }
+        else
+          {exists: false, path: @manager.global_db_path}
+        end
+      end
+
+      def list_current_project
+        if @manager.project_exists?
+          @manager.ensure_project!
+          store = @manager.project_store
+          {
+            exists: true,
+            path: @manager.project_path,
+            db_path: @manager.project_db_path,
+            facts_active: store.facts.where(status: "active").count,
+            facts_total: store.facts.count,
+            entities: store.entities.count
+          }
+        else
+          {exists: false, path: @manager.project_path, db_path: @manager.project_db_path}
+        end
+      end
+
+      def discover_other_projects
+        return [] unless @manager.global_exists?
+
+        @manager.ensure_global!
+        global = @manager.global_store
+
+        # Find project paths from promoted facts
+        promoted_paths = global.facts
+          .where(Sequel.like(:created_from, "promoted:%"))
+          .select(:created_from)
+          .distinct
+          .all
+          .filter_map { |f|
+            match = f[:created_from]&.match(/\Apromoted:(.+):\d+\z/)
+            match[1] if match
+          }
+          .uniq
+
+        # Also check for project_path values on facts
+        fact_paths = global.facts
+          .exclude(project_path: nil)
+          .select(:project_path)
+          .distinct
+          .all
+          .map { |f| f[:project_path] }
+
+        all_paths = (promoted_paths + fact_paths).uniq
+        current = @manager.project_path
+
+        all_paths.filter_map { |path|
+          next if path == current
+
+          db_path = File.join(path, ".claude", "memory.sqlite3")
+          entry = {path: path, db_path: db_path, exists: File.exist?(db_path)}
+
+          if entry[:exists]
+            begin
+              temp_store = Store::SQLiteStore.new(db_path)
+              entry[:facts_active] = temp_store.facts.where(status: "active").count
+              entry[:facts_total] = temp_store.facts.count
+              entry[:entities] = temp_store.entities.count
+              temp_store.close
+            rescue => _e
+              entry[:error] = "Could not read database"
+            end
+          end
+
+          entry
         }
       end
 

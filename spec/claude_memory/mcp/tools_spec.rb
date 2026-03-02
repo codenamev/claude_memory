@@ -105,6 +105,17 @@ RSpec.describe ClaudeMemory::MCP::Tools do
         expect(result[:error]).to include("Unknown tool")
       end
     end
+
+    describe "memory.list_projects" do
+      it "returns legacy store info when no StoreManager" do
+        create_fact("convention", "use tabs")
+        result = tools.call("memory.list_projects", {})
+
+        expect(result[:global][:exists]).to be true
+        expect(result[:global][:facts_active]).to eq(1)
+        expect(result[:current_project]).to be_nil
+      end
+    end
   end
 
   describe "with StoreManager" do
@@ -408,6 +419,105 @@ RSpec.describe ClaudeMemory::MCP::Tools do
         result = manager_tools.call("memory.architecture", {"limit" => 1})
 
         expect(result[:count]).to be <= 1
+      end
+    end
+
+    describe "memory.list_projects" do
+      it "returns global and current project database info" do
+        result = manager_tools.call("memory.list_projects", {})
+
+        expect(result[:global][:exists]).to be true
+        expect(result[:global][:path]).to eq(global_db)
+        expect(result[:current_project][:exists]).to be true
+        expect(result[:current_project][:db_path]).to eq(project_db)
+        expect(result[:project_count]).to eq(1)
+      end
+
+      it "includes fact counts for both databases" do
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test")
+        manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "convention",
+          object_literal: "use tabs"
+        )
+
+        result = manager_tools.call("memory.list_projects", {})
+
+        expect(result[:current_project][:facts_active]).to eq(1)
+        expect(result[:current_project][:facts_total]).to eq(1)
+        expect(result[:global][:facts_active]).to eq(0)
+      end
+
+      it "discovers other projects from promoted facts" do
+        # Create and promote a fact to record a project path
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test")
+        fact_id = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "convention",
+          object_literal: "use tabs"
+        )
+        manager.promote_fact(fact_id)
+
+        # The promoted fact's created_from references the project path
+        # But that path won't have a real .claude/memory.sqlite3,
+        # so it should show exists: false
+        result = manager_tools.call("memory.list_projects", {})
+
+        # The current project is filtered out from other_projects,
+        # so if manager.project_path matches the promoted path, it won't appear
+        expect(result[:other_projects]).to be_an(Array)
+      end
+
+      it "discovers projects from global facts with project_path" do
+        entity_id = manager.global_store.find_or_create_entity(type: "repo", name: "other-project")
+        manager.global_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "uses_database",
+          object_literal: "MySQL",
+          scope: "project",
+          project_path: "/tmp/other-project"
+        )
+
+        result = manager_tools.call("memory.list_projects", {})
+
+        other = result[:other_projects].find { |p| p[:path] == "/tmp/other-project" }
+        expect(other).not_to be_nil
+        expect(other[:exists]).to be false
+      end
+
+      it "includes stats for discoverable project databases that exist" do
+        # Create a real project database at a temp path
+        other_project_dir = File.join(tmpdir, "other-project")
+        other_claude_dir = File.join(other_project_dir, ".claude")
+        FileUtils.mkdir_p(other_claude_dir)
+        other_db_path = File.join(other_claude_dir, "memory.sqlite3")
+
+        other_store = ClaudeMemory::Store::SQLiteStore.new(other_db_path)
+        other_entity = other_store.find_or_create_entity(type: "repo", name: "other")
+        other_store.insert_fact(
+          subject_entity_id: other_entity,
+          predicate: "uses_framework",
+          object_literal: "Django"
+        )
+        other_store.close
+
+        # Record this project path in global DB
+        entity_id = manager.global_store.find_or_create_entity(type: "repo", name: "other")
+        manager.global_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "convention",
+          object_literal: "use spaces",
+          scope: "project",
+          project_path: other_project_dir
+        )
+
+        result = manager_tools.call("memory.list_projects", {})
+
+        other = result[:other_projects].find { |p| p[:path] == other_project_dir }
+        expect(other).not_to be_nil
+        expect(other[:exists]).to be true
+        expect(other[:facts_active]).to eq(1)
+        expect(other[:entities]).to eq(1)
       end
     end
   end
