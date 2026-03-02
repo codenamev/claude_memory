@@ -204,6 +204,82 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
     end
   end
 
+  describe "error classification" do
+    it "returns SUCCESS (0) for database errors (transport failure)" do
+      payload = {
+        "session_id" => "sess-123",
+        "transcript_path" => transcript_path
+      }
+      stdin.string = JSON.generate(payload)
+
+      # Simulate database error by using an invalid path that causes Sequel error
+      allow(ClaudeMemory::Store::SQLiteStore).to receive(:new)
+        .and_raise(Sequel::DatabaseConnectionError.new("unable to open database"))
+
+      exit_code = command.call(["ingest", "--db", "/invalid/path/db.sqlite3"])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      expect(stderr.string).to include("degraded gracefully")
+    end
+
+    it "returns SUCCESS (0) for permission errors (transport failure)" do
+      payload = {
+        "session_id" => "sess-123",
+        "transcript_path" => transcript_path
+      }
+      stdin.string = JSON.generate(payload)
+
+      allow(ClaudeMemory::Store::SQLiteStore).to receive(:new)
+        .and_raise(Errno::EACCES.new("permission denied"))
+
+      exit_code = command.call(["ingest", "--db", db_path])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      expect(stderr.string).to include("degraded gracefully")
+    end
+
+    it "returns ERROR (2) for PayloadError (client bug)" do
+      payload = {
+        "session_id" => "sess-123"
+        # Missing transcript_path
+      }
+      stdin.string = JSON.generate(payload)
+
+      exit_code = command.call(["ingest", "--db", db_path])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::ERROR)
+    end
+
+    it "returns SUCCESS (0) for context hook with database errors" do
+      payload = {"hook_event_name" => "SessionStart"}
+      stdin.string = JSON.generate(payload)
+
+      allow(ClaudeMemory::Store::StoreManager).to receive(:new)
+        .and_raise(Sequel::DatabaseError.new("database is locked"))
+
+      exit_code = command.call(["context", "--db", db_path])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      expect(stderr.string).to include("degraded gracefully")
+    end
+
+    it "returns SUCCESS (0) for unexpected RuntimeError (graceful degradation)" do
+      payload = {
+        "session_id" => "sess-123",
+        "transcript_path" => transcript_path
+      }
+      stdin.string = JSON.generate(payload)
+
+      allow(ClaudeMemory::Store::SQLiteStore).to receive(:new)
+        .and_raise(RuntimeError.new("something unexpected"))
+
+      exit_code = command.call(["ingest", "--db", db_path])
+
+      expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+      expect(stderr.string).to include("degraded gracefully")
+    end
+  end
+
   describe "output messages" do
     it "prints success message for ingested content" do
       File.write(transcript_path, "New content")

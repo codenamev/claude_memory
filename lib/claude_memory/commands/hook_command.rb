@@ -50,6 +50,8 @@ module ClaudeMemory
       rescue ClaudeMemory::Hook::Handler::PayloadError => e
         stderr.puts "Payload error: #{e.message}"
         Hook::ExitCodes::ERROR
+      rescue => e
+        classify_error(e)
       end
 
       private
@@ -134,8 +136,22 @@ module ClaudeMemory
 
         manager.close
         Hook::ExitCodes::SUCCESS
-      rescue => _e
-        Hook::ExitCodes::SUCCESS
+      rescue => e
+        classify_error(e)
+      end
+
+      def classify_error(error)
+        exit_code = Hook::ErrorClassifier.exit_code_for(error)
+
+        if exit_code == Hook::ExitCodes::SUCCESS
+          # Transport/infrastructure error — degrade gracefully
+          stderr.puts "Hook degraded gracefully: #{error.class} - #{error.message}"
+        else
+          # Client/programming error — surface to developer
+          stderr.puts "Hook error: #{error.class} - #{error.message}"
+        end
+
+        exit_code
       end
     end
   end
