@@ -11,21 +11,21 @@ module ClaudeMemory
         [
           {
             name: "memory.recall",
-            description: "Search facts matching a query from both global and project memory databases.",
+            description: "Search facts matching a query from both global and project memory databases. Returns full facts with provenance (~800 tokens/result, ~300 with compact: true). For token-efficient browsing, use memory.recall_index first (~200 tokens/result), then memory.recall_details for selected facts.",
             inputSchema: {
               type: "object",
               properties: {
                 query: {type: "string", description: "Search query for existing knowledge (e.g., 'authentication flow', 'error handling', 'database setup')"},
                 limit: {type: "integer", description: "Max results", default: 10},
                 scope: {type: "string", enum: ["all", "global", "project"], description: "Filter by scope: 'all' (default), 'global', or 'project'", default: "all"},
-                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses", default: false}
+                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false}
               },
               required: ["query"]
             }
           },
           {
             name: "memory.recall_index",
-            description: "Lightweight search returning fact previews, IDs, and token costs. Follow up with memory.recall_details for full information.",
+            description: "Lightweight search returning fact previews, IDs, and token costs (~200 tokens/result). Step 1 of progressive disclosure: browse results here, then call memory.recall_details with selected fact IDs for full information (~500 tokens/fact). Saves ~60% tokens vs memory.recall when you only need a few facts.",
             inputSchema: {
               type: "object",
               properties: {
@@ -38,7 +38,7 @@ module ClaudeMemory
           },
           {
             name: "memory.recall_details",
-            description: "Fetch full details for specific fact IDs. Use after memory.recall_index.",
+            description: "Fetch full details for specific fact IDs (~500 tokens/fact). Step 2 of progressive disclosure: use after memory.recall_index to get provenance and metadata for selected facts only.",
             inputSchema: {
               type: "object",
               properties: {
@@ -234,7 +234,7 @@ module ClaudeMemory
           },
           {
             name: "memory.recall_semantic",
-            description: "Search facts using semantic similarity (finds conceptually related facts using vector embeddings)",
+            description: "Search facts using semantic similarity (finds conceptually related facts using vector embeddings). ~800 tokens/result, ~300 with compact: true.",
             inputSchema: {
               type: "object",
               properties: {
@@ -242,7 +242,7 @@ module ClaudeMemory
                 mode: {type: "string", enum: ["vector", "text", "both"], default: "both", description: "Search mode: vector (embeddings), text (FTS), or both (hybrid)"},
                 limit: {type: "integer", default: 10, description: "Maximum results to return"},
                 scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"},
-                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses", default: false}
+                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false}
               },
               required: ["query"]
             }
@@ -262,7 +262,7 @@ module ClaudeMemory
                 },
                 limit: {type: "integer", default: 10, description: "Maximum results to return"},
                 scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"},
-                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses", default: false}
+                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false}
               },
               required: ["concepts"]
             }
