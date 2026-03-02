@@ -1,9 +1,9 @@
-# QMD Analysis: Quick Markdown Search (Updated)
+# QMD Analysis (Updated)
 
-*Analysis Date: 2026-02-02*
-*Previous Analysis: 2026-01-26*
+*Analysis Date: 2026-03-02*
+*Previous Analysis: 2026-02-02*
 *Repository: https://github.com/tobi/qmd*
-*Version/Commit: 63028fd (latest main)*
+*Version: 1.1.0 (commit 40610c3)*
 
 ---
 
@@ -11,45 +11,44 @@
 
 ### Project Purpose
 
-QMD (Quick Markdown Search) is an **on-device search engine** for markdown knowledge bases, notes, meeting transcripts, and documentation. It combines BM25 full-text search, vector semantic search, and LLM re-ranking — all running locally via node-llama-cpp with GGUF models.
+QMD (Query Markup Documents) is an **on-device search engine** for markdown knowledge bases. It combines BM25 full-text search, vector semantic search, and LLM re-ranking — all running locally via node-llama-cpp with GGUF models.
 
-### Key Innovation
+### Key Innovation (What's New Since Last Study)
 
-QMD's standout innovations since last analysis:
+1. **Query Document Format** (`docs/SYNTAX.md`): Structured multi-line queries with typed sub-queries (`lex:`, `vec:`, `hyde:`) that route to different search backends. First sub-query gets 2x weight in Reciprocal Rank Fusion. This replaces the separate `search`/`vsearch`/`query` commands with a unified `query` tool.
 
-1. **Custom fine-tuned query expansion model** (`qmd-query-expansion-1.7B`): A Qwen3-1.7B model trained with SFT + GRPO (reinforcement learning) specifically for structured search query expansion. Produces typed outputs (`lex:`, `vec:`, `hyde:`) that route to different search backends.
+2. **Lex Query Syntax**: Full BM25 operator support — `"exact phrase"` matching, `-term` exclusions, `-"phrase"` exclusions. Enables intent-aware disambiguation (e.g., `performance -sports -athlete`).
 
-2. **Claude Code plugin ecosystem**: QMD ships as a Claude Code marketplace plugin (`.claude-plugin/marketplace.json`) with skills, MCP server integration, and inline status checks.
+3. **HTTP MCP Transport** (`src/mcp.ts:10-16`): Stateless HTTP server alongside stdio. Models stay loaded in VRAM across requests. Embedding/reranking contexts disposed after 5 min idle.
 
-3. **Session-scoped LLM management** (`ILLMSession`): Structured lifecycle for LLM resources with abort signals, timeout management, and clean disposal.
+4. **Unified MCP `query` tool**: Removed separate `search`, `vector_search`, `deep_search` tools. Single `query` tool handles all modes via the query document format.
+
+5. **Collection Management Enhancements**: `include`/`exclude` collections from default queries, `update-cmd` for pre-update shell commands, multiple `-c` flags.
 
 ### Technology Stack
 
-- **Runtime**: Bun >= 1.0.0 (TypeScript)
-- **Database**: SQLite with sqlite-vec extension (cosine distance)
+- **Runtime**: Node.js >= 22 / Bun (dual runtime, `src/db.ts:9-24`)
+- **Database**: SQLite with better-sqlite3 + sqlite-vec extension v0.1.7-alpha.2
 - **Full-Text Search**: SQLite FTS5 with Porter tokenization
-- **Embeddings**: EmbeddingGemma-300M (GGUF, ~300MB)
-- **Reranking**: Qwen3-Reranker-0.6B (GGUF, ~640MB)
-- **Query Expansion**: qmd-query-expansion-1.7B (custom fine-tuned, ~1.1GB)
-- **MCP**: @modelcontextprotocol/sdk with stdio transport
-- **Validation**: Zod v4 for MCP tool input schemas
-- **Config**: YAML-based collection management (`~/.config/qmd/index.yml`)
+- **Embeddings**: EmbeddingGemma (~300MB GGUF)
+- **Reranking**: Qwen3-Reranker-0.6B (~640MB GGUF)
+- **Query Expansion**: Qwen3-1.7B (custom fine-tuned, ~1.1GB)
+- **MCP**: @modelcontextprotocol/sdk v1.25.1
+- **Validation**: Zod v4
+- **Plugin**: Claude Code marketplace format
 
 ### Production Readiness
 
-- **Maturity**: Beta, actively developed, 5,700+ GitHub stars
-- **Test Coverage**: Unit tests (store.test.ts, mcp.test.ts), eval harness (18 queries across 3 difficulty levels)
-- **Documentation**: Comprehensive README, CLAUDE.md, inline code docs
-- **Community**: 257 forks, 29 issues, 17 PRs, active maintainer (Tobi Lütke)
-- **Plugin Distribution**: Available via Claude Code marketplace
+- **Maturity**: Stable (v1.1.0), 5,700+ GitHub stars
+- **Test Coverage**: vitest suite (store, mcp, collections, formatter, cli, eval)
+- **Plugin Distribution**: Claude Code marketplace
+- **Community**: Active (256 PRs merged, external contributors)
 
 ---
 
 ## Architecture Overview
 
 ### Data Model
-
-QMD uses content-addressable storage with a virtual filesystem layer:
 
 ```
 content table (SHA256 hash → document body, deduplication)
@@ -65,11 +64,11 @@ vectors_vec (sqlite-vec native KNN index, cosine distance)
 llm_cache (hash-keyed deterministic response cache)
 ```
 
-### Key Design Patterns
+### Key Design Patterns (New)
 
-1. **Content-Addressable Storage**: `content` table deduplicates by SHA256 hash — multiple documents with identical content share one row (`store.ts:440-450`)
+1. **Query Document Format** (`docs/SYNTAX.md:1-100`): EBNF grammar for structured queries. Lines typed as `lex:`, `vec:`, or `hyde:` route to different backends. Plain text defaults to `expand:` (LLM-generated variants).
 
-2. **Two-Step Vector Query**: JOINs with sqlite-vec virtual tables hang indefinitely. QMD enforces separate queries for vec lookup and metadata join (`store.ts:1912-1915`):
+2. **Two-Step Vector Query** (`store.ts:1912-1915`): JOINs with sqlite-vec virtual tables hang indefinitely. QMD uses separate queries:
    ```typescript
    // Step 1: KNN from vec table
    const vecResults = db.prepare(
@@ -78,272 +77,84 @@ llm_cache (hash-keyed deterministic response cache)
    // Step 2: Join with documents separately
    ```
 
-3. **YAML-Based Collection Config**: Collections migrated from SQLite foreign keys to `~/.config/qmd/index.yml` for easier user management. Schema migration in `migrate-schema.ts` handled the transition.
+3. **Smart Chunking** (`store.ts:53-219`): 900 tokens/chunk, 15% overlap, markdown-aware break points with scored pattern matching (h1=100, h2=90, paragraph=20). Distance decay prevents splitting inside code fences.
 
-4. **Hierarchical Context System**: Context descriptions inherit along path hierarchy — a file at `/work/projects/api.md` gets global context + `/` context + `/work` context concatenated (`collections.ts:94-113`)
+4. **Dynamic MCP Instructions** (`mcp.ts:91-98`): `buildInstructions()` generates context-aware server instructions from actual index state, injected into LLM system prompt.
 
-5. **Probabilistic Cache Cleanup**: 1% chance per query to prune LLM cache to latest 1000 entries (`store.ts:804-807`)
-
-6. **Lazy Model Singleton**: LLM models lazy-load on first use, keep in memory, and unload contexts after 2-minute idle (`llm.ts:920-951`)
-
-### Module Organization
-
-```
-qmd/
-├── src/
-│   ├── qmd.ts          # CLI entry point (~750 lines, lazy-loaded store)
-│   ├── store.ts         # Core store: schema, search, indexing (~2400 lines)
-│   ├── mcp.ts           # MCP server: 6 tools + resource + prompt (~626 lines)
-│   ├── llm.ts           # LLM abstraction: embed, rerank, expand (~1208 lines)
-│   ├── collections.ts   # YAML config management (~390 lines)
-│   ├── store.test.ts    # Comprehensive store unit tests
-│   └── mcp.test.ts      # MCP integration tests
-├── finetune/            # Query expansion model training pipeline
-│   ├── reward.py        # Multi-dimensional reward function (5 dimensions, 120 pts)
-│   ├── train.py         # Unified SFT + GRPO training
-│   ├── eval.py          # Model evaluation with scoring
-│   └── jobs/            # HuggingFace Jobs wrappers
-├── test/
-│   └── eval-harness.ts  # Search quality evaluation (18 queries)
-├── skills/qmd/          # Claude Code plugin skill definition
-└── .claude-plugin/      # Marketplace distribution metadata
-```
+5. **Dual Runtime Compatibility** (`db.ts:9-24`): Cross-runtime SQLite layer that works under both Bun (bun:sqlite) and Node.js (better-sqlite3).
 
 ### Comparison with ClaudeMemory
 
-| Aspect | QMD | ClaudeMemory | Notes |
-|--------|-----|--------------|-------|
-| **Data Model** | Full markdown documents | Structured fact triples | Different paradigms: recall vs extraction |
-| **Storage** | SQLite + sqlite-vec (native vectors) | SQLite + JSON embeddings | QMD has 10-100x faster KNN |
-| **Search** | BM25 + Vector + RRF + Reranking | BM25 + Vector (hybrid) | QMD adds reranking + query expansion |
-| **MCP** | 6 tools + resource + prompt | 18 tools | ClaudeMemory has richer tool surface |
-| **Distribution** | Bun global install + plugin | Ruby gem + MCP + hooks | QMD has smoother install via plugin |
-| **LLM Dependency** | 3 local GGUF models (~2GB total) | None (local ONNX only) | ClaudeMemory is dramatically lighter |
-| **Query Expansion** | Custom fine-tuned model (1.7B) | None | QMD has ML-powered query improvement |
-| **Truth Maintenance** | None (all docs valid) | Supersession + conflicts | ClaudeMemory handles contradictions |
-| **Scope System** | YAML collections | Dual-database (global/project) | Both approaches valid for their use case |
-| **Testing** | Unit + eval harness | Unit + evals + benchmarks (DevMemBench) | ClaudeMemory has more comprehensive benchmarks |
+| Aspect | QMD (1.1.0) | ClaudeMemory | Notes |
+|--------|-------------|--------------|-------|
+| **Data Model** | Content-addressable chunks | Subject-predicate-object facts | QMD stores documents; we store knowledge |
+| **Storage** | SQLite + sqlite-vec | SQLite + Sequel + fastembed-rb | Both use FTS5 |
+| **Vector Search** | sqlite-vec (native C) | JSON embeddings (Ruby) | QMD 10-100x faster |
+| **Query Language** | Typed sub-queries (lex/vec/hyde) | Free-text search | QMD more expressive |
+| **Chunking** | Smart (900 tok, markdown-aware) | None (fact-level) | Different granularity |
+| **Plugin Format** | marketplace.json | Ruby gem + MCP + hooks | QMD easier to install |
+| **MCP Transport** | stdio + HTTP | stdio only | HTTP enables shared server |
 
 ---
 
 ## Key Components Deep-Dive
 
-### Component 1: Fine-Tuned Query Expansion
+### Component 1: Query Document Parser
 
-**Purpose**: Generate structured query variations (lex/vec/hyde) to improve search recall by routing different query types to appropriate backends.
+**Purpose**: Parse structured multi-line queries into typed sub-queries for routing to appropriate search backends.
 
-**Location**: `finetune/`, `src/llm.ts:637-679`
-
-**Implementation** (from `finetune/README.md`):
-
-The custom model `qmd-query-expansion-1.7B` is trained in two stages:
-
-1. **SFT (Supervised Fine-Tuning)**: Teaches format compliance
-   - Base model: Qwen3-1.7B
-   - LoRA rank 16, alpha 32 (all projection layers)
-   - ~2,290 training examples, 5 epochs
-   - Loss: train 0.472, val 0.304
-
-2. **GRPO (Group Relative Policy Optimization)**: Refines quality
-   - LoRA rank 4, alpha 8 (q_proj, v_proj only)
-   - KL beta 0.04 (prevents drift from SFT)
-   - 200 steps, mean reward 0.757
-
-**Reward Function** (from `finetune/reward.py`):
-5 dimensions totaling 120 points (140 with hyde):
-- Format (0-30): Valid lex/vec/hyde lines
-- Diversity (0-30): Multiple types, no echoing query
-- HyDE (0-20): Presence, length, quality
-- Quality (0-20): Lex < vec length, preserved terms
-- Entity (±45 to +20): Named entity preservation
-- Think penalty: No `<think>` blocks (uses `/no_think` directive)
-
-**Output Format**:
-```
-lex: authentication configuration
-lex: auth settings setup
-vec: how to configure authentication settings
-hyde: Authentication can be configured by setting the AUTH_SECRET environment variable.
-```
+**Location**: `docs/SYNTAX.md`, `src/store.ts`
 
 **Design Decisions**:
-- Structured output types (`lex:`, `vec:`, `hyde:`) route to different backends instead of generic rewrites
-- `/no_think` Qwen3 directive suppresses chain-of-thought for direct output
-- Grammar-constrained generation ensures format compliance at inference time
-- Per-query caching avoids redundant expansion (80% hit rate)
+- Typed lines (`lex:`, `vec:`, `hyde:`) enable precise control over search routing
+- First sub-query gets 2x weight in RRF fusion
+- Plain text auto-expands via LLM to generate all three types
+- Lex supports phrase matching and negation for disambiguation
 
-**Relevance to ClaudeMemory**: The structured lex/vec/hyde output pattern is interesting — if we ever add query expansion to our recall pipeline, this type-routed approach is more sophisticated than simple query rewriting. The reward function design (multi-dimensional scoring with entity preservation) is also a good reference for evaluating any future distiller quality.
+### Component 2: HTTP MCP Transport
 
----
+**Purpose**: Long-lived MCP server that avoids repeated model loading.
 
-### Component 2: Claude Code Plugin System
+**Location**: `src/mcp.ts:119-137`
 
-**Purpose**: Package QMD for frictionless installation via Claude Code marketplace.
+**Design Decisions**:
+- WebStandardStreamableHTTPServerTransport for stateless HTTP
+- Models stay loaded in VRAM across requests
+- Idle disposal after 5 min (transparent recreation ~1s)
+- Health endpoint for liveness checks
+- Daemon mode with PID file management
 
-**Location**: `.claude-plugin/marketplace.json`, `skills/qmd/SKILL.md`
+### Component 3: Smart Chunking
 
-**Plugin Structure** (from `marketplace.json:1-29`):
-```json
-{
-  "name": "qmd",
-  "plugins": [{
-    "name": "qmd",
-    "skills": ["./skills/"],
-    "mcpServers": {
-      "qmd": { "command": "qmd", "args": ["mcp"] }
-    }
-  }]
-}
-```
+**Purpose**: Split documents at natural boundaries for better embeddings.
 
-**Skill Definition** (from `skills/qmd/SKILL.md:1-10`):
-```yaml
----
-name: qmd
-description: Search personal markdown knowledge bases...
-metadata:
-  author: tobi
-  version: "1.1.1"
-allowed-tools: Bash(qmd:*), mcp__qmd__*
----
-```
+**Location**: `src/store.ts:68-219`
 
-Key features:
-- **Inline status check**: `!` prefix runs command during skill load (`SKILL.md:18`)
-- **Trigger phrases**: "search my notes", "find in docs", "what did I write about"
-- **Tool permissions**: Scoped to `qmd:*` bash commands and `mcp__qmd__*` tools
-- **Score interpretation guide**: Embedded in skill for LLM consumption
-- **Recommended workflow**: status → search → vsearch → query → get
-
-**Relevance to ClaudeMemory**: This is the clearest example of how to package a memory/search tool as a Claude Code plugin. The skill definition format, tool permissions scoping, inline status checks, and MCP server bundling are all patterns we should adopt when ready to ship as a plugin. The `allowed-tools` pattern (`Bash(qmd:*)`) is particularly useful for security scoping.
-
----
-
-### Component 3: MCP Server with Structured Content
-
-**Purpose**: Expose QMD search as MCP tools with both human-readable text and machine-parseable structured content.
-
-**Location**: `src/mcp.ts`
-
-**Implementation** (from `mcp.ts:258-292`):
-```typescript
-server.registerTool("search", {
-  title: "Search (BM25)",
-  inputSchema: {
-    query: z.string().describe("Search query"),
-    limit: z.number().optional().default(10),
-    minScore: z.number().optional().default(0),
-    collection: z.string().optional(),
-  },
-}, async ({ query, limit, minScore, collection }) => {
-  // ... search logic ...
-  return {
-    content: [{ type: "text", text: formatSearchSummary(filtered, query) }],
-    structuredContent: { results: filtered },
-  };
-});
-```
-
-**Key patterns**:
-1. **Dual output**: Both `content` (human-readable text) and `structuredContent` (JSON) returned from every tool
-2. **Zod validation**: Input schemas use Zod v4 with `.describe()` for auto-documentation
-3. **Resource template**: Documents accessible via `qmd://{+path}` URI pattern with suffix matching fallback (`mcp.ts:105-166`)
-4. **Query guide prompt**: Registered prompt explaining search strategy to LLMs (`mcp.ts:172-252`)
-5. **Line numbers**: Default in resource output for precise references
-6. **Error handling**: `isError: true` flag for clear error signaling, fuzzy file suggestions on not-found
-
-**Relevance to ClaudeMemory**: We already have 18 MCP tools, but QMD's dual `content`/`structuredContent` pattern is worth adopting — it ensures both human (text summary) and machine (JSON) consumers get optimal formats. The registered prompt for query guidance is also a good pattern for improving Claude's tool usage.
-
----
-
-### Component 4: Session-Scoped LLM Lifecycle
-
-**Purpose**: Manage LLM model loading, context creation, and cleanup with structured lifecycle guarantees.
-
-**Location**: `src/llm.ts:126-146`
-
-**Session Interface** (from `llm.ts:137-146`):
-```typescript
-export interface ILLMSession {
-  embed(text: string, options?: EmbedOptions): Promise<EmbeddingResult | null>;
-  embedBatch(texts: string[]): Promise<(EmbeddingResult | null)[]>;
-  expandQuery(query: string, options?): Promise<Queryable[]>;
-  rerank(query: string, documents: RerankDocument[]): Promise<RerankResult>;
-  readonly isValid: boolean;
-  readonly signal: AbortSignal;
-}
-```
-
-**Key patterns**:
-- Sessions have `isValid` flag and `signal` (AbortSignal) for lifecycle tracking
-- Maximum duration timeout prevents runaway sessions
-- Models lazy-load but stay resident; contexts dispose after 2-min idle
-- Singleton pattern ensures only one LLM instance (memory management)
-
-**Relevance to ClaudeMemory**: If we ever integrate local LLMs for distillation, this session-scoped lifecycle pattern is the right approach. Clean abort propagation via AbortSignal is a good practice for any long-running operation.
+**Design Decisions**:
+- Scored break points (h1=100 → newline=1) with distance decay
+- Code fence detection prevents splitting mid-block
+- 200-token search window for finding optimal cut points
+- Squared distance decay for gentle early, steep late penalties
 
 ---
 
 ## Comparative Analysis
 
-### What QMD Does Well (New Findings)
+### What They Do Well
 
-#### 1. Custom Fine-Tuned Model Pipeline
-- **Description**: Full training pipeline (SFT → GRPO → GGUF conversion) for search-specific model
-- **Evidence**: `finetune/reward.py` — multi-dimensional reward function; `finetune/train.py` — unified training script
-- **Why It Works**: Domain-specific models outperform general-purpose LLMs for structured tasks. The two-stage approach (format learning via SFT, quality refinement via GRPO) is state-of-the-art.
-- **Metric**: Min 92% average score required before deployment
-
-#### 2. Plugin Distribution
-- **Description**: Ships as a Claude Code marketplace plugin with zero-config MCP + skills
-- **Evidence**: `.claude-plugin/marketplace.json`, `skills/qmd/SKILL.md`
-- **Why It Works**: `claude marketplace add tobi/qmd` is dramatically simpler than manual gem install + MCP config + hook setup
-- **Impact**: Massive UX improvement for installation
-
-#### 3. Typed Query Routing
-- **Description**: Query expansion produces typed outputs (`lex:`, `vec:`, `hyde:`) routed to appropriate backends
-- **Evidence**: `llm.ts:637-679` — structured prompt; `llm.ts:1006-1013` — grammar constraint
-- **Why It Works**: Different search backends have different strengths. Routing keyword queries to BM25 and semantic queries to vector search maximizes recall.
-
-#### 4. Dual Content/StructuredContent MCP Responses
-- **Description**: Every MCP tool returns both human-readable text summary and machine-parseable JSON
-- **Evidence**: `mcp.ts:288-291` — `return { content: [...], structuredContent: {...} }`
-- **Why It Works**: LLMs can parse both formats, but text summaries are more token-efficient for simple consumption
+1. **Native Vector Queries**: sqlite-vec provides sub-millisecond KNN with C-level performance
+2. **Typed Query Language**: Explicit control over search routing reduces ambiguity
+3. **Smart Chunking**: Markdown-aware splitting produces better embeddings
+4. **HTTP MCP Transport**: Shared server avoids repeated model loading
+5. **Dynamic Instructions**: Index-aware MCP instructions give LLM immediate context
 
 ### What We Do Well
 
-#### 1. Fact-Based Knowledge Graph
-- Our subject-predicate-object triples enable structured queries and inference
-- Truth maintenance resolves contradictions automatically
-- Far richer than document-level retrieval for knowledge extraction
-
-#### 2. Dual-Database Architecture
-- Clean global/project separation without YAML collections
-- Simpler queries, clearer data ownership
-
-#### 3. Comprehensive MCP Surface
-- 18 tools vs QMD's 6 — we cover recall, explain, manage, monitor
-- Progressive disclosure (recall_index → recall_details) for token efficiency
-
-#### 4. Lightweight Dependencies
-- ~5MB gem vs ~2GB+ with GGUF models
-- fastembed-rb (67MB ONNX) vs EmbeddingGemma (300MB GGUF)
-- No runtime LLM dependency
-
-#### 5. Robust Benchmarking
-- DevMemBench: 155 queries, Recall@k, MRR, nDCG@10
-- 100 truth maintenance test cases
-- 31 end-to-end scenarios with real Claude
-- QMD has 18 eval queries — our evaluation is more comprehensive
-
-### Trade-offs
-
-| Approach | Pros | Cons | Best For |
-|----------|------|------|----------|
-| **QMD's LLM-powered search** | Better semantic recall, typed query routing | 2GB+ models, 2-3s cold start, complex deps | Large document collections, conceptual search |
-| **Our FastEmbed search** | Lightweight (67MB), fast (<100ms), no LLM | Lower semantic quality for vague queries | Structured fact retrieval, quick lookups |
-| **QMD's plugin distribution** | Zero-config install, marketplace discovery | Requires plugin ecosystem maturity | Wide user adoption |
-| **Our gem + MCP + hooks** | Fine-grained control, works today | Complex setup, multiple config files | Power users, custom integrations |
+1. **Knowledge Representation**: Facts with provenance > raw document chunks
+2. **Truth Maintenance**: Supersession and conflict resolution
+3. **Dual-Database System**: Project/global scope separation
+4. **Distillation Pipeline**: Extract structured knowledge from transcripts
+5. **Temporal Validity**: Facts have valid_from/valid_to windows
 
 ---
 
@@ -351,247 +162,94 @@ export interface ILLMSession {
 
 ### High Priority ⭐
 
-#### 1. Claude Code Plugin Distribution Format ⭐ NEW
-- **Value**: 10x easier installation (single command vs multi-step gem + MCP + hook config)
-- **Evidence**: `.claude-plugin/marketplace.json` — complete plugin spec; `skills/qmd/SKILL.md` — skill definition with tool scoping
-- **Implementation**: Create `.claude-plugin/marketplace.json` with `mcpServers` pointing to `claude-memory serve-mcp`, skill definition from existing MCP tools, and `allowed-tools: mcp__claude-memory__*`
-- **Effort**: 2-3 days (plugin metadata, skill definition, testing, documentation)
-- **Trade-off**: Depends on Claude Code plugin ecosystem maturity; current hooks integration may still be needed
-- **Recommendation**: **ADOPT** — QMD proves the format works. Start with plugin skeleton, iterate as ecosystem matures
-- **Integration Points**: New `.claude-plugin/` directory, `skills/` directory, update installation docs
+#### 1. Native Vector Storage (sqlite-vec)
+- **Value**: 10-100x faster KNN queries, eliminates O(n) Ruby similarity
+- **Evidence**: `db.ts:52-54` — single function call to load extension
+- **Implementation**: Add sqlite-vec gem, create `facts_vec` virtual table, two-step query pattern
+- **Effort**: 3-5 days
+- **Trade-off**: Native dependency (but well-maintained, cross-platform)
+- **Recommendation**: **ADOPT** — Critical for scaling beyond 1000 facts
 
-#### 2. MCP Structured Content Pattern ⭐ NEW
-- **Value**: Better MCP response quality — dual human-readable + machine-parseable output
-- **Evidence**: `mcp.ts:288-291` — `{ content: [{ type: "text", text: summary }], structuredContent: { results } }`
-- **Implementation**: Update all 18 MCP tool handlers to return both `content` (text summary) and `structuredContent` (JSON). Text content would be a concise summary; structured content preserves full data.
-- **Effort**: 1-2 days (update tool handlers, update tests)
-- **Trade-off**: Slightly more code per tool handler; may need to verify Claude Code MCP client supports `structuredContent`
-- **Recommendation**: **ADOPT** — Pure improvement, no downside if client supports it
-- **Integration Points**: `lib/claude_memory/mcp/server.rb`, all tool handler methods
+#### 2. Smart Chunking for Long Content
+- **Value**: Better embeddings for transcripts > 3000 chars
+- **Evidence**: `store.ts:53-219` — scored break points, code fence awareness
+- **Implementation**: Port chunking algorithm to Ruby for transcript ingestion
+- **Effort**: 2-3 days
+- **Trade-off**: Complexity; only needed for long content
+- **Recommendation**: **CONSIDER** — Adopt if users report long transcript issues
 
-#### 3. MCP Registered Prompt for Query Guidance ⭐ NEW
-- **Value**: Claude uses memory tools more effectively with embedded search strategy
-- **Evidence**: `mcp.ts:172-252` — registered prompt explaining when to use recall vs recall_semantic vs search_concepts
-- **Implementation**: Register a `memory_guide` prompt in our MCP server explaining tool selection strategy (recall for keywords, recall_semantic for concepts, search_concepts for multi-faceted queries, explain for provenance)
-- **Effort**: 4-6 hours (write prompt, register in server, test)
-- **Trade-off**: Minimal; prompt is only loaded on request
-- **Recommendation**: **ADOPT** — Simple way to improve tool usage quality
-- **Integration Points**: `lib/claude_memory/mcp/server.rb`
-
-#### 4. Inline Status Check in Skills ⭐ NEW
-- **Value**: Immediate feedback on memory system health when skill loads
-- **Evidence**: `SKILL.md:18` — `!` prefix runs `qmd status 2>/dev/null || echo "Not installed"`
-- **Implementation**: Add inline check to our skill definition: `!claude-memory doctor --brief 2>/dev/null || echo "Not configured. Run: gem install claude_memory"`
-- **Effort**: 1-2 hours
-- **Trade-off**: None
-- **Recommendation**: **ADOPT** — Trivial improvement with clear benefit
-- **Integration Points**: Skill definition file
-
-### Previously Identified (Carried Forward)
-
-These items from the 2026-01-26 analysis remain relevant:
-
-#### 5. ⭐ Native Vector Storage (sqlite-vec) — STILL CRITICAL
-- **Value**: 10-100x faster KNN queries
-- **Status**: Not yet implemented in ClaudeMemory
-- **Updated Evidence**: QMD now handles 10,000+ documents in production (5,700+ star project)
-- **Recommendation**: **ADOPT IMMEDIATELY** — Foundational improvement
-
-#### 6. ⭐ Reciprocal Rank Fusion (RRF) Algorithm — STILL HIGH VALUE
-- **Value**: 50% improvement in Hit@3 for medium-difficulty queries
-- **Status**: Not yet implemented in ClaudeMemory
-- **Recommendation**: **ADOPT IMMEDIATELY** — Pure algorithmic improvement
-
-#### 7. ⭐ Docid Short Hash System — STILL MEDIUM VALUE
-- **Value**: Better UX, cross-database fact references
-- **Status**: Not yet implemented
-- **Recommendation**: **ADOPT IN PHASE 2**
-
-#### 8. ⭐ Smart Expansion Detection — STILL MEDIUM VALUE
-- **Value**: Skip unnecessary vector search when FTS has strong signal
-- **Status**: Not yet implemented
-- **Recommendation**: **ADOPT IN PHASE 3**
+#### 3. HTTP MCP Transport
+- **Value**: Shared server, models stay loaded, faster subsequent queries
+- **Evidence**: `mcp.ts:119-137` — WebStandardStreamableHTTPServerTransport
+- **Implementation**: Add HTTP transport option alongside stdio
+- **Effort**: 2-3 days
+- **Trade-off**: Process management complexity
+- **Recommendation**: **CONSIDER** — Useful if MCP startup latency becomes an issue
 
 ### Medium Priority
 
-#### 9. Skill Definition with Tool Scoping
-- **Value**: Security and UX — limit tool access to memory-related commands
-- **Evidence**: `SKILL.md:9` — `allowed-tools: Bash(qmd:*), mcp__qmd__*`
-- **Implementation**: Define skill with `allowed-tools: Bash(claude-memory:*), mcp__claude-memory__*`
-- **Effort**: Included in plugin distribution work
-- **Recommendation**: **CONSIDER** — Good practice for plugin security
-- **Integration Points**: Skills directory
+#### 4. Dynamic MCP Server Instructions
+- **Value**: Give LLM immediate context about database state without extra tool call
+- **Evidence**: `mcp.ts:91-98` — builds instructions from actual index state
+- **Implementation**: Generate instructions showing fact counts, recent decisions, active conflicts
+- **Effort**: 1 day
+- **Trade-off**: Minimal
+- **Recommendation**: **ADOPT**
 
-#### 10. Evaluation Harness Improvements
-- **Value**: QMD's eval structure with difficulty levels and Hit@K metrics is cleaner
-- **Evidence**: `test/eval-harness.ts:11-16` — typed queries with difficulty + description
-- **Implementation**: Already have DevMemBench (more comprehensive). Could adopt difficulty classification.
-- **Recommendation**: **CONSIDER** — Our evals are already better; could add difficulty labels
-
-### Low Priority
-
-#### 11. YAML-Based Collection Configuration
-- **Value**: User-editable config for what gets indexed
-- **Evidence**: `collections.ts`, `example-index.yml`
-- **Recommendation**: **REJECT** — Our dual-database provides cleaner separation
-
-#### 12. Custom Query Expansion Model
-- **Value**: Better search recall via ML-powered query rewriting
-- **Evidence**: `finetune/` — complete training pipeline
-- **Recommendation**: **REJECT** — Too heavy (1.7B model) for our fact retrieval use case. If we need expansion, we can leverage Claude's own capabilities during recall.
-
-#### 13. LLM-Based Reranking
-- **Value**: Better ranking precision
-- **Recommendation**: **REJECT** — Over-engineering for structured fact retrieval
+#### 5. Query Document Format
+- **Value**: More expressive queries with explicit search routing
+- **Evidence**: `docs/SYNTAX.md:1-100` — formal EBNF grammar
+- **Implementation**: Support typed queries in recall (e.g., `lex: exact term` vs `vec: semantic query`)
+- **Effort**: 3-5 days
+- **Trade-off**: Complexity; current free-text may be sufficient
+- **Recommendation**: **DEFER** — Over-engineering for fact retrieval
 
 ### Features to Avoid
 
-#### 1. Heavy Local LLM Dependencies
-- **What It Is**: Three GGUF models totaling ~2GB for search operations
-- **Why Avoid**: ClaudeMemory targets lightweight, instant search. 2-3s cold start and 3GB memory is inappropriate for a fact lookup tool.
-- **Our Alternative**: FastEmbed (67MB ONNX, <100ms) provides adequate semantic search for structured facts.
-
-#### 2. Content-Addressable Document Storage
-- **What It Is**: SHA256 hash-based deduplication of full documents
-- **Why Avoid**: We store facts, not documents. Our deduplication is by fact signature.
-- **Our Alternative**: Existing fact signature-based deduplication.
-
----
-
-## Implementation Recommendations
-
-### Phase 1: Plugin Foundation (NEW)
-
-**Goals**: Establish ClaudeMemory as a Claude Code plugin with improved MCP output
-
-**Tasks**:
-- [ ] Create `.claude-plugin/marketplace.json` with plugin metadata
-- [ ] Create skill definition with tool scoping and inline health check
-- [ ] Add MCP structured content pattern to all 18 tool handlers
-- [ ] Register query guidance prompt in MCP server
-- [ ] Test plugin installation workflow
-- [ ] Update installation docs
-
-**Success Criteria**:
-- ClaudeMemory installable via `claude plugin add`
-- MCP tools return both text summaries and structured JSON
-- Query guide prompt available via MCP
-
-**Risks**: Plugin ecosystem may change; maintain backward compatibility with manual setup
-
----
-
-### Phase 2: Vector Storage Upgrade (CARRIED FORWARD)
-
-**Goals**: Adopt sqlite-vec for native KNN and RRF fusion for search quality
-
-**Tasks**:
-- [ ] Add sqlite-vec extension support
-- [ ] Schema migration for `facts_vec` virtual table (two-step query pattern)
-- [ ] Implement `Recall::RRFusion` class
-- [ ] Backfill existing embeddings
-- [ ] Benchmark: target 10x KNN improvement
-
-**Success Criteria**:
-- Vector search uses native sqlite-vec
-- RRF fusion active for hybrid queries
-- DevMemBench shows improved retrieval metrics
-
----
-
-### Phase 3: UX Polish (CARRIED FORWARD)
-
-**Goals**: Docid hashes and smart expansion detection
-
-**Tasks**:
-- [ ] Schema migration for `docid` column (8-char hash)
-- [ ] Implement `Recall::ExpansionDetector`
-- [ ] Update CLI and MCP tools for docid support
+- **Custom Fine-Tuned Query Expansion (Qwen3-1.7B)**: Too heavy for fact retrieval
+- **EmbeddingGemma**: We use fastembed-rb (BAAI/bge-small-en-v1.5) which is lighter
+- **Content-Addressable Storage**: Our facts are deduplicated by signature, not content hash
+- **LLM Reranking**: Cross-encoder reranking is over-engineering for our use case
 
 ---
 
 ## Architecture Decisions
 
 ### What to Preserve
+- **Fact-based knowledge model**: More valuable than raw document chunks
+- **Dual-database system**: Clean project/global separation
+- **Ruby + Sequel**: Mature, stable, well-tested
 
-- **Fact-Based Knowledge Graph**: Our structured triples are fundamentally different from (and better suited for knowledge extraction than) QMD's document storage
-- **Truth Maintenance**: Supersession + conflict resolution is a core differentiator
-- **Dual-Database Architecture**: Cleaner than YAML collections for our use case
-- **Lightweight Dependencies**: Ruby gem + ONNX embeddings vs 2GB+ GGUF models
-
-### What to Adopt (NEW)
-
-- **Plugin Distribution Format**: `.claude-plugin/marketplace.json` + skills for frictionless installation
-- **Structured MCP Content**: Dual `content`/`structuredContent` responses for all tools
-- **MCP Query Guide Prompt**: Registered prompt teaching Claude how to use memory tools effectively
-- **Inline Status Checks**: Skill-level health verification on load
-
-### What to Adopt (CARRIED FORWARD)
-
-- **sqlite-vec Native Vectors**: 10-100x faster KNN (critical)
-- **RRF Fusion**: 50% search quality improvement (critical)
-- **Docid Short Hashes**: Better UX for fact references
-- **Smart Expansion Detection**: Skip vector search when FTS is confident
+### What to Adopt
+- **sqlite-vec**: Critical for vector query performance
+- **Two-step vector query pattern**: Avoid JOIN hangs
+- **Dynamic MCP instructions**: Free context for LLMs
 
 ### What to Reject
-
-- **Local LLM Models for Search**: Too heavy (2GB+, 3s cold start)
-- **Custom Fine-Tuned Models**: Training pipeline is impressive but overkill for fact retrieval
-- **YAML Collection System**: Our dual-DB is better for our use case
-- **Content-Addressable Storage**: Different data model
-- **Virtual Path System**: Unnecessary for fact-based storage
+- **YAML collection system**: Our dual-database is cleaner
+- **Custom fine-tuned models**: Too heavy for our use case
+- **Query document format**: Over-engineering for fact retrieval
 
 ---
 
 ## Key Takeaways
 
 ### Main Learnings
+1. sqlite-vec is production-ready (v0.1.7-alpha.2) and used by multiple projects
+2. Two-step query pattern is mandatory (JOINs hang with vec tables)
+3. Query document format is elegant but over-engineering for fact retrieval
+4. HTTP MCP transport enables shared server mode
 
-1. **Plugin distribution is the future**: QMD's marketplace plugin reduces installation from "read docs, install gem, configure MCP, set up hooks, restart Claude" to one command. This is the single most impactful UX improvement we should adopt.
-
-2. **Structured MCP responses matter**: Returning both text summary and structured JSON is a simple pattern that significantly improves how Claude consumes tool output.
-
-3. **Fine-tuned models for specific tasks work**: QMD's two-stage SFT→GRPO pipeline for query expansion is state-of-the-art. While we shouldn't adopt the models themselves (too heavy), the reward function design and structured output routing are good reference patterns.
-
-4. **Eval methodology with difficulty levels**: QMD's easy/medium/hard query classification provides clearer signal about where improvements matter. Our DevMemBench is more comprehensive but could benefit from this labeling.
-
-5. **The previous QMD analysis recommendations remain valid**: sqlite-vec, RRF, docids, and smart expansion are still unimplemented and still valuable.
-
-### Recommended Adoption Order
-
-1. **First**: Plugin distribution format — highest UX impact, unblocks ecosystem adoption
-2. **Second**: MCP structured content + query guide prompt — low effort, immediate quality gain
-3. **Third**: sqlite-vec + RRF fusion — foundational performance and quality
-4. **Fourth**: Docids + smart expansion — polish and optimization
-
-### Expected Impact
-
-- **Installation**: 10x easier (single command vs multi-step)
-- **MCP Quality**: Better Claude tool usage with structured responses + query guidance
-- **Search Performance**: 10-100x faster KNN (sqlite-vec), 50% better Hit@3 (RRF)
-- **UX**: Human-friendly fact references (#abc123de), smarter search skipping
-
-### Next Actions
-
-- [ ] Review plugin distribution feasibility (check Claude Code plugin spec)
-- [ ] Implement MCP structured content pattern (quick win)
-- [ ] Register query guide MCP prompt (quick win)
-- [ ] Continue with sqlite-vec + RRF adoption plan from previous analysis
-- [ ] Store analysis findings in memory
+### Changes Since Last Analysis (2026-02-02)
+- v1.1.0 released with query document format
+- Lex syntax with phrase matching and negation
+- Unified `query` MCP tool replacing 3 separate tools
+- HTTP MCP transport with daemon mode
+- Dual Node.js/Bun runtime support
+- Collection include/exclude management
 
 ---
 
-## References
-
-- **Repository**: https://github.com/tobi/qmd
-- **Previous Analysis**: docs/influence/qmd.md (2026-01-26)
-- **Claude Code Plugins**: https://code.claude.com/docs/en/plugins.md
-- **MCP Spec**: https://modelcontextprotocol.io
-- **sqlite-vec**: https://github.com/asg017/sqlite-vec
-- **RRF Paper**: Cormack et al., "Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods" (2009)
-
----
-
-*Analysis completed: 2026-02-02*
+*Analysis completed: 2026-03-02*
 *Analyst: Claude Code*
-*Review Status: Draft — Updated from 2026-01-26 analysis with new findings on plugin distribution, fine-tuned models, and MCP patterns*
+*Review Status: Draft*
