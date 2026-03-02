@@ -99,6 +99,14 @@ Source: QMD study (2026-03-02)
 
 Added `memory.list_projects` MCP tool. Shows global DB, current project, and discovers other projects from promoted facts/global fact paths with stats.
 
+### ~~8. Database Compact Command~~ ✅ Implemented 2026-03-02
+
+Added `claude-memory compact` command. Runs SQLite VACUUM with optional integrity check (`--check`). Supports `--scope` for global/project/all. Reports size before/after with savings.
+
+### ~~9. Fact Export Command~~ ✅ Implemented 2026-03-02
+
+Added `claude-memory export` command. Dumps facts with entities and provenance to JSON. Supports `--scope`, `--status` (active/all), `--output` (file), `--pretty`. Includes version metadata for import compatibility.
+
 ---
 
 ## Features to Avoid
@@ -165,4 +173,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-02 - Implemented: Background Processing for Hooks (--async), MCP Discovery Tools (memory.list_projects), Hook Error Classification, Dynamic MCP Server Instructions, Progressive Disclosure Documentation, Conversation Exclusion Markers.*
+*Last updated: 2026-03-02 - Implemented: Database Compact Command, Fact Export Command, Background Processing for Hooks (--async), MCP Discovery Tools (memory.list_projects), Hook Error Classification, Dynamic MCP Server Instructions, Progressive Disclosure Documentation, Conversation Exclusion Markers.*
