@@ -65,19 +65,15 @@ Source: QMD study (updated 2026-03-02)
 - **Consideration**: Only if users report issues with long transcripts
 - **Effort**: 2-3 days
 
-### 5. Background Processing for Hooks
+### ~~5. Background Processing for Hooks~~ ✅ Implemented 2026-03-02
 
-Source: episodic-memory study
-
-- **Value**: Non-blocking hooks for better UX
-- **Implementation**: `--async` flag on hook commands, fork and detach
-- **Trade-off**: Background process management complexity, potential race conditions
+`--async` flag on hook ingest/sweep/publish subcommands. Fork+detach for non-blocking execution, fallback to sync when fork unavailable.
 
 ---
 
 ## Low Priority / Defer
 
-### 6. Signal-Based Ingestion Filtering
+### 5. Signal-Based Ingestion Filtering
 
 Source: claude-supermemory study (2026-03-02)
 
@@ -88,7 +84,7 @@ Source: claude-supermemory study (2026-03-02)
 - **Trade-off**: May miss important but subtly-expressed facts. Our distiller already extracts structured facts, which inherently filters noise.
 - **Recommendation**: DEFER — Distiller handles this naturally
 
-### 7. HTTP MCP Transport
+### 6. HTTP MCP Transport
 
 Source: QMD study (2026-03-02)
 
@@ -99,15 +95,9 @@ Source: QMD study (2026-03-02)
 - **Trade-off**: Process management complexity
 - **Recommendation**: DEFER — Only if MCP startup latency becomes an issue
 
-### 8. MCP Discovery Tools
+### ~~7. MCP Discovery Tools~~ ✅ Implemented 2026-03-02
 
-Source: grepai study (2026-03-02)
-
-- **Value**: Let Claude discover available search scopes before querying
-- **Evidence**: grepai `mcp/server.go` — `grepai_list_workspaces`, `grepai_list_projects`
-- **Implementation**: Add `memory.list_projects` tool showing available databases with fact counts
-- **Effort**: 1 day
-- **Trade-off**: Minimal but low demand
+Added `memory.list_projects` MCP tool. Shows global DB, current project, and discovers other projects from promoted facts/global fact paths with stats.
 
 ---
 
@@ -175,4 +165,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-02 - Implemented: Hook Error Classification, Dynamic MCP Server Instructions, Progressive Disclosure Documentation, Conversation Exclusion Markers.*
+*Last updated: 2026-03-02 - Implemented: Background Processing for Hooks (--async), MCP Discovery Tools (memory.list_projects), Hook Error Classification, Dynamic MCP Server Instructions, Progressive Disclosure Documentation, Conversation Exclusion Markers.*
