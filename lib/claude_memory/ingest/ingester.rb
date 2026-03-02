@@ -23,6 +23,7 @@ module ClaudeMemory
 
         prepared = prepare_delta(session_id, transcript_path, project_path)
         return {status: :no_change, bytes_read: 0} if prepared.nil?
+        return {status: :skipped, bytes_read: 0, reason: "session_excluded"} if prepared == :excluded
 
         content_id = persist_content(source, session_id, transcript_path, prepared)
 
@@ -32,10 +33,21 @@ module ClaudeMemory
 
       private
 
+      # Tags that cause the entire delta to be skipped when present.
+      # Different from ContentSanitizer which strips tag content but keeps the rest.
+      EXCLUSION_TAGS = %w[no-memory private].freeze
+
       def prepare_delta(session_id, transcript_path, project_path)
         current_offset = @store.get_delta_cursor(session_id, transcript_path) || 0
         delta, new_offset = TranscriptReader.read_delta(transcript_path, current_offset)
         return nil if delta.nil?
+
+        # Skip entire delta if session exclusion markers are present
+        if session_excluded?(delta)
+          # Advance cursor so we don't re-check this content
+          @store.update_delta_cursor(session_id, transcript_path, new_offset)
+          return :excluded
+        end
 
         metadata = @metadata_extractor.extract(delta)
         tool_calls = @tool_filter.filter(@tool_extractor.extract(delta))
@@ -147,6 +159,10 @@ module ClaudeMemory
 
         # Ingest if we haven't seen this version before
         existing.nil?
+      end
+
+      def session_excluded?(text)
+        EXCLUSION_TAGS.any? { |tag| text.include?("<#{tag}>") }
       end
 
       def detect_project_path

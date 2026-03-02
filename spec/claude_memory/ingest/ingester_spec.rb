@@ -90,7 +90,7 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
     end
 
     context "privacy tag stripping" do
-      it "strips private tags from ingested content" do
+      it "excludes entire session when <private> tag is present" do
         File.write(transcript_path, "Public <private>Secret API key</private> Public")
 
         result = ingester.ingest(
@@ -99,12 +99,12 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
           transcript_path: transcript_path
         )
 
-        item = store.content_items.where(id: result[:content_id]).first
-        expect(item[:raw_text]).to eq("Public  Public")
-        expect(item[:raw_text]).not_to include("Secret API key")
+        expect(result[:status]).to eq(:skipped)
+        expect(result[:reason]).to eq("session_excluded")
+        expect(store.content_items.count).to eq(0)
       end
 
-      it "strips multiple privacy tag types" do
+      it "excludes entire session when exclusion tags are present" do
         File.write(transcript_path, "A <private>X</private> B <no-memory>Y</no-memory> C <secret>Z</secret> D")
 
         result = ingester.ingest(
@@ -113,11 +113,24 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
           transcript_path: transcript_path
         )
 
+        # <private> triggers session exclusion before <secret> stripping occurs
+        expect(result[:status]).to eq(:skipped)
+        expect(result[:reason]).to eq("session_excluded")
+      end
+
+      it "strips secret tags (non-exclusion) from ingested content" do
+        File.write(transcript_path, "Public <secret>API_KEY=abc123</secret> Content")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:status]).to eq(:ingested)
         item = store.content_items.where(id: result[:content_id]).first
-        expect(item[:raw_text]).to eq("A  B  C  D")
-        expect(item[:raw_text]).not_to include("X")
-        expect(item[:raw_text]).not_to include("Y")
-        expect(item[:raw_text]).not_to include("Z")
+        expect(item[:raw_text]).to eq("Public  Content")
+        expect(item[:raw_text]).not_to include("API_KEY")
       end
 
       it "strips claude-memory-context system tags" do
@@ -147,7 +160,7 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
         expect(item[:raw_text]).to eq("No privacy tags in this content")
       end
 
-      it "handles multiline private content" do
+      it "excludes entire session with multiline private content" do
         content = <<~TEXT
           Config:
           <private>
@@ -165,10 +178,67 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
           transcript_path: transcript_path
         )
 
-        item = store.content_items.where(id: result[:content_id]).first
-        expect(item[:raw_text]).not_to include("API_KEY")
-        expect(item[:raw_text]).not_to include("secret123")
-        expect(item[:raw_text]).to include("Public config")
+        expect(result[:status]).to eq(:skipped)
+        expect(result[:reason]).to eq("session_excluded")
+        expect(store.content_items.count).to eq(0)
+      end
+    end
+
+    context "session exclusion markers" do
+      it "skips ingestion when <no-memory> tag is present" do
+        File.write(transcript_path, "Some content <no-memory>DO NOT INDEX</no-memory> more content")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:status]).to eq(:skipped)
+        expect(result[:reason]).to eq("session_excluded")
+        expect(result[:bytes_read]).to eq(0)
+        expect(store.content_items.count).to eq(0)
+      end
+
+      it "skips ingestion when <private> tag is present" do
+        File.write(transcript_path, "Sensitive <private>secret data</private> session")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:status]).to eq(:skipped)
+        expect(result[:reason]).to eq("session_excluded")
+        expect(store.content_items.count).to eq(0)
+      end
+
+      it "advances cursor past excluded content" do
+        File.write(transcript_path, "<no-memory>skip this</no-memory>")
+
+        ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        # Cursor should advance so we don't re-check this content
+        cursor = store.get_delta_cursor("sess-123", transcript_path)
+        expect(cursor).to be > 0
+      end
+
+      it "still ingests content without exclusion markers" do
+        File.write(transcript_path, "Normal content without markers")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:status]).to eq(:ingested)
+        expect(store.content_items.count).to eq(1)
       end
     end
 

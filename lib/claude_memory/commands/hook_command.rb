@@ -76,8 +76,12 @@ module ClaudeMemory
           Hook::ExitCodes::SUCCESS
         when :skipped
           # Different reasons for skipping have different severity
-          if result[:reason] == "unchanged"
+          case result[:reason]
+          when "unchanged"
             stdout.puts "No new content to ingest"
+            Hook::ExitCodes::SUCCESS
+          when "session_excluded"
+            stdout.puts "Session excluded by privacy marker"
             Hook::ExitCodes::SUCCESS
           else
             # transcript_not_found or other skipped reasons

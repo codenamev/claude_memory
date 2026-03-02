@@ -53,6 +53,21 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
         expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
       end
 
+      it "returns SUCCESS (0) for session excluded by privacy marker" do
+        File.write(transcript_path, "Content <no-memory>DO NOT INDEX</no-memory> more")
+
+        payload = {
+          "session_id" => "sess-123",
+          "transcript_path" => transcript_path
+        }
+        stdin.string = JSON.generate(payload)
+
+        exit_code = command.call(["ingest", "--db", db_path])
+
+        expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+        expect(stdout.string).to include("excluded")
+      end
+
       it "returns WARNING (1) for skipped ingest (missing file)" do
         payload = {
           "session_id" => "sess-123",
