@@ -9,12 +9,13 @@ module ClaudeMemory
       SCOPE_PROJECT = "project"
 
       def call(args)
-        opts = parse_options(args, {scope: SCOPE_ALL, batch_size: 100, force: false}) do |o|
+        opts = parse_options(args, {scope: SCOPE_ALL, batch_size: 100, force: false, vec: false}) do |o|
           OptionParser.new do |parser|
             parser.banner = "Usage: claude-memory index [options]"
             parser.on("--scope SCOPE", "Scope: global, project, or all (default: all)") { |v| o[:scope] = v }
             parser.on("--batch-size SIZE", Integer, "Batch size (default: 100)") { |v| o[:batch_size] = v }
             parser.on("--force", "Re-index facts that already have embeddings") { o[:force] = true }
+            parser.on("--vec", "Backfill vec0 index from existing embeddings (no regeneration)") { o[:vec] = true }
           end
         end
         return 1 if opts.nil?
@@ -25,20 +26,27 @@ module ClaudeMemory
           return 1
         end
 
-        generator = Embeddings::Generator.new
-
-        if opts[:scope] == SCOPE_ALL || opts[:scope] == SCOPE_GLOBAL
-          index_database("global", Configuration.global_db_path, generator, opts)
+        if opts[:vec]
+          return vec_backfill(opts)
         end
 
-        if opts[:scope] == SCOPE_ALL || opts[:scope] == SCOPE_PROJECT
-          index_database("project", Configuration.project_db_path, generator, opts)
+        generator = Embeddings::Generator.new
+
+        scopes_for(opts[:scope]).each do |label, db_path|
+          index_database(label, db_path, generator, opts)
         end
 
         0
       end
 
       private
+
+      def scopes_for(scope)
+        pairs = []
+        pairs << ["global", Configuration.global_db_path] if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
+        pairs << ["project", Configuration.project_db_path] if scope == SCOPE_ALL || scope == SCOPE_PROJECT
+        pairs
+      end
 
       def index_database(label, db_path, generator, opts)
         unless File.exist?(db_path)
@@ -94,6 +102,11 @@ module ClaudeMemory
 
         stdout.puts "#{label.capitalize} database: Indexing #{facts.size} facts..."
 
+        vec_index = store.vector_index
+        if vec_index.available?
+          stdout.puts "  sqlite-vec available, dual-writing to vec0 index"
+        end
+
         processed = checkpoint ? checkpoint[:processed_items] : 0
         begin
           facts.each_slice(opts[:batch_size]) do |batch|
@@ -106,8 +119,11 @@ module ClaudeMemory
                 # Generate embedding
                 embedding = generator.generate(text)
 
-                # Store embedding
+                # Store embedding (JSON column)
                 store.update_fact_embedding(fact[:id], embedding)
+
+                # Dual-write to vec0 if available (insert_embedding manages vec_indexed_at)
+                vec_index.insert_embedding(fact[:id], embedding) if vec_index.available?
 
                 processed += 1
               end
@@ -135,6 +151,45 @@ module ClaudeMemory
         ensure
           store.close
         end
+      end
+
+      def vec_backfill(opts)
+        scopes_for(opts[:scope]).each do |label, db_path|
+          unless File.exist?(db_path)
+            stdout.puts "#{label.capitalize} database not found, skipping..."
+            next
+          end
+
+          store = Store::SQLiteStore.new(db_path)
+          begin
+            vec_index = store.vector_index
+
+            unless vec_index.available?
+              stderr.puts "#{label.capitalize}: sqlite-vec not available, cannot backfill"
+              next
+            end
+
+            total = store.facts.where(vec_indexed_at: nil).where(Sequel.~(embedding_json: nil)).where(status: "active").count
+            if total == 0
+              stdout.puts "#{label.capitalize} database: All embeddings already in vec0 index"
+              next
+            end
+
+            stdout.puts "#{label.capitalize} database: Backfilling #{total} facts to vec0..."
+            backfilled = 0
+            loop do
+              count = vec_index.backfill_batch!(limit: opts[:batch_size])
+              break if count == 0
+              backfilled += count
+              stdout.puts "  Backfilled #{backfilled}/#{total}..."
+            end
+            stdout.puts "  Done! #{backfilled} facts indexed in vec0"
+          ensure
+            store.close
+          end
+        end
+
+        0
       end
 
       def build_fact_text(fact, store)
