@@ -614,7 +614,7 @@ module ClaudeMemory
       end
 
       def db_stats(store)
-        {
+        stats = {
           exists: true,
           facts_total: store.facts.count,
           facts_active: store.facts.where(status: "active").count,
@@ -622,12 +622,18 @@ module ClaudeMemory
           open_conflicts: store.conflicts.where(status: "open").count,
           schema_version: store.schema_version
         }
+
+        vec_index = store.vector_index
+        stats[:vec_available] = vec_index.available?
+        stats[:vec_indexed] = vec_index.coverage_stats[:vec_indexed] if vec_index.available?
+
+        stats
       end
 
       def detailed_stats(store)
         active_facts = store.facts.where(status: "active").count
 
-        {
+        stats = {
           exists: true,
           facts: fact_stats(store, active_facts),
           entities: entity_stats(store),
@@ -636,6 +642,10 @@ module ClaudeMemory
           conflicts: conflict_stats(store),
           schema_version: store.schema_version
         }
+
+        stats[:vec] = vec_stats(store, active_facts)
+
+        stats
       end
 
       def fact_stats(store, active_facts)
@@ -698,6 +708,13 @@ module ClaudeMemory
           total_active_facts: active_facts,
           coverage_percentage: (facts_with_provenance * 100.0 / active_facts).round(1)
         }
+      end
+
+      def vec_stats(store, _active_facts)
+        vec_index = store.vector_index
+        result = {available: vec_index.available?}
+        result.merge!(vec_index.coverage_stats) if vec_index.available?
+        result
       end
 
       def conflict_stats(store)

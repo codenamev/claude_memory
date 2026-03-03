@@ -20,6 +20,7 @@ module ClaudeMemory
         checks = [
           Checks::DatabaseCheck.new(manager.global_db_path, "global"),
           Checks::DatabaseCheck.new(manager.project_db_path, "project"),
+          Checks::VecCheck.new,
           Checks::SnapshotCheck.new,
           Checks::ClaudeMdCheck.new,
           Checks::HooksCheck.new
