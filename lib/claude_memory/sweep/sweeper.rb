@@ -31,6 +31,8 @@ module ClaudeMemory
         expire_disputed_facts if within_budget?
         prune_orphaned_provenance if within_budget?
         prune_old_content if within_budget?
+        backfill_vec_index if within_budget?
+        cleanup_vec_expired if within_budget?
         checkpoint_wal if within_budget?
 
         @stats[:elapsed_seconds] = Time.now - @start_time
@@ -81,6 +83,34 @@ module ClaudeMemory
           .where { ingested_at < cutoff }
           .exclude(id: referenced_ids)
           .delete
+      end
+
+      def with_vec_index
+        vec_index = @store.vector_index
+        return unless vec_index.available?
+        yield vec_index
+      end
+
+      def backfill_vec_index
+        with_vec_index do |vec_index|
+          @stats[:vec_backfilled] = vec_index.backfill_batch!(limit: 100)
+        end
+      end
+
+      def cleanup_vec_expired
+        with_vec_index do |vec_index|
+          # Remove vec0 entries for superseded/expired facts
+          # (remove_embedding manages vec_indexed_at)
+          stale_ids = @store.facts
+            .where(status: %w[superseded expired])
+            .where(Sequel.~(vec_indexed_at: nil))
+            .select(:id)
+            .limit(100)
+            .map { |r| r[:id] }
+
+          stale_ids.each { |fact_id| vec_index.remove_embedding(fact_id) }
+          @stats[:vec_cleaned] = stale_ids.size
+        end
       end
 
       def checkpoint_wal
