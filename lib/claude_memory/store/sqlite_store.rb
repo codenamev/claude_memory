@@ -10,7 +10,7 @@ require "sequel/adapters/extralite"
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 11
+      SCHEMA_VERSION = 12
 
       attr_reader :db
 
@@ -86,6 +86,10 @@ module ClaudeMemory
 
       def close
         @db.disconnect
+      end
+
+      def vector_index
+        @vector_index ||= Index::VectorIndex.new(self)
       end
 
       # Checkpoint the WAL file to prevent unlimited growth
