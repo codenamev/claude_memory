@@ -529,6 +529,33 @@ module ClaudeMemory
       # Generate query embedding
       query_embedding = @embedding_generator.generate(query_text)
 
+      # Fast path: use sqlite-vec KNN when available
+      vec_index = store.vector_index
+      if vec_index.available?
+        return search_by_vector_native(store, vec_index, query_embedding, limit, source)
+      end
+
+      # Fallback: JSON + Ruby cosine similarity
+      search_by_vector_fallback(store, query_embedding, limit, source)
+    end
+
+    def search_by_vector_native(store, vec_index, query_embedding, limit, source)
+      matches = vec_index.search(query_embedding, k: limit)
+      return [] if matches.empty?
+
+      fact_ids = matches.map { |m| m[:fact_id] }
+      facts_by_id = batch_find_facts(store, fact_ids)
+      receipts_by_fact_id = batch_find_receipts(store, fact_ids)
+
+      Core::ResultBuilder.build_results_with_scores(
+        matches,
+        facts_by_id: facts_by_id,
+        receipts_by_fact_id: receipts_by_fact_id,
+        source: source
+      )
+    end
+
+    def search_by_vector_fallback(store, query_embedding, limit, source)
       # Load facts with embeddings
       facts_data = store.facts_with_embeddings(limit: 5000)
       return [] if facts_data.empty?
