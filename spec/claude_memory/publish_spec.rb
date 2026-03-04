@@ -186,9 +186,22 @@ RSpec.describe ClaudeMemory::Publish do
         expect(first[:status]).to eq(:updated)
 
         # Simulate time passing but no content change
-        sleep 0.01
+        sleep 1.1
         second = publish.publish!(mode: :shared)
         expect(second[:status]).to eq(:unchanged)
+      end
+
+      it "does not rewrite when file has trailing whitespace differences" do
+        create_fact("convention", "test rule")
+        publish.publish!(mode: :shared)
+
+        # Simulate an editor or git hook stripping trailing whitespace
+        path = ".claude/rules/claude_memory.generated.md"
+        content = File.read(path)
+        File.write(path, content.gsub(/[[:blank:]]+$/, ""))
+
+        result = publish.publish!(mode: :shared)
+        expect(result[:status]).to eq(:unchanged)
       end
     end
   end
