@@ -19,3 +19,6 @@ mise.toml
 .claude/memory.sqlite3-wal
 .claude/mind.*
 .claude/settings*.json
+
+# Pre-compiled gems
+*.gem

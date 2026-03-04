@@ -118,7 +118,9 @@ GEM
     unicode-emoji (4.2.0)
 
 PLATFORMS
+  arm64-darwin
   arm64-darwin-24
+  x86_64-darwin
   x86_64-darwin-25
   x86_64-linux
 
