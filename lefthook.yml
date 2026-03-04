@@ -17,6 +17,10 @@ pre-commit:
         fi
     quality-review:
       run: |
+        if [ -n "$CLAUDECODE" ]; then
+          echo "Inside Claude Code session, skipping quality-review hook (run /review-commit manually)"
+          exit 0
+        fi
         staged_ruby=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rb$' || true)
         if [ -n "$staged_ruby" ]; then
           echo "Running quality review on staged changes..."

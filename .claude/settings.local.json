@@ -28,7 +28,14 @@
       "mcp__plugin_claude-memory_memory__memory_architecture",
       "mcp__plugin_claude-memory_memory__memory_recall_index",
       "Bash(./bin/run-evals:*)",
-      "WebSearch"
+      "WebSearch",
+      "mcp__memory__memory_check_setup",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(export PATH=\"$HOME/.bun/bin:/usr/bin:/bin:$PATH\")",
+      "Bash(qmd search:*)",
+      "Skill(study-repo)",
+      "WebFetch(domain:www.rubydoc.info)",
+      "Bash(git status:*)"
     ]
   },
   "enableAllProjectMcpServers": true
