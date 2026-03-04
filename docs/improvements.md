@@ -15,21 +15,9 @@ This document contains only unimplemented improvements. Completed items are remo
 
 ## High Priority
 
-### 1. Native Vector Storage (sqlite-vec) ⭐ CRITICAL
+### ~~1. Native Vector Storage (sqlite-vec)~~ ✅ Implemented 2026-03-04
 
-Source: QMD, episodic-memory, grepai (all three use sqlite-vec)
-
-- **Value**: 10-100x faster KNN queries, enables larger fact databases
-- **Validation**: Now confirmed in 3/5 studied projects — QMD (`db.ts:52`), episodic-memory (`db.ts:5,51`), grepai (via GOB but moving to sqlite-vec). This is the ecosystem standard.
-- **Current Issue**: JSON embedding storage requires loading all facts, O(n) Ruby similarity calculation
-- **Solution**: sqlite-vec extension with native C KNN queries
-- **Implementation**:
-  - Schema migration v12: Create `facts_vec` virtual table using `vec0`
-  - Two-step query pattern (avoid JOINs — they hang with vec tables! Confirmed by QMD `store.ts:1912-1915`)
-  - Update `Embeddings::Similarity` class
-  - Backfill existing embeddings
-- **Trade-off**: Adds native dependency (well-maintained, cross-platform, v0.1.7-alpha.2)
-- **Effort**: 3-5 days
+Schema migration v12 with `facts_vec` virtual table (vec0, cosine distance). Two-step query pattern (KNN → batch hydration). VectorIndex class with native C KNN search, fallback to O(n) Ruby. Backfill via `claude-memory index --vec` and sweeper. Doctor check with coverage stats. Cross-platform: arm64-darwin, x86_64-darwin, x86_64-linux.
 
 ### 2. Claude Code Plugin Distribution Format
 
@@ -173,4 +161,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-02 - Implemented: Database Compact Command, Fact Export Command, Background Processing for Hooks (--async), MCP Discovery Tools (memory.list_projects), Hook Error Classification, Dynamic MCP Server Instructions, Progressive Disclosure Documentation, Conversation Exclusion Markers.*
+*Last updated: 2026-03-04 - Marked sqlite-vec (Native Vector Storage) as implemented. Previous: Database Compact Command, Fact Export Command, Background Processing for Hooks (--async), MCP Discovery Tools (memory.list_projects), Hook Error Classification, Dynamic MCP Server Instructions, Progressive Disclosure Documentation, Conversation Exclusion Markers.*
