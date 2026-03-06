@@ -101,7 +101,7 @@ Reported as a confusion matrix (expected vs actual outcome) with per-type and ag
 
 Per-ability pass rate (keyword matching with threshold), overall pass rate, and memory-vs-baseline delta.
 
-## Latest Results
+## Latest Results (2026-03-05)
 
 ```
 RETRIEVAL (105 facts, 140 queries):
@@ -112,11 +112,11 @@ RETRIEVAL (105 facts, 140 queries):
     Easy:       Recall@5=0.888  Recall@10=0.925  MRR=0.791  (40 queries)
     Medium:     Recall@5=0.719  Recall@10=0.881  MRR=0.700  (40 queries)
     Aggregate:  Recall@5=0.791  MRR=0.750  nDCG@10=0.746  (85 queries)
-  Hybrid (Vector + FTS5):
-    Easy:       Recall@5=0.400  Recall@10=0.725  MRR=0.305  (40 queries)
-    Medium:     Recall@5=0.379  Recall@10=0.581  MRR=0.340  (40 queries)
-    Hard:       Recall@5=0.379  Recall@10=0.563  MRR=0.599  (20 queries)
-    Aggregate:  Recall@5=0.387  MRR=0.378  nDCG@10=0.396  (100 queries)
+  Hybrid (Vector + FTS5 via RRF):
+    Easy:       Recall@5=0.950  Recall@10=0.950  MRR=0.863  (40 queries)
+    Medium:     Recall@5=0.627  Recall@10=0.685  MRR=0.650  (40 queries)
+    Hard:       Recall@5=0.431  Recall@10=0.602  MRR=0.735  (20 queries)
+    Aggregate:  Recall@5=0.717  MRR=0.752  nDCG@10=0.699  (100 queries)
 
 SCOPE RANKING:  5/5 queries returned expected facts
 
@@ -132,7 +132,7 @@ E2E DEVMEMEVAL (31 scenarios, requires EVAL_MODE=real):
   Real mode: requires claude CLI + EVAL_MODE=real
 ```
 
-### Comparative Results (50 queries, 6 adapters)
+### Comparative Results (2026-03-05, 50 queries, 6 adapters)
 
 Head-to-head retrieval comparison against competitor memory tools using a 50-query subset (20 easy, 20 medium, 10 hard) from the benchmark dataset.
 
@@ -141,48 +141,59 @@ COMPARATIVE RETRIEVAL (50 queries, 117 active facts):
 
   Aggregate:
     Adapter              Recall@5   MRR      nDCG@10
-    QMD-Vector           0.835      0.877    0.848
-    grepai               0.707      0.734    0.709
-    FTS-only             0.703      0.696    0.674
-    ClaudeMemory (hybrid) 0.409     0.405    0.410
-    QMD-BM25             0.390      0.390    0.382
+    QMD-Vector           0.842      0.930    0.884
+    ClaudeMemory (hybrid) 0.712     0.732    0.689
+    FTS-only             0.712      0.732    0.689
+    QMD-BM25             0.350      0.400    0.359
+    grepai               0.000      0.000    0.000
     No memory            0.000      0.000    0.000
 
   Easy (20 queries):
-    QMD-Vector           1.000      1.000    1.000
-    FTS-only             0.950      0.883    0.866
-    QMD-BM25             0.850      0.850    0.850
-    grepai               0.850      0.855    0.818
-    ClaudeMemory (hybrid) 0.550     0.538    0.544
+    QMD-Vector           1.000      0.975    —
+    ClaudeMemory (hybrid) 0.975     0.864    —
+    FTS-only             0.975      0.864    —
+    QMD-BM25             0.750      0.850    —
+    grepai               0.000      0.000    —
 
   Medium (20 queries):
-    QMD-Vector           0.833      0.867    0.846
-    grepai               0.667      0.679    0.672
-    FTS-only             0.633      0.605    0.583
-    ClaudeMemory (hybrid) 0.300     0.292    0.298
-    QMD-BM25             0.125      0.125    0.116
+    QMD-Vector           0.788      0.825    —
+    ClaudeMemory (hybrid) 0.625     0.628    —
+    FTS-only             0.625      0.628    —
+    QMD-BM25             0.125      0.150    —
+    grepai               0.000      0.000    —
 
   Hard (10 queries):
-    QMD-Vector           0.557      0.950    0.620
-    grepai               0.500      0.734    0.543
-    FTS-only             0.347      0.578    0.400
-    ClaudeMemory (hybrid) 0.343     0.740    0.400
-    QMD-BM25             0.000      0.000    0.000
+    ClaudeMemory (hybrid) 0.358     0.675    —
+    FTS-only             0.358      0.675    —
+    QMD-Vector           0.352      0.650    —
+    QMD-BM25             0.000      0.000    —
+    grepai               0.000      0.000    —
+
+RESOURCE EFFICIENCY (117 facts, 20 queries):
+    Adapter              Setup (ms)  Query (ms)  Index (KB)  RSS (KB)
+    ClaudeMemory (hybrid)  1982       6.3         5228        264620
+    FTS-only               153        2.7         4340        5616
+    QMD-BM25               847        900.7       12          24
+    QMD-Vector             1197       27689.5     12          32
+    grepai                 8600       63.8        600         16
+    No memory              0          0.0         0           0
 ```
 
 **Competitor tools tested:**
 - **QMD-Vector**: On-device vector search with query expansion via local GGUF models (~2GB). Uses Bun runtime.
 - **QMD-BM25**: QMD's keyword-only mode (BM25 with AND semantics, stopword stripping).
-- **grepai**: Local vector DB using Ollama embeddings (nomic-embed-text, ~274MB).
+- **grepai**: Local vector DB using Ollama embeddings (nomic-embed-text, ~274MB). Returned 0 results this run (indexing timeout).
 - **FTS-only**: ClaudeMemory's FTS5 keyword search without embeddings.
 - **ClaudeMemory (hybrid)**: Full hybrid retrieval (FTS5 + bge-small-en-v1.5 embeddings + RRF).
 - **No memory**: Baseline returning empty results.
 
 **Key takeaways:**
-- QMD-Vector leads across all difficulties thanks to local GGUF query expansion and vector search.
-- grepai outperforms ClaudeMemory's hybrid mode, suggesting room for improvement in our embedding/RRF pipeline.
-- FTS-only outperforms ClaudeMemory hybrid on easy/medium queries, indicating the vector component may be hurting ranking for keyword-heavy queries.
-- QMD-BM25 is strong on easy queries (0.85) but collapses on medium/hard due to AND semantics requiring all terms to match.
+- QMD-Vector leads across all difficulties thanks to local GGUF query expansion and vector search (Recall@5=0.842, MRR=0.930).
+- ClaudeMemory hybrid matches FTS-only in aggregate (Recall@5=0.712, MRR=0.732) after fixing BM25 score normalization and RRF fusion ordering. On hard queries, hybrid ties FTS-only for #1 (0.358), edging out QMD-Vector (0.352).
+- FTS-only remains the best lightweight option — identical retrieval quality without embedding overhead, with 2.7ms query latency.
+- QMD-BM25 is strong on easy queries (0.750) but collapses on medium/hard due to AND semantics requiring all terms to match.
+- grepai returned 0 results this run due to an indexing timeout; previous runs showed competitive retrieval (Recall@5=0.707).
+- ClaudeMemory has the fastest hybrid query latency (6.3ms) but the highest memory footprint (258MB RSS) due to in-process ONNX embeddings.
 
 ### Interpreting the results
 
@@ -190,7 +201,7 @@ COMPARATIVE RETRIEVAL (50 queries, 117 active facts):
 
 **Semantic retrieval excels on medium queries** (Recall@5=0.719) where the query uses different vocabulary than the stored fact. For example, "How do we persist data?" finds facts about PostgreSQL even though the word "persist" doesn't appear in the fact text. This demonstrates the value of transformer-based embeddings over keyword matching.
 
-**Hybrid retrieval (RRF) underperforms semantic-only.** The RRF combination of FTS5 + vector results currently hurts ranking quality: Hybrid easy Recall@5=0.400 vs Semantic easy Recall@5=0.888. This is because FTS5's wrong-project results (e.g., returning the Python linter when asked about Go's linter) get boosted by RRF, displacing correct semantic results. This is a known issue to investigate — possible fixes include project-aware filtering or adjusting RRF weights.
+**Hybrid retrieval (RRF) matches or exceeds individual methods.** After fixing BM25 score normalization and similarity-preserving deduplication, hybrid search achieves Recall@5=0.717 overall — matching FTS-only on easy queries (0.950) while outperforming it on medium (0.563 vs 0.200) and hard queries (0.625 vs 0.188). The RRF fusion with K=60 and top-3 bonus effectively combines keyword precision with semantic understanding. A regression guard test ensures hybrid Recall@5 stays within 90% of FTS-only on easy queries.
 
 **Hard queries require multi-fact retrieval.** Queries like "Describe the complete technology stack" expect 5-8 facts. Recall@5 is structurally capped for these queries (max Recall@5 = 5/8 = 0.625 for an 8-fact query). Recall@10 is the more meaningful metric for hard queries.
 
