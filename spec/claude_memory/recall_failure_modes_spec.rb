@@ -51,7 +51,8 @@ RSpec.describe "Recall Failure Modes" do
         )
 
         # Simulate global database failure
-        allow(manager).to receive(:global_store).and_raise(Sequel::DatabaseError.new("Connection lost"))
+        allow(manager).to receive(:store_for_scope).with("project").and_call_original
+        allow(manager).to receive(:store_for_scope).with("global").and_raise(Sequel::DatabaseError.new("Connection lost"))
 
         # Currently raises error - future improvement would be to gracefully degrade
         expect {
@@ -70,10 +71,10 @@ RSpec.describe "Recall Failure Modes" do
       end
     end
 
-    context "when store returns nil" do
-      it "handles nil store gracefully" do
-        allow(manager).to receive(:project_store).and_return(nil)
-        allow(manager).to receive(:global_store).and_return(nil)
+    context "when databases do not exist on disk" do
+      it "handles missing databases gracefully" do
+        allow(manager).to receive(:project_exists?).and_return(false)
+        allow(manager).to receive(:global_exists?).and_return(false)
 
         results = recall.query("test", scope: "all")
         expect(results).to eq([])

@@ -44,19 +44,8 @@ module ClaudeMemory
       end
 
       def query_store(source_label, &operation)
-        store = (source_label == :project) ? @manager.project_store : @manager.global_store
-        return [] unless store
-
-        ensure_store!(source_label)
+        store = @manager.store_for_scope(source_label.to_s)
         operation.call(store, source_label)
-      end
-
-      def ensure_store!(source_label)
-        if source_label == :project
-          @manager.ensure_project!
-        else
-          @manager.ensure_global!
-        end
       end
     end
   end

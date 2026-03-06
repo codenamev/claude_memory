@@ -9,10 +9,8 @@ RSpec.describe ClaudeMemory::Recall::DualQueryTemplate do
     double("StoreManager").tap do |m|
       allow(m).to receive(:project_exists?).and_return(true)
       allow(m).to receive(:global_exists?).and_return(true)
-      allow(m).to receive(:project_store).and_return(project_store)
-      allow(m).to receive(:global_store).and_return(global_store)
-      allow(m).to receive(:ensure_project!)
-      allow(m).to receive(:ensure_global!)
+      allow(m).to receive(:store_for_scope).with("project").and_return(project_store)
+      allow(m).to receive(:store_for_scope).with("global").and_return(global_store)
     end
   end
 
@@ -31,9 +29,9 @@ RSpec.describe ClaudeMemory::Recall::DualQueryTemplate do
         )
       end
 
-      it "ensures both stores" do
-        expect(manager).to receive(:ensure_project!)
-        expect(manager).to receive(:ensure_global!)
+      it "initializes stores via store_for_scope" do
+        expect(manager).to receive(:store_for_scope).with("project")
+        expect(manager).to receive(:store_for_scope).with("global")
 
         template.execute(scope: "all") { |store, source| [] }
       end
@@ -51,7 +49,7 @@ RSpec.describe ClaudeMemory::Recall::DualQueryTemplate do
       end
 
       it "does not query global store" do
-        expect(manager).not_to receive(:global_store)
+        expect(manager).not_to receive(:store_for_scope).with("global")
 
         template.execute(scope: "project") { |store, source| [] }
       end
@@ -69,7 +67,7 @@ RSpec.describe ClaudeMemory::Recall::DualQueryTemplate do
       end
 
       it "does not query project store" do
-        expect(manager).not_to receive(:project_store)
+        expect(manager).not_to receive(:store_for_scope).with("project")
 
         template.execute(scope: "global") { |store, source| [] }
       end
@@ -103,22 +101,6 @@ RSpec.describe ClaudeMemory::Recall::DualQueryTemplate do
 
         expect(results).to contain_exactly(
           {store: project_store, source: :project}
-        )
-      end
-    end
-
-    context "when store returns nil" do
-      before do
-        allow(manager).to receive(:project_store).and_return(nil)
-      end
-
-      it "skips nil stores" do
-        results = template.execute(scope: "all") do |store, source|
-          [{store: store, source: source}]
-        end
-
-        expect(results).to contain_exactly(
-          {store: global_store, source: :global}
         )
       end
     end
