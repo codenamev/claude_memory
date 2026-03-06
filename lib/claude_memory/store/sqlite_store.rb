@@ -467,6 +467,12 @@ module ClaudeMemory
         # Handle backward compatibility: databases created with old migration system
         sync_legacy_schema_version!
 
+        # Skip migration if the database is already ahead of this gem's version.
+        # This happens when a newer gem version migrated the DB and an older
+        # installed gem (e.g. via hooks) tries to open it.
+        current = current_schema_version
+        return if current && current > SCHEMA_VERSION
+
         # Run Sequel migrations to bring database to target version
         Sequel::Migrator.run(@db, migrations_path, target: SCHEMA_VERSION)
 
@@ -504,6 +510,11 @@ module ClaudeMemory
           @db[:schema_info].delete
           @db[:schema_info].insert(version: meta_version)
         end
+      end
+
+      def current_schema_version
+        return nil unless @db.table_exists?(:schema_info)
+        @db[:schema_info].get(:version)
       end
 
       def set_meta(key, value)

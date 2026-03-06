@@ -35,6 +35,28 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore do
     end
   end
 
+  describe "forward-migrated database compatibility" do
+    it "opens a database with a higher schema version without error" do
+      # Simulate a DB migrated by a newer gem version
+      store.db[:schema_info].update(version: described_class::SCHEMA_VERSION + 2)
+      store.close
+
+      expect { described_class.new(db_path) }.not_to raise_error
+    end
+
+    it "preserves the higher schema version" do
+      future_version = described_class::SCHEMA_VERSION + 2
+      store.db[:schema_info].update(version: future_version)
+      store.db[:meta].insert_conflict(target: :key, update: {value: future_version.to_s})
+        .insert(key: "schema_version", value: future_version.to_s)
+      store.close
+
+      store2 = described_class.new(db_path)
+      expect(store2.schema_version).to eq(future_version)
+      store2.close
+    end
+  end
+
   describe "table existence" do
     %w[meta content_items delta_cursors entities entity_aliases facts provenance fact_links conflicts].each do |table|
       it "creates #{table} table" do
