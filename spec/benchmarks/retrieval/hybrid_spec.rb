@@ -177,4 +177,48 @@ RSpec.describe "Hybrid Retrieval Accuracy", :benchmark do
       expect(all_recall5).not_to be_empty
     end
   end
+
+  describe "hybrid vs FTS-only regression guard" do
+    let(:fts_queries) do
+      all_queries.select { |q| q["tests"]&.include?("fts5") && q["difficulty"] == "easy" }
+    end
+
+    it "hybrid Recall@5 on easy queries is not worse than FTS-only" do
+      recall = ClaudeMemory::Recall.new(
+        builder.store,
+        fts: builder.fts,
+        embedding_generator: embedding_generator
+      )
+
+      hybrid_scores = []
+      fts_scores = []
+
+      fts_queries.each do |query_data|
+        expected_db_ids = builder.resolve_ids(query_data["expected_facts"] || [])
+        next if expected_db_ids.empty?
+
+        # Hybrid (mode: :both)
+        hybrid_results = recall.query_semantic(query_data["query"], limit: 10, scope: "all", mode: :both)
+        hybrid_ids = hybrid_results.filter_map { |r| r.is_a?(Hash) ? r[:fact]&.[](:id) : nil }
+        hybrid_scores << recall_at_k(hybrid_ids, expected_db_ids, 5)
+
+        # FTS-only (mode: :text)
+        fts_results = recall.query_semantic(query_data["query"], limit: 10, scope: "all", mode: :text)
+        fts_ids = fts_results.filter_map { |r| r.is_a?(Hash) ? r[:fact]&.[](:id) : nil }
+        fts_scores << recall_at_k(fts_ids, expected_db_ids, 5)
+      end
+
+      next if hybrid_scores.empty?
+
+      avg_hybrid = hybrid_scores.sum / hybrid_scores.size
+      avg_fts = fts_scores.sum / fts_scores.size
+
+      puts "  Regression guard: Hybrid easy Recall@5=#{avg_hybrid.round(3)} vs FTS-only=#{avg_fts.round(3)}"
+
+      # Hybrid must not regress below 90% of FTS-only performance
+      expect(avg_hybrid).to be >= (avg_fts * 0.9),
+        "Hybrid Recall@5 (#{avg_hybrid.round(3)}) fell below 90% of FTS-only (#{avg_fts.round(3)}). " \
+        "The vector component may be hurting ranking."
+    end
+  end
 end

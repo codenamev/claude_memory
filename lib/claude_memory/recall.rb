@@ -499,7 +499,8 @@ module ClaudeMemory
       results = template.execute(scope: scope, limit: limit) do |store, source|
         query_semantic_single(store, text, limit: limit * 3, mode: mode, source: source)
       end
-      dedupe_and_sort(results, limit)
+      # Use similarity-preserving dedupe (not source/time sort) to keep RRF ordering
+      Core::FactRanker.dedupe_by_fact_id(results, limit)
     end
 
     def query_semantic_legacy(text, limit:, scope:, mode:)
@@ -583,33 +584,59 @@ module ClaudeMemory
     end
 
     def search_by_fts(store, query_text, limit, source)
-      # Use existing FTS search infrastructure
       fts = Index::LexicalFTS.new(store)
-      content_ids = fts.search(query_text, limit: limit * 2)
+      ranked_results = fts.search_with_ranks(query_text, limit: limit * 2)
 
-      return [] if content_ids.empty?
+      return [] if ranked_results.empty?
 
-      # Find facts from content items
-      fact_ids = store.provenance
+      content_ids = ranked_results.map { |r| r[:content_item_id] }
+
+      # Map content_item_ids to fact_ids, preserving FTS rank order
+      provenance_rows = store.provenance
         .where(content_item_id: content_ids)
-        .select(:fact_id)
-        .distinct
-        .map { |row| row[:fact_id] }
+        .select(:fact_id, :content_item_id)
+        .all
 
-      return [] if fact_ids.empty?
+      content_to_facts = provenance_rows.group_by { |r| r[:content_item_id] }
 
-      # Batch fetch facts
+      # Build ordered fact list with normalized BM25 scores
+      # FTS5 rank values are negative (more negative = better match)
+      ranks = ranked_results.map { |r| r[:rank] }
+      min_rank = ranks.min # Most negative = best
+      max_rank = ranks.max # Least negative = worst
+      range = (max_rank - min_rank).abs
+
+      seen_fact_ids = Set.new
+      scored_matches = []
+
+      ranked_results.each do |r|
+        similarity = if range > 0
+          # Normalize: best rank → 1.0, worst rank → 0.1
+          0.1 + 0.9 * ((max_rank - r[:rank]).abs / range)
+        else
+          0.8 # Single result gets a reasonable score
+        end
+
+        fact_ids = content_to_facts[r[:content_item_id]]&.map { |p| p[:fact_id] } || []
+        fact_ids.each do |fid|
+          next if seen_fact_ids.include?(fid)
+          seen_fact_ids.add(fid)
+          scored_matches << {fact_id: fid, similarity: similarity}
+        end
+      end
+
+      return [] if scored_matches.empty?
+
+      fact_ids = scored_matches.map { |m| m[:fact_id] }
       facts_by_id = batch_find_facts(store, fact_ids)
       receipts_by_fact_id = batch_find_receipts(store, fact_ids)
 
-      results = Core::ResultBuilder.build_results(
-        fact_ids,
+      Core::ResultBuilder.build_results_with_scores(
+        scored_matches,
         facts_by_id: facts_by_id,
         receipts_by_fact_id: receipts_by_fact_id,
-        source: source,
-        similarity: 0.5  # Default score for FTS results
-      )
-      results.take(limit)
+        source: source
+      ).take(limit)
     end
 
     def merge_search_results(vector_results, text_results, limit)
