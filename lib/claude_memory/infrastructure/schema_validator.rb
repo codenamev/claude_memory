@@ -21,6 +21,9 @@ module ClaudeMemory
         operation_progress: %i[id operation_type scope status started_at]
       }.freeze
 
+      # sqlite-vec virtual table prefix; all internal tables (chunks, rowids, etc.) share this
+      VEC_TABLE_PREFIX = "facts_vec"
+
       CRITICAL_INDEXES = %i[
         idx_facts_predicate idx_facts_subject idx_facts_status idx_facts_scope
         idx_facts_project idx_provenance_fact idx_content_items_session
@@ -184,9 +187,10 @@ module ClaudeMemory
         now = Time.now.utc.iso8601
         version = @store.schema_version
 
-        # Get table counts for snapshot
+        # Get table counts for snapshot (skip virtual tables that need extensions)
         table_counts = {}
         @store.db.tables.each do |table|
+          next if table.to_s.start_with?(VEC_TABLE_PREFIX)
           table_counts[table.to_s] = @store.db[table].count
         end
 
