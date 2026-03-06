@@ -26,6 +26,9 @@ jobs:
           ruby-version: '4.0.1'
           bundler-cache: true
 
+      - name: Install gem locally
+        run: bundle exec rake install
+
       - name: Install Claude CLI
         run: |
           npm install -g @anthropic-ai/claude-code
@@ -107,14 +110,14 @@ jobs:
             real-eval-results.json
           retention-days: 30
 
-      - name: Comment on release (if triggered by release)
+      - name: Update release with eval results (if triggered by release)
         if: github.event_name == 'release' && always()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
 
-            let body = '## 🧪 Real Eval Validation\n\n';
+            let evalSection = '\n\n---\n\n## 🧪 Real Eval Validation\n\n';
 
             if (fs.existsSync('real-eval-results.json')) {
               const results = JSON.parse(fs.readFileSync('real-eval-results.json', 'utf8'));
@@ -126,29 +129,30 @@ jobs:
               const realTests = total - results.summary.pending_count;
               const estimatedCost = (realTests * 0.02).toFixed(2);
 
-              body += `**Results:** ${passed}/${total} passed`;
+              evalSection += `**Results:** ${passed}/${total} passed`;
               if (failed > 0) {
-                body += ` ⚠️ ${failed} failed`;
+                evalSection += ` ⚠️ ${failed} failed`;
               } else {
-                body += ' ✅';
+                evalSection += ' ✅';
               }
-              body += `\n**Duration:** ${duration}s\n`;
-              body += `**Estimated Cost:** ~$${estimatedCost}\n\n`;
+              evalSection += `\n**Duration:** ${duration}s\n`;
+              evalSection += `**Estimated Cost:** ~$${estimatedCost}\n\n`;
 
               if (failed > 0) {
-                body += '⚠️ Some real eval tests failed. Check the workflow logs for details.\n';
+                evalSection += '⚠️ Some real eval tests failed. Check the workflow logs for details.\n';
               } else {
-                body += '✅ All real eval tests passed! Memory is working as expected.\n';
+                evalSection += '✅ All real eval tests passed! Memory is working as expected.\n';
               }
             } else {
-              body += '⚠️ Real eval tests did not complete. Check workflow logs.\n';
+              evalSection += '⚠️ Real eval tests did not complete. Check workflow logs.\n';
             }
 
-            body += `\n[View full results](${context.payload.release.html_url})`;
+            const release = context.payload.release;
+            const existingBody = release.body || '';
 
-            github.rest.issues.createComment({
-              issue_number: context.payload.release.id,
+            github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: body
+              release_id: release.id,
+              body: existingBody + evalSection
             });
