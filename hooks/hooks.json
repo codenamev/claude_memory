@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-runner.sh ingest",
+            "timeout": 10
           }
         ]
       }
@@ -15,7 +16,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-runner.sh ingest",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-runner.sh context",
+            "timeout": 5
           }
         ]
       }
@@ -25,22 +32,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-runner.sh ingest",
+            "timeout": 30
           },
           {
             "type": "command",
-            "command": "claude-memory hook publish"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "idle_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude-memory hook sweep"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-runner.sh sweep",
+            "timeout": 30
           }
         ]
       }
@@ -50,7 +48,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook publish"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-runner.sh ingest",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-runner.sh sweep",
+            "timeout": 30
           }
         ]
       }

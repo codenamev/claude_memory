@@ -14,17 +14,27 @@ module ClaudeMemory
         def initialize_memory
           @stdout.puts "Initializing ClaudeMemory (global only)...\n\n"
 
+          if plugin_mode?
+            @stdout.puts "(Plugin mode detected — hooks and MCP managed by plugin)\n\n"
+          end
+
           # Check for existing hooks in global settings
-          hooks_config = HooksConfigurator.new(@stdout)
-          global_settings = File.join(Dir.home, ".claude", "settings.json")
-          if hooks_config.has_claude_memory_hooks?(global_settings)
-            handle_existing_hooks(hooks_config, global_settings)
-            return 0 if @skip_initialization
+          unless plugin_mode?
+            hooks_config = HooksConfigurator.new(@stdout)
+            global_settings = File.join(Dir.home, ".claude", "settings.json")
+            if hooks_config.has_claude_memory_hooks?(global_settings)
+              handle_existing_hooks(hooks_config, global_settings)
+              return 0 if @skip_initialization
+            end
           end
 
           ensure_database
-          configure_hooks unless @skip_hooks
-          configure_mcp
+
+          unless plugin_mode?
+            configure_hooks unless @skip_hooks
+            configure_mcp
+          end
+
           configure_memory_instructions
 
           print_completion_message
@@ -74,9 +84,18 @@ module ClaudeMemory
           MemoryInstructionsWriter.new(@stdout).write_global_instructions
         end
 
+        def plugin_mode?
+          ENV.key?("CLAUDE_PLUGIN_ROOT")
+        end
+
         def print_completion_message
           @stdout.puts "\n=== Global Setup Complete ===\n"
           @stdout.puts "ClaudeMemory is now configured globally."
+
+          if plugin_mode?
+            @stdout.puts "\nPlugin mode: hooks and MCP are managed by the plugin."
+          end
+
           @stdout.puts "\nNote: Run 'claude-memory init' in each project for project-specific memory."
         end
       end

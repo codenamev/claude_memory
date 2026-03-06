@@ -19,15 +19,9 @@ This document contains only unimplemented improvements. Completed items are remo
 
 Schema migration v12 with `facts_vec` virtual table (vec0, cosine distance). Two-step query pattern (KNN → batch hydration). VectorIndex class with native C KNN search, fallback to O(n) Ruby. Backfill via `claude-memory index --vec` and sweeper. Doctor check with coverage stats. Cross-platform: arm64-darwin, x86_64-darwin, x86_64-linux.
 
-### 2. Claude Code Plugin Distribution Format
+### ~~2. Claude Code Plugin Distribution Format~~ ✅ Implemented 2026-03-04
 
-Source: QMD, episodic-memory, claude-supermemory, claude-mem (all 4 use marketplace.json)
-
-- **Value**: 10x easier installation (one command vs multi-step gem + MCP + hook config)
-- **Validation**: All 4 non-gem projects distribute via Claude Code marketplace plugin format
-- **Implementation**: Package ClaudeMemory as marketplace plugin for single-command installation
-- **Evidence**: `.claude-plugin/marketplace.json` with MCP server bundling, skill definitions, hook registration
-- **Effort**: 2-3 days
+Plugin packaging with `plugin.json` referencing MCP server, hooks, skills, commands, and output styles. Wrapper scripts (`scripts/serve-mcp.sh`, `scripts/hook-runner.sh`) handle gem detection gracefully. Initializers detect plugin mode via `CLAUDE_PLUGIN_ROOT` and skip hooks/MCP/output-style config. Version sync Rake task keeps plugin metadata in sync with gem version.
 
 ---
 
@@ -161,4 +155,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-04 - Marked sqlite-vec (Native Vector Storage) as implemented. Previous: Database Compact Command, Fact Export Command, Background Processing for Hooks (--async), MCP Discovery Tools (memory.list_projects), Hook Error Classification, Dynamic MCP Server Instructions, Progressive Disclosure Documentation, Conversation Exclusion Markers.*
+*Last updated: 2026-03-04 - Marked Claude Code Plugin Distribution Format as implemented. Previous: sqlite-vec (Native Vector Storage), Database Compact Command, Fact Export Command, Background Processing for Hooks (--async), MCP Discovery Tools (memory.list_projects), Hook Error Classification, Dynamic MCP Server Instructions, Progressive Disclosure Documentation, Conversation Exclusion Markers.*

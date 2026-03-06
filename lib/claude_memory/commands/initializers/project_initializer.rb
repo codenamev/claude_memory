@@ -16,19 +16,29 @@ module ClaudeMemory
         def initialize_memory
           @stdout.puts "Initializing ClaudeMemory (project-local)...\n\n"
 
+          if plugin_mode?
+            @stdout.puts "(Plugin mode detected — hooks, MCP, and output style managed by plugin)\n\n"
+          end
+
           # Check for existing hooks and offer options
-          hooks_config = HooksConfigurator.new(@stdout)
-          if hooks_config.has_claude_memory_hooks?(".claude/settings.json")
-            handle_existing_hooks(hooks_config)
-            return 0 if @skip_initialization
+          unless plugin_mode?
+            hooks_config = HooksConfigurator.new(@stdout)
+            if hooks_config.has_claude_memory_hooks?(".claude/settings.json")
+              handle_existing_hooks(hooks_config)
+              return 0 if @skip_initialization
+            end
           end
 
           ensure_databases
           ensure_directories
-          configure_hooks unless @skip_hooks
-          configure_mcp
+
+          unless plugin_mode?
+            configure_hooks unless @skip_hooks
+            configure_mcp
+            install_output_style
+          end
+
           configure_memory_instructions
-          install_output_style
 
           print_completion_message
           0
@@ -93,17 +103,30 @@ module ClaudeMemory
           @stdout.puts "✓ Installed output style at #{style_dest}"
         end
 
+        def plugin_mode?
+          ENV.key?("CLAUDE_PLUGIN_ROOT")
+        end
+
         def print_completion_message
           @stdout.puts "\n=== Setup Complete ===\n"
           @stdout.puts "ClaudeMemory is now configured for this project."
           @stdout.puts "\nDatabases:"
           @stdout.puts "  Global: ~/.claude/memory.sqlite3 (user-wide knowledge)"
           @stdout.puts "  Project: .claude/memory.sqlite3 (project-specific)"
-          @stdout.puts "\nNext steps:"
-          @stdout.puts "  1. Restart Claude Code to load the new configuration"
-          @stdout.puts "  2. Use Claude Code normally - transcripts will be ingested automatically"
-          @stdout.puts "  3. Run 'claude-memory promote <fact_id>' to move facts to global"
-          @stdout.puts "  4. Run 'claude-memory doctor' to verify setup"
+
+          if plugin_mode?
+            @stdout.puts "\nPlugin mode: hooks, MCP, and output style are managed by the plugin."
+            @stdout.puts "\nNext steps:"
+            @stdout.puts "  1. Use Claude Code normally - transcripts will be ingested automatically"
+            @stdout.puts "  2. Run 'claude-memory promote <fact_id>' to move facts to global"
+            @stdout.puts "  3. Run 'claude-memory doctor' to verify setup"
+          else
+            @stdout.puts "\nNext steps:"
+            @stdout.puts "  1. Restart Claude Code to load the new configuration"
+            @stdout.puts "  2. Use Claude Code normally - transcripts will be ingested automatically"
+            @stdout.puts "  3. Run 'claude-memory promote <fact_id>' to move facts to global"
+            @stdout.puts "  4. Run 'claude-memory doctor' to verify setup"
+          end
         end
       end
     end

@@ -38,11 +38,17 @@ When invoked, it will:
 ### Step 1: Check Installation Status
 
 ```bash
+gem list claude_memory
 claude-memory --version
 claude-memory doctor
 ```
 
 Analyze the output to determine current state.
+
+- If `gem list` shows no `claude_memory` entry, the gem is not installed.
+  Guide the user: `gem install claude_memory`
+- If running in plugin mode (`CLAUDE_PLUGIN_ROOT` is set), hooks and MCP
+  are managed by the plugin — only databases and memory instructions need setup.
 
 ### Step 2: Determine Action Required
 

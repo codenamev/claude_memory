@@ -20,4 +20,26 @@ RSpec::Core::RakeTask.new(:spec_sequential)
 
 require "standard/rake"
 
+namespace :plugin do
+  desc "Sync ClaudeMemory::VERSION into .claude-plugin/plugin.json and marketplace.json"
+  task :sync_version do
+    require_relative "lib/claude_memory/version"
+    version = ClaudeMemory::VERSION
+
+    %w[.claude-plugin/plugin.json .claude-plugin/marketplace.json].each do |path|
+      next unless File.exist?(path)
+
+      content = File.read(path)
+      updated = content.gsub(/"version"\s*:\s*"[^"]*"/, "\"version\": \"#{version}\"")
+
+      if content != updated
+        File.write(path, updated)
+        puts "Updated #{path} to version #{version}"
+      else
+        puts "#{path} already at version #{version}"
+      end
+    end
+  end
+end
+
 task default: %i[spec standard]
