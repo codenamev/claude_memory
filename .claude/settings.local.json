@@ -35,7 +35,8 @@
       "Bash(qmd search:*)",
       "Skill(study-repo)",
       "WebFetch(domain:www.rubydoc.info)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "WebFetch(domain:github.com)"
     ]
   },
   "enableAllProjectMcpServers": true

@@ -170,7 +170,9 @@ Transcripts → Ingest → Index (FTS5)
 - **`Ingest`**: Transcript reading and delta-based ingestion (`ingest/`)
   - Tracks cursor position per session to avoid re-processing
 
-- **`Index`**: Full-text search using SQLite FTS5 (`index/`)
+- **`Index`**: Full-text search and vector indexing (`index/`)
+  - `LexicalFTS`: SQLite FTS5 full-text search
+  - `VectorIndex`: sqlite-vec native KNN search with vec0 virtual tables
   - Optimized with batch queries to eliminate N+1 issues
 
 - **`Distill`**: Fact extraction interface (`distill/`)
@@ -194,8 +196,8 @@ Transcripts → Ingest → Index (FTS5)
   - Modes: shared (repo), local (uncommitted), home (user directory)
 
 - **`MCP`**: Model Context Protocol server and tools (`mcp/`)
-  - Exposes memory tools to Claude Code
-  - Tools: recall, explain, promote, status, conflicts, changes, sweep_now
+  - Exposes memory tools to Claude Code (21 tools total)
+  - Dual content/structuredContent responses with compact mode
 
 - **`Hook`**: Hook entrypoint handlers (`hook/`)
   - Reads stdin JSON from Claude Code hooks
@@ -284,7 +286,7 @@ Single-value predicates (like "uses_database") supersede old values. Multi-value
 
 - `lib/claude_memory.rb`: Main module, requires, database path helpers
 - `lib/claude_memory/cli.rb`: Thin command router (41 lines)
-- `lib/claude_memory/commands/`: Individual command classes (20 commands)
+- `lib/claude_memory/commands/`: Individual command classes (22 commands)
 - `lib/claude_memory/configuration.rb`: Centralized configuration and ENV access
 - `lib/claude_memory/domain/`: Domain models (Fact, Entity, Provenance, Conflict)
 - `lib/claude_memory/core/`: Value objects and null objects
@@ -299,31 +301,33 @@ Single-value predicates (like "uses_database") supersede old values. Multi-value
 
 The gem includes an MCP server (`claude-memory serve-mcp`) that exposes memory operations as tools. Configuration should be in `.mcp.json` at project root.
 
-Available MCP tools (18 total):
+Available MCP tools (21 total):
 - **Query & Recall**: `memory.recall`, `memory.recall_index`, `memory.recall_details`, `memory.recall_semantic`, `memory.search_concepts`
-- **Provenance**: `memory.explain`
+- **Provenance**: `memory.explain`, `memory.fact_graph`
 - **Shortcuts**: `memory.decisions`, `memory.conventions`, `memory.architecture`
 - **Context**: `memory.facts_by_tool`, `memory.facts_by_context`
 - **Management**: `memory.promote`, `memory.store_extraction`
 - **Monitoring**: `memory.status`, `memory.stats`, `memory.changes`, `memory.conflicts`
 - **Maintenance**: `memory.sweep_now`
-- **Setup**: `memory.check_setup`
+- **Discovery**: `memory.check_setup`, `memory.list_projects`
 
 ## Hook Integration
 
 ClaudeMemory integrates with Claude Code via hooks in `.claude/settings.json`:
 
-- **Ingest hook**: Triggers on Stop/SessionStart/PreCompact events
+- **Ingest hook**: Triggers on Stop/SessionStart/PreCompact/SessionEnd events
   - Calls `claude-memory hook ingest` with stdin JSON
   - Reads transcript delta and updates both global and project databases
 
-- **Sweep hook**: Triggers on idle_prompt and safety events
+- **Context hook**: Triggers on SessionStart
+  - Calls `claude-memory hook context`
+  - Injects recent facts via `hookSpecificOutput.additionalContext`
+
+- **Sweep hook**: Triggers on PreCompact/SessionEnd events
   - Runs time-bounded maintenance on both databases
+  - Cleans up vec0 entries for superseded/expired facts
 
-- **Publish hook**: Optional, on SessionEnd/PreCompact
-  - Publishes curated snapshot to `.claude/rules/`
-
-Hook commands read JSON payloads from stdin for robustness.
+Hook commands read JSON payloads from stdin for robustness. Supports `--async` flag for non-blocking execution.
 
 ## Code Style
 

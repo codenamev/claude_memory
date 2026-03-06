@@ -95,12 +95,16 @@ Claude: "Based on my memory, you're using Rails with PostgreSQL..."
 ## Key Features
 
 - **Dual Scope**: Project-specific + global user preferences
+- **Hybrid Search**: FTS5 full-text + semantic vector search with Reciprocal Rank Fusion
+- **Native Vector Storage**: [sqlite-vec](https://github.com/asg017/sqlite-vec) for fast KNN search with local embeddings ([fastembed-rb](https://github.com/khasinski/fastembed-rb), no API key)
+- **Session Context**: Automatic context injection at session start with recent facts
 - **Privacy First**: `<private>` tags exclude sensitive data
 - **Progressive Disclosure**: Lightweight queries before full details
 - **Semantic Shortcuts**: Quick access to decisions, conventions, architecture
 - **Truth Maintenance**: Automatic conflict resolution
 - **Claude-Powered**: Uses Claude's intelligence to extract facts (no API key needed)
 - **Token Efficient**: 10x reduction in memory queries with progressive disclosure
+- **Database Maintenance**: Compact, export, and backup commands
 
 ## Privacy Control
 
@@ -169,10 +173,10 @@ claude-memory doctor
 This checks:
 - Database existence and integrity
 - Schema version compatibility
+- sqlite-vec availability and index coverage
 - Hooks configuration
 - Snapshot status
 - Stuck operations
-- Orphaned hooks (hooks without MCP configuration)
 
 ### Uninstalling
 
@@ -253,7 +257,7 @@ The benchmark dataset draws from real CLAUDE.md patterns and is designed specifi
 
 - **Language:** Ruby 3.2+
 - **Storage:** SQLite3 (no external services)
-- **Testing:** 985 examples, 100% core coverage
+- **Testing:** 1316 examples, 100% core coverage
 - **Code Style:** Standard Ruby
 
 ```bash

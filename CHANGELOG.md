@@ -4,6 +4,61 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-06
+
+### Added
+
+**Native Vector Storage (sqlite-vec)**
+- Integrated [sqlite-vec](https://github.com/asg017/sqlite-vec) for native KNN vector search
+  - `VectorIndex` class with vec0 virtual table for cosine similarity search
+  - Dual-write: embeddings stored in both JSON column and vec0 index
+  - `claude-memory index --vec` flag for backfilling existing embeddings into vec0
+  - Fast path in `Recall` uses sqlite-vec KNN when available, falls back to JSON + Ruby
+  - Sweeper cleans up vec0 entries for superseded/expired facts
+  - Doctor and MCP status/stats report vec0 availability and coverage
+  - Cross-platform support with platform-specific gem installation
+
+**Database Maintenance**
+- `compact` command for database maintenance (VACUUM + integrity check)
+- `export` command for fact backup and migration to JSON
+
+**Hook Enhancements**
+- SessionStart context injection via `hookSpecificOutput.additionalContext`
+  - Injects recent facts and project context at session start
+- Tool-specific observation compression for reduced token usage
+- `--async` flag for non-blocking hook execution
+- Hook error classification for graceful degradation
+- Conversation exclusion markers for session-level opt-out
+
+**MCP Discovery**
+- `memory.list_projects` MCP tool for discovering all project databases
+
+**Developer Experience**
+- Dynamic MCP server instructions with progressive disclosure documentation
+- Comparative benchmark suite with QMD and grepai adapters
+  - `bin/setup-competitors` for installing competitor tools
+  - `bin/run-evals --comparative` for side-by-side benchmarks
+
+### Fixed
+
+- **Recall returned no results**: `DualQueryTemplate` accessed stores before initializing them,
+  causing all recall queries to silently return empty results. Refactored to use existing
+  `store_for_scope` method which handles initialization and access atomically.
+- **Doctor crashed on sqlite-vec tables**: `SchemaValidator` iterated all tables including vec0
+  virtual tables, which require the sqlite-vec extension. Now skips `facts_vec*` tables using
+  prefix match to handle future partition tables.
+- **Forward-migrated databases**: Older gem versions now gracefully handle databases migrated
+  by newer versions instead of crashing.
+- **Hybrid retrieval ordering**: Preserved BM25 scores and RRF ordering in hybrid search results
+  instead of re-sorting by source/time.
+- Fork-based concurrency tests skipped on Ruby 4.0+ (Extralite incompatibility)
+- Real eval tests now run in tmpdir with fixture database
+
+### Internal
+- Refactored publish to avoid unnecessary rewrites from timestamp churn
+- Skip quality-review hook when running inside Claude Code session
+- Influence studies for claude-mem, episodic-memory, kbs repositories
+
 ## [0.5.1] - 2026-02-04
 
 ### Fixed

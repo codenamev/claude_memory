@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "claude-memory",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "source": "./",
       "description": "Long-term self-managed memory for Claude Code with fact extraction, truth maintenance, and provenance tracking",
       "repository": "https://github.com/codenamev/claude_memory"
