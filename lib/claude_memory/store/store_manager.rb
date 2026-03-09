@@ -85,7 +85,11 @@ module ClaudeMemory
         subject = @project_store.entities.where(id: fact[:subject_entity_id]).first
         return nil unless subject
 
-        # Wrap all database operations in a transaction for atomicity
+        # Read all project data before entering global transaction
+        object = fact[:object_entity_id] ? @project_store.entities.where(id: fact[:object_entity_id]).first : nil
+        provenance_records = @project_store.provenance.where(fact_id: fact_id).all
+
+        # Wrap all global database operations in a transaction for atomicity
         @global_store.db.transaction do
           global_subject_id = @global_store.find_or_create_entity(
             type: subject[:type],
@@ -93,14 +97,11 @@ module ClaudeMemory
           )
 
           global_object_id = nil
-          if fact[:object_entity_id]
-            object = @project_store.entities.where(id: fact[:object_entity_id]).first
-            if object
-              global_object_id = @global_store.find_or_create_entity(
-                type: object[:type],
-                name: object[:canonical_name]
-              )
-            end
+          if object
+            global_object_id = @global_store.find_or_create_entity(
+              type: object[:type],
+              name: object[:canonical_name]
+            )
           end
 
           global_fact_id = @global_store.insert_fact(
@@ -118,23 +119,17 @@ module ClaudeMemory
             project_path: nil
           )
 
-          copy_provenance(fact_id, global_fact_id)
+          provenance_records.each do |prov|
+            @global_store.insert_provenance(
+              fact_id: global_fact_id,
+              content_item_id: nil,
+              quote: prov[:quote],
+              attribution_entity_id: nil,
+              strength: prov[:strength]
+            )
+          end
 
           global_fact_id
-        end
-      end
-
-      private
-
-      def copy_provenance(source_fact_id, target_fact_id)
-        @project_store.provenance.where(fact_id: source_fact_id).each do |prov|
-          @global_store.insert_provenance(
-            fact_id: target_fact_id,
-            content_item_id: nil,
-            quote: prov[:quote],
-            attribution_entity_id: nil,
-            strength: prov[:strength]
-          )
         end
       end
     end

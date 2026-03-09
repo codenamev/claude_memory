@@ -43,8 +43,8 @@ RSpec.describe ClaudeMemory::Store::StoreManager do
         strength: "stated"
       )
 
-      # Mock provenance copy to fail
-      allow(manager).to receive(:copy_provenance).and_raise(StandardError, "Provenance copy failed")
+      # Mock provenance insert to fail
+      allow(manager.global_store).to receive(:insert_provenance).and_raise(StandardError, "Provenance copy failed")
 
       expect {
         manager.promote_fact(fact_id)

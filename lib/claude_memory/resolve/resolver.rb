@@ -9,8 +9,6 @@ module ClaudeMemory
 
       def apply(extraction, content_item_id: nil, occurred_at: nil, project_path: nil, scope: "project")
         occurred_at ||= Time.now.utc.iso8601
-        @current_project_path = project_path
-        @current_scope = scope
 
         result = {
           entities_created: 0,
@@ -27,7 +25,8 @@ module ClaudeMemory
           result[:entities_created] = entity_ids.size
 
           extraction.facts.each do |fact_data|
-            outcome = resolve_fact(fact_data, entity_ids, content_item_id, occurred_at)
+            outcome = resolve_fact(fact_data, entity_ids, content_item_id, occurred_at,
+              project_path: project_path, scope: scope)
             result[:facts_created] += outcome[:created]
             result[:facts_superseded] += outcome[:superseded]
             result[:conflicts_created] += outcome[:conflicts]
@@ -49,12 +48,13 @@ module ClaudeMemory
         entity_ids
       end
 
-      def resolve_fact(fact_data, entity_ids, content_item_id, occurred_at)
+      def resolve_fact(fact_data, entity_ids, content_item_id, occurred_at, project_path:, scope:)
         subject_id = resolve_subject(fact_data, entity_ids)
         existing_facts = @store.facts_for_slot(subject_id, fact_data[:predicate])
         resolution = determine_resolution(existing_facts, fact_data, entity_ids)
 
-        apply_resolution(resolution, fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts)
+        apply_resolution(resolution, fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts,
+          project_path: project_path, scope: scope)
       end
 
       def resolve_subject(fact_data, entity_ids)
@@ -77,14 +77,16 @@ module ClaudeMemory
         end
       end
 
-      def apply_resolution(resolution, fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts)
+      def apply_resolution(resolution, fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, project_path:, scope:)
         case resolution
         when :reinforce
           apply_reinforcement(existing_facts, fact_data, entity_ids, content_item_id)
         when :conflict
-          apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at)
+          apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at,
+            project_path: project_path, scope: scope)
         else
-          apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution)
+          apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution,
+            project_path: project_path, scope: scope)
         end
       end
 
@@ -95,28 +97,30 @@ module ClaudeMemory
         {created: 0, superseded: 0, conflicts: 0, provenance: 1}
       end
 
-      def apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at)
-        create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at)
+      def apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at, project_path:, scope:)
+        create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at,
+          project_path: project_path, scope: scope)
         {created: 0, superseded: 0, conflicts: 1, provenance: 0}
       end
 
-      def apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution)
+      def apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution, project_path:, scope:)
         superseded_count = 0
         if resolution == :supersede
           supersede_facts(existing_facts, occurred_at)
           superseded_count = existing_facts.size
         end
 
-        fact_id = insert_new_fact(fact_data, subject_id, entity_ids, occurred_at)
+        fact_id = insert_new_fact(fact_data, subject_id, entity_ids, occurred_at,
+          project_path: project_path, scope: scope)
         link_superseded_facts(fact_id, existing_facts) if superseded_count > 0
         add_provenance(fact_id, content_item_id, fact_data)
 
         {created: 1, superseded: superseded_count, conflicts: 0, provenance: 1}
       end
 
-      def insert_new_fact(fact_data, subject_id, entity_ids, occurred_at)
-        fact_scope = fact_data[:scope_hint] || @current_scope
-        fact_project = (fact_scope == "global") ? nil : @current_project_path
+      def insert_new_fact(fact_data, subject_id, entity_ids, occurred_at, project_path:, scope:)
+        fact_scope = fact_data[:scope_hint] || scope
+        fact_project = (fact_scope == "global") ? nil : project_path
 
         @store.insert_fact(
           subject_entity_id: subject_id,
@@ -153,7 +157,7 @@ module ClaudeMemory
         end
       end
 
-      def create_conflict(existing_fact_id, new_fact_data, subject_id, content_item_id, occurred_at)
+      def create_conflict(existing_fact_id, new_fact_data, subject_id, content_item_id, occurred_at, project_path:, scope:)
         # Already within transaction from resolve_fact
         new_fact_id = @store.insert_fact(
           subject_entity_id: subject_id,
@@ -163,8 +167,8 @@ module ClaudeMemory
           confidence: new_fact_data[:confidence] || 1.0,
           status: "disputed",
           valid_from: occurred_at,
-          scope: @current_scope,
-          project_path: @current_project_path
+          scope: scope,
+          project_path: project_path
         )
 
         @store.insert_conflict(

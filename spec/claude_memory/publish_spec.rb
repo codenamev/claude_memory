@@ -9,14 +9,11 @@ RSpec.describe ClaudeMemory::Publish do
   let(:store) { ClaudeMemory::Store::SQLiteStore.new(db_path) }
   let(:publish) { described_class.new(store) }
 
-  before do
+  around do |example|
     FileUtils.mkdir_p(test_dir)
-    Dir.chdir(test_dir)
-  end
-
-  after do
+    Dir.chdir(test_dir) { example.run }
+  ensure
     store.close
-    Dir.chdir("/")
     FileUtils.rm_rf(test_dir)
   end
 

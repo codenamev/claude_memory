@@ -16,18 +16,10 @@ module ClaudeMemory
       # @param query [String] Search query
       # @return [String, nil] Best matching snippet or nil if no content
       def self.extract(content, query)
-        return nil if content.nil? || content.empty? || query.nil? || query.empty?
+        parsed = parse_and_find(content, query)
+        return nil unless parsed
 
-        lines = content.lines.map(&:chomp)
-        return nil if lines.empty?
-
-        terms = tokenize_query(query)
-        return nil if terms.empty?
-
-        best_line_idx = find_best_line(lines, terms)
-        return nil unless best_line_idx
-
-        build_snippet(lines, best_line_idx)
+        build_snippet(parsed[:lines], parsed[:best_line_idx])
       end
 
       # Extract snippet and return line range information
@@ -35,17 +27,11 @@ module ClaudeMemory
       # @param query [String] Search query
       # @return [Hash, nil] Hash with :snippet, :line_start, :line_end or nil
       def self.extract_with_lines(content, query)
-        return nil if content.nil? || content.empty? || query.nil? || query.empty?
+        parsed = parse_and_find(content, query)
+        return nil unless parsed
 
-        lines = content.lines.map(&:chomp)
-        return nil if lines.empty?
-
-        terms = tokenize_query(query)
-        return nil if terms.empty?
-
-        best_line_idx = find_best_line(lines, terms)
-        return nil unless best_line_idx
-
+        lines = parsed[:lines]
+        best_line_idx = parsed[:best_line_idx]
         start_idx = [best_line_idx - CONTEXT_BEFORE, 0].max
         end_idx = [best_line_idx + CONTEXT_AFTER, lines.size - 1].min
 
@@ -54,6 +40,22 @@ module ClaudeMemory
           line_start: start_idx + 1, # 1-indexed
           line_end: end_idx + 1       # 1-indexed
         }
+      end
+
+      # @api private
+      def self.parse_and_find(content, query)
+        return nil if content.nil? || content.empty? || query.nil? || query.empty?
+
+        lines = content.lines.map(&:chomp)
+        return nil if lines.empty?
+
+        terms = tokenize_query(query)
+        return nil if terms.empty?
+
+        best_line_idx = find_best_line(lines, terms)
+        return nil unless best_line_idx
+
+        {lines: lines, best_line_idx: best_line_idx}
       end
 
       # @api private

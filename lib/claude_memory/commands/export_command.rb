@@ -66,8 +66,11 @@ module ClaudeMemory
       end
 
       def collect_from_store(store, source_label, status_filter, export)
-        # Collect entities
-        store.entities.each do |entity|
+        # Collect entities (batch load all for lookup)
+        all_entities = store.entities.all
+        entities_by_id = all_entities.each_with_object({}) { |e, h| h[e[:id]] = e }
+
+        all_entities.each do |entity|
           export[:entities] << {
             id: entity[:id],
             type: entity[:type],
@@ -76,13 +79,18 @@ module ClaudeMemory
           }
         end
 
-        # Collect facts with provenance
+        # Collect facts with provenance (batch load to avoid N+1)
         facts_ds = store.facts
         facts_ds = facts_ds.where(status: "active") if status_filter == "active"
+        all_facts = facts_ds.all
 
-        facts_ds.each do |fact|
-          subject = store.entities.where(id: fact[:subject_entity_id]).first
-          receipts = store.provenance.where(fact_id: fact[:id]).all
+        fact_ids = all_facts.map { |f| f[:id] }
+        provenance_by_fact = store.provenance.where(fact_id: fact_ids).all
+          .group_by { |p| p[:fact_id] }
+
+        all_facts.each do |fact|
+          subject = entities_by_id[fact[:subject_entity_id]]
+          receipts = provenance_by_fact[fact[:id]] || []
 
           export[:facts] << {
             id: fact[:id],

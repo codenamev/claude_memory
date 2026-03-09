@@ -604,7 +604,7 @@ module ClaudeMemory
               entry[:facts_total] = temp_store.facts.count
               entry[:entities] = temp_store.entities.count
               temp_store.close
-            rescue => _e
+            rescue Sequel::DatabaseError, Extralite::Error, IOError => _e
               entry[:error] = "Could not read database"
             end
           end
