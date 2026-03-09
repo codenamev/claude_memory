@@ -36,7 +36,17 @@
       "Skill(study-repo)",
       "WebFetch(domain:www.rubydoc.info)",
       "Bash(git status:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "mcp__memory__memory_stats",
+      "mcp__memory__memory_recall_index",
+      "Bash(mkdir -p /tmp/study-repos)",
+      "Read(//tmp/**)",
+      "Bash(ls:*)",
+      "Bash(sort -k2 -rn)",
+      "Bash(claude-memory recall:*)",
+      "Bash(claude-memory stats:*)",
+      "Bash(claude-memory search:*)",
+      "Bash(bundle exec:*)"
     ]
   },
   "enableAllProjectMcpServers": true
