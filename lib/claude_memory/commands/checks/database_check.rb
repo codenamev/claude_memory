@@ -81,6 +81,13 @@ module ClaudeMemory
           end
           details[:stuck_operations] = stuck_ops.size
 
+          # Check FTS table format
+          fts_sql = store.db.fetch("SELECT sql FROM sqlite_master WHERE name = 'content_fts' AND type = 'table'").first
+          if fts_sql && !fts_sql[:sql].to_s.include?("content=''")
+            details[:fts_legacy] = true
+            warnings << "FTS index uses legacy format (stores duplicate text). Run 'claude-memory compact' to save ~40% disk space."
+          end
+
           # Run schema validation
           validator = ClaudeMemory::Infrastructure::SchemaValidator.new(store)
           validation = validator.validate

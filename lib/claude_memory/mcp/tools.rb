@@ -627,7 +627,19 @@ module ClaudeMemory
         stats[:vec_available] = vec_index.available?
         stats[:vec_indexed] = vec_index.coverage_stats[:vec_indexed] if vec_index.available?
 
+        if fts_legacy?(store)
+          stats[:fts_legacy] = true
+          stats[:optimization_hint] = "Run 'claude-memory compact' to reduce database size by ~40%"
+        end
+
         stats
+      end
+
+      def fts_legacy?(store)
+        row = store.db.fetch("SELECT sql FROM sqlite_master WHERE name = 'content_fts' AND type = 'table'").first
+        row && !row[:sql].to_s.include?("content=''")
+      rescue
+        false
       end
 
       def detailed_stats(store)

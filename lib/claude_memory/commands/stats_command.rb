@@ -79,8 +79,9 @@ module ClaudeMemory
           print_roi_metrics(db)
           stdout.puts
 
-          # Database size
+          # Database size + optimization hints
           print_database_size(db_path)
+          check_fts_format(db)
           stdout.puts
 
           db.disconnect
@@ -217,6 +218,16 @@ module ClaudeMemory
         else
           stdout.puts "Database Size: #{size_kb} KB"
         end
+      end
+
+      def check_fts_format(db)
+        fts_sql = db.fetch("SELECT sql FROM sqlite_master WHERE name = 'content_fts' AND type = 'table'").first
+        return unless fts_sql && !fts_sql[:sql].to_s.include?("content=''")
+
+        stdout.puts "  Optimization available: FTS index stores duplicate text."
+        stdout.puts "  Run 'claude-memory compact' to reduce size by ~40%."
+      rescue
+        # Ignore errors reading FTS metadata
       end
 
       def format_date(iso8601_string)
