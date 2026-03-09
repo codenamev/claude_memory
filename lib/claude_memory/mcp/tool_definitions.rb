@@ -5,6 +5,15 @@ module ClaudeMemory
     # MCP tool definitions for Claude Memory
     # Pure data structure - no logic, just tool schemas
     module ToolDefinitions
+      # Annotations for read-only query tools (safe to call anytime)
+      READ_ONLY = {readOnlyHint: true, idempotentHint: true, destructiveHint: false}.freeze
+
+      # Annotations for state-changing but non-destructive tools
+      WRITE = {readOnlyHint: false, idempotentHint: false, destructiveHint: false}.freeze
+
+      # Annotations for idempotent writes (safe to retry)
+      WRITE_IDEMPOTENT = {readOnlyHint: false, idempotentHint: true, destructiveHint: false}.freeze
+
       # Returns array of tool definitions for MCP protocol
       # @return [Array<Hash>] Tool definitions with name, description, and inputSchema
       def self.all
@@ -21,7 +30,8 @@ module ClaudeMemory
                 compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false}
               },
               required: ["query"]
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.recall_index",
@@ -34,7 +44,8 @@ module ClaudeMemory
                 scope: {type: "string", enum: ["all", "global", "project"], description: "Scope: 'all' (both), 'global' (user-wide), 'project' (current only)", default: "all"}
               },
               required: ["query"]
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.recall_details",
@@ -46,7 +57,8 @@ module ClaudeMemory
                 scope: {type: "string", enum: ["project", "global"], description: "Database to query", default: "project"}
               },
               required: ["fact_ids"]
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.explain",
@@ -58,7 +70,8 @@ module ClaudeMemory
                 scope: {type: "string", enum: ["global", "project"], description: "Which database to look in", default: "project"}
               },
               required: ["fact_id"]
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.changes",
@@ -70,7 +83,8 @@ module ClaudeMemory
                 limit: {type: "integer", default: 20},
                 scope: {type: "string", enum: ["all", "global", "project"], default: "all"}
               }
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.conflicts",
@@ -80,7 +94,8 @@ module ClaudeMemory
               properties: {
                 scope: {type: "string", enum: ["all", "global", "project"], default: "all"}
               }
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.sweep_now",
@@ -91,7 +106,8 @@ module ClaudeMemory
                 budget_seconds: {type: "integer", default: 5},
                 scope: {type: "string", enum: ["global", "project"], default: "project"}
               }
-            }
+            },
+            annotations: WRITE
           },
           {
             name: "memory.status",
@@ -99,7 +115,8 @@ module ClaudeMemory
             inputSchema: {
               type: "object",
               properties: {}
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.stats",
@@ -109,7 +126,8 @@ module ClaudeMemory
               properties: {
                 scope: {type: "string", enum: ["all", "global", "project"], description: "Show stats for: all (default), global, or project", default: "all"}
               }
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.promote",
@@ -120,7 +138,8 @@ module ClaudeMemory
                 fact_id: {type: "integer", description: "Project fact ID to promote to global"}
               },
               required: ["fact_id"]
-            }
+            },
+            annotations: WRITE_IDEMPOTENT
           },
           {
             name: "memory.store_extraction",
@@ -174,7 +193,8 @@ module ClaudeMemory
                 scope: {type: "string", enum: ["global", "project"], description: "Default scope for facts", default: "project"}
               },
               required: ["facts"]
-            }
+            },
+            annotations: WRITE
           },
           {
             name: "memory.decisions",
@@ -184,7 +204,8 @@ module ClaudeMemory
               properties: {
                 limit: {type: "integer", default: 10, description: "Maximum results to return"}
               }
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.conventions",
@@ -194,7 +215,8 @@ module ClaudeMemory
               properties: {
                 limit: {type: "integer", default: 20, description: "Maximum results to return"}
               }
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.architecture",
@@ -204,7 +226,8 @@ module ClaudeMemory
               properties: {
                 limit: {type: "integer", default: 10, description: "Maximum results to return"}
               }
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.facts_by_tool",
@@ -217,7 +240,8 @@ module ClaudeMemory
                 scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"}
               },
               required: ["tool_name"]
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.facts_by_context",
@@ -230,7 +254,8 @@ module ClaudeMemory
                 limit: {type: "integer", default: 20, description: "Maximum results to return"},
                 scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"}
               }
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.recall_semantic",
@@ -245,7 +270,8 @@ module ClaudeMemory
                 compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false}
               },
               required: ["query"]
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.search_concepts",
@@ -265,7 +291,8 @@ module ClaudeMemory
                 compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false}
               },
               required: ["concepts"]
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.fact_graph",
@@ -278,7 +305,8 @@ module ClaudeMemory
                 scope: {type: "string", enum: ["global", "project"], description: "Which database to search", default: "project"}
               },
               required: ["fact_id"]
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.check_setup",
@@ -286,7 +314,8 @@ module ClaudeMemory
             inputSchema: {
               type: "object",
               properties: {}
-            }
+            },
+            annotations: READ_ONLY
           },
           {
             name: "memory.list_projects",
@@ -294,7 +323,8 @@ module ClaudeMemory
             inputSchema: {
               type: "object",
               properties: {}
-            }
+            },
+            annotations: READ_ONLY
           }
         ]
       end
