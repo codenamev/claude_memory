@@ -50,6 +50,9 @@ module ClaudeMemory
           stdout.puts "#{label}: integrity check passed"
         end
 
+        stdout.puts "#{label}: rebuilding FTS index..."
+        rebuild_fts(db_path)
+
         stdout.puts "#{label}: compacting..."
         run_vacuum(db_path)
 
@@ -57,6 +60,13 @@ module ClaudeMemory
         saved = size_before - size_after
 
         stdout.puts "#{label}: #{format_size(size_before)} -> #{format_size(size_after)} (#{format_saved(saved)})"
+      end
+
+      def rebuild_fts(db_path)
+        store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+        fts = ClaudeMemory::Index::LexicalFTS.new(store)
+        fts.rebuild!
+        store.close
       end
 
       def run_vacuum(db_path)

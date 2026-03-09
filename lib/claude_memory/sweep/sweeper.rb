@@ -79,10 +79,19 @@ module ClaudeMemory
       def prune_old_content
         cutoff = (Time.now - @config[:content_retention_days] * 86400).utc.iso8601
         referenced_ids = @store.provenance.exclude(content_item_id: nil).select(:content_item_id)
-        @stats[:old_content_pruned] = @store.content_items
+        prunable = @store.content_items
           .where { ingested_at < cutoff }
           .exclude(id: referenced_ids)
-          .delete
+
+        # Remove FTS entries for content being pruned
+        fts = ClaudeMemory::Index::LexicalFTS.new(@store)
+        prunable.select(:id, :raw_text).each do |row|
+          fts.remove_content_item(row[:id], row[:raw_text])
+        rescue
+          # FTS entry may not exist; skip
+        end
+
+        @stats[:old_content_pruned] = prunable.delete
       end
 
       def with_vec_index
