@@ -46,7 +46,7 @@ RSpec.describe ClaudeMemory::Ingest::Ingester, "atomicity" do
       expect(cursor).to be > 0
 
       # Verify FTS index was created
-      indexed = store.db[:content_fts].where(content_item_id: result[:content_id]).first
+      indexed = store.db.fetch("SELECT rowid FROM content_fts WHERE rowid = ?", result[:content_id]).first
       expect(indexed).not_to be_nil
     end
 
@@ -219,7 +219,7 @@ RSpec.describe ClaudeMemory::Ingest::Ingester, "atomicity" do
       expect(content).not_to be_nil
 
       # 2. FTS index was created
-      fts_entry = store.db[:content_fts].where(content_item_id: result[:content_id]).first
+      fts_entry = store.db.fetch("SELECT rowid FROM content_fts WHERE rowid = ?", result[:content_id]).first
       expect(fts_entry).not_to be_nil
 
       # 3. Cursor was updated
