@@ -2,6 +2,12 @@
 
 module ClaudeMemory
   class Error < StandardError; end
+
+  # Context marker to prevent self-ingestion of ClaudeMemory's own
+  # meta-conversations (distiller subagents, sweeper sessions, etc.).
+  # Include this marker in subagent prompts to exclude their transcripts
+  # from being ingested into the knowledge base.
+  SELF_CONTEXT_MARKER = "claude-memory-self"
 end
 
 require_relative "claude_memory/core/result"

@@ -35,7 +35,7 @@ module ClaudeMemory
 
       # Tags that cause the entire delta to be skipped when present.
       # Different from ContentSanitizer which strips tag content but keeps the rest.
-      EXCLUSION_TAGS = %w[no-memory private].freeze
+      EXCLUSION_TAGS = ["no-memory", "private", ClaudeMemory::SELF_CONTEXT_MARKER].freeze
 
       def prepare_delta(session_id, transcript_path, project_path)
         current_offset = @store.get_delta_cursor(session_id, transcript_path) || 0

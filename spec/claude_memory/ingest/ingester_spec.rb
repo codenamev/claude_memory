@@ -228,6 +228,20 @@ RSpec.describe ClaudeMemory::Ingest::Ingester do
         expect(cursor).to be > 0
       end
 
+      it "skips ingestion when <claude-memory-self> tag is present" do
+        File.write(transcript_path, "Distiller output <claude-memory-self>meta-conversation</claude-memory-self> result")
+
+        result = ingester.ingest(
+          source: "test",
+          session_id: "sess-123",
+          transcript_path: transcript_path
+        )
+
+        expect(result[:status]).to eq(:skipped)
+        expect(result[:reason]).to eq("session_excluded")
+        expect(store.content_items.count).to eq(0)
+      end
+
       it "still ingests content without exclusion markers" do
         File.write(transcript_path, "Normal content without markers")
 
