@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "open3"
+
 module ClaudeMemory
   # Centralized configuration and ENV access
   # Provides consistent access to paths and environment variables
@@ -15,7 +17,7 @@ module ClaudeMemory
     end
 
     def project_dir
-      env["CLAUDE_PROJECT_DIR"] || Dir.pwd
+      env["CLAUDE_PROJECT_DIR"] || resolve_project_dir
     end
 
     def global_db_path
@@ -33,6 +35,43 @@ module ClaudeMemory
 
     def transcript_path
       env["CLAUDE_TRANSCRIPT_PATH"]
+    end
+
+    private
+
+    def resolve_project_dir
+      return Dir.pwd if env["CLAUDE_MEMORY_ISOLATE_WORKTREES"]
+
+      git_main_repo_root || Dir.pwd
+    end
+
+    # Resolve main repository root, even when running inside a git worktree.
+    # Uses --git-common-dir which returns the shared .git directory across
+    # all worktrees, preventing duplicate project databases per worktree.
+    def git_main_repo_root
+      common_dir = git_command("rev-parse --git-common-dir")
+      return nil unless common_dir
+
+      if common_dir == ".git"
+        git_command("rev-parse --show-toplevel")
+      else
+        # Worktree - common_dir is absolute path to main repo's .git dir
+        # (or .git/worktrees parent). Resolve to repo root.
+        File.dirname(File.realpath(common_dir))
+      end
+    rescue Errno::ENOENT
+      # git not available or path doesn't exist
+      nil
+    end
+
+    # Run a git command and return stripped output, or nil on failure
+    def git_command(args)
+      output, status = Open3.capture2("git #{args}", err: File::NULL)
+      return nil unless status.success?
+      stripped = output.strip
+      stripped.empty? ? nil : stripped
+    rescue Errno::ENOENT
+      nil
     end
   end
 end

@@ -34,8 +34,38 @@ RSpec.describe ClaudeMemory::Configuration do
       expect(config.project_dir).to eq("/path/to/project")
     end
 
-    it "falls back to Dir.pwd when not set" do
+    it "resolves git repo root for regular repos" do
       config = described_class.new({})
+      allow(config).to receive(:git_command).with("rev-parse --git-common-dir").and_return(".git")
+      allow(config).to receive(:git_command).with("rev-parse --show-toplevel").and_return("/repo/root")
+
+      expect(config.project_dir).to eq("/repo/root")
+    end
+
+    it "resolves main repo root when inside a git worktree" do
+      config = described_class.new({})
+      allow(config).to receive(:git_command).with("rev-parse --git-common-dir").and_return("/main/repo/.git")
+      allow(File).to receive(:realpath).with("/main/repo/.git").and_return("/main/repo/.git")
+
+      expect(config.project_dir).to eq("/main/repo")
+    end
+
+    it "uses Dir.pwd when CLAUDE_MEMORY_ISOLATE_WORKTREES is set" do
+      config = described_class.new({"CLAUDE_MEMORY_ISOLATE_WORKTREES" => "1"})
+      expect(config.project_dir).to eq(Dir.pwd)
+    end
+
+    it "falls back to Dir.pwd when git is not available" do
+      config = described_class.new({})
+      allow(config).to receive(:git_command).and_return(nil)
+
+      expect(config.project_dir).to eq(Dir.pwd)
+    end
+
+    it "falls back to Dir.pwd when not in a git repo" do
+      config = described_class.new({})
+      allow(config).to receive(:git_command).with("rev-parse --git-common-dir").and_return(nil)
+
       expect(config.project_dir).to eq(Dir.pwd)
     end
   end
