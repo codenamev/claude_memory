@@ -33,15 +33,9 @@ Source: QMD v1.1.5 study (2026-03-09)
 - **Effort**: 2-3 days
 - **Recommendation**: ADOPT
 
-### 4. MCP Tool Annotations ⭐
+### ~~4. MCP Tool Annotations~~ ✅ Implemented 2026-03-09
 
-Source: episodic-memory study (2026-03-09)
-
-- **Value**: Tell Claude which tools are read-only, idempotent, or destructive for better tool selection
-- **Implementation**: Add `readOnlyHint`, `idempotentHint`, `destructiveHint` annotations to all 21 MCP tools in `MCP::Tools::TOOLS`
-- **Evidence**: episodic-memory `src/mcp-server.ts:144-150` — tool annotations on search/show tools
-- **Effort**: 0.5 days
-- **Recommendation**: ADOPT — zero trade-off, immediate benefit
+Added `readOnlyHint`, `idempotentHint`, `destructiveHint` annotations to all 21 MCP tools via shared constants (READ_ONLY, WRITE, WRITE_IDEMPOTENT). 17 query tools marked read-only, store_extraction/sweep_now as write, promote as write-idempotent.
 
 ### 5. Retrieval Score Traces ⭐
 
@@ -53,25 +47,13 @@ Source: QMD v1.1.5 study (2026-03-09)
 - **Effort**: 2 days
 - **Recommendation**: ADOPT
 
-### 6. MCP Stdout Protection Audit ⭐
+### ~~6. MCP Stdout Protection Audit~~ ✅ Implemented 2026-03-09
 
-Source: claude-mem v10.5.5 study (2026-03-09)
+ServeMcpCommand captures real stdout for MCP transport, redirects `$stdout` to `$stderr` during serve. Accidental puts/print from gems goes to stderr. Restore via ensure block.
 
-- **Value**: Prevent accidental `puts` or `$stdout.write` from corrupting stdio JSON-RPC transport
-- **Implementation**: Audit MCP server for any stdout leaks. Add `$stdout` interception or redirect to `$stderr` during MCP serve mode
-- **Evidence**: claude-mem `src/servers/mcp-server.ts:19-22` — `console.log` interception to prevent protocol corruption
-- **Effort**: 0.5 days
-- **Recommendation**: ADOPT
+### ~~7. Worktree-Aware Git Root Detection~~ ✅ Implemented 2026-03-09
 
-### 7. Worktree-Aware Git Root Detection ⭐
-
-Source: claude-supermemory v2.0.1 study (2026-03-09)
-
-- **Value**: Prevent duplicate project databases when using git worktrees
-- **Implementation**: Use `git rev-parse --git-common-dir` to resolve main repo root. Add opt-in `CLAUDE_MEMORY_ISOLATE_WORKTREES` env var for worktree isolation
-- **Evidence**: supermemory `src/lib/git-utils.js:5-50` — worktree detection with `--git-common-dir`
-- **Effort**: 0.5 days
-- **Recommendation**: ADOPT
+Configuration#project_dir uses `git rev-parse --git-common-dir` to resolve main repo root across worktrees. `CLAUDE_MEMORY_ISOLATE_WORKTREES` env var opts into per-worktree isolation. Uses Open3.capture2 with graceful fallback to Dir.pwd.
 
 ### 8. Search Agent Delegation Pattern ⭐
 
@@ -83,15 +65,9 @@ Source: episodic-memory study (2026-03-09)
 - **Effort**: 1-2 days
 - **Recommendation**: ADOPT
 
-### 9. Self-Excluding Agent Conversations
+### ~~9. Self-Excluding Agent Conversations~~ ✅ Implemented 2026-03-09
 
-Source: episodic-memory study (2026-03-09)
-
-- **Value**: Prevent ClaudeMemory's own meta-conversations (distiller, sweeper) from polluting the knowledge base
-- **Implementation**: Add context marker to hook output; skip ingestion when marker detected in transcript
-- **Evidence**: episodic-memory `src/constants.ts:6-7`, `src/sync.ts:6-10` — SUMMARIZER_CONTEXT_MARKER exclusion
-- **Effort**: 0.5 days
-- **Recommendation**: ADOPT
+Added `SELF_CONTEXT_MARKER` constant (`claude-memory-self`) to ClaudeMemory module. Added to ingester EXCLUSION_TAGS. Transcripts containing `<claude-memory-self>` are skipped entirely, preventing meta-conversation pollution.
 
 ### 10. Structured Error Classification
 
@@ -279,4 +255,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-09 - Re-studied all 6 influencer repos. Added 9 new high-priority items (#3-11): Intent Parameter, MCP Tool Annotations, Retrieval Score Traces, MCP Stdout Protection, Worktree-Aware Git Root, Search Agent Delegation, Self-Excluding Conversations, Structured Error Classification, Entity Context Extraction Prompts. Added 3 medium-priority items (#12-14): Shell Completion, Content-Addressed Dedup, Vector Scoring Dedup. Added 4 new Features to Avoid. Previous: Claude Code Plugin Distribution Format, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
+*Last updated: 2026-03-09 - Implemented 4 features: MCP Tool Annotations (#4), MCP Stdout Protection (#6), Worktree-Aware Git Root (#7), Self-Excluding Conversations (#9). Previously: Re-studied all 6 influencer repos. Added 9 new high-priority items (#3-11). Added 3 medium-priority items (#12-14). Added 4 new Features to Avoid. Previous: Claude Code Plugin Distribution Format, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
