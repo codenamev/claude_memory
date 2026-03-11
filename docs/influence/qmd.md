@@ -1,9 +1,9 @@
 # QMD Analysis (Updated)
 
-*Analysis Date: 2026-03-02*
-*Previous Analysis: 2026-02-02*
+*Analysis Date: 2026-03-10*
+*Previous Analysis: 2026-03-02, 2026-02-02*
 *Repository: https://github.com/tobi/qmd*
-*Version: 1.1.0 (commit 40610c3)*
+*Version: 2.0.1 (commit ae3604c)*
 
 ---
 
@@ -13,36 +13,40 @@
 
 QMD (Query Markup Documents) is an **on-device search engine** for markdown knowledge bases. It combines BM25 full-text search, vector semantic search, and LLM re-ranking — all running locally via node-llama-cpp with GGUF models.
 
-### Key Innovation (What's New Since Last Study)
+### Key Innovation (What's New Since v1.1.5 Study)
 
-1. **Query Document Format** (`docs/SYNTAX.md`): Structured multi-line queries with typed sub-queries (`lex:`, `vec:`, `hyde:`) that route to different search backends. First sub-query gets 2x weight in Reciprocal Rank Fusion. This replaces the separate `search`/`vsearch`/`query` commands with a unified `query` tool.
+1. **Stable SDK API** (`src/index.ts:1-524`): QMD 2.0 declares a stable library API via `createStore()` returning a `QMDStore` interface. Clean separation between SDK (public), CLI (consumer), and MCP (consumer). The SDK owns all search, retrieval, collection management, context management, indexing, and lifecycle operations.
 
-2. **Lex Query Syntax**: Full BM25 operator support — `"exact phrase"` matching, `-term` exclusions, `-"phrase"` exclusions. Enables intent-aware disambiguation (e.g., `performance -sports -athlete`).
+2. **Unified `search()` Method** (`src/index.ts:145-164`): Replaces the old `query()`/`search()`/`structuredSearch()` split. Accepts either a simple `query` string (auto-expanded) or pre-expanded `queries` array. Clean polymorphic design.
 
-3. **HTTP MCP Transport** (`src/mcp.ts:10-16`): Stateless HTTP server alongside stdio. Models stay loaded in VRAM across requests. Embedding/reranking contexts disposed after 5 min idle.
+3. **MCP Server as SDK Consumer** (`src/mcp/server.ts:1-808`): MCP server completely rewritten to consume the SDK — zero internal store access. Uses `QMDStore` interface exclusively. Multi-session HTTP transport with session map.
 
-4. **Unified MCP `query` tool**: Removed separate `search`, `vector_search`, `deep_search` tools. Single `query` tool handles all modes via the query document format.
+4. **Self-Contained Database** (`src/store.ts:699-767`): New `store_collections` and `store_config` SQLite tables make the DB self-contained. No external YAML config needed — SDK creates stores with inline config or DB-only mode.
 
-5. **Collection Management Enhancements**: `include`/`exclude` collections from default queries, `update-cmd` for pre-update shell commands, multiple `-c` flags.
+5. **Maintenance Class** (`src/maintenance.ts:1-54`): Dedicated maintenance wrapper for cleanup operations — vacuum, orphaned content/vectors cleanup, LLM cache clearing, inactive doc deletion, embedding reset.
+
+6. **Embedded Skills** (`src/embedded-skills.ts`): Skill definitions (SKILL.md + references) embedded as base64 in source. `qmd skill install` copies packaged skill to `~/.claude/commands/`.
+
+7. **REST API** (`src/mcp/server.ts:626-675`): POST `/query` (alias `/search`) endpoint alongside MCP — structured search without MCP protocol overhead.
 
 ### Technology Stack
 
 - **Runtime**: Node.js >= 22 / Bun (dual runtime, `src/db.ts:9-24`)
-- **Database**: SQLite with better-sqlite3 + sqlite-vec extension v0.1.7-alpha.2
+- **Database**: SQLite with better-sqlite3 ^12.4.5 + sqlite-vec v0.1.7-alpha.2
 - **Full-Text Search**: SQLite FTS5 with Porter tokenization
-- **Embeddings**: EmbeddingGemma (~300MB GGUF)
+- **Embeddings**: Qwen3-Embedding (configurable via `QMD_EMBED_MODEL`)
 - **Reranking**: Qwen3-Reranker-0.6B (~640MB GGUF)
 - **Query Expansion**: Qwen3-1.7B (custom fine-tuned, ~1.1GB)
 - **MCP**: @modelcontextprotocol/sdk v1.25.1
-- **Validation**: Zod v4
-- **Plugin**: Claude Code marketplace format
+- **Validation**: Zod v4.2.1
+- **Plugin**: Claude Code marketplace format + embedded skills
 
 ### Production Readiness
 
-- **Maturity**: Stable (v1.1.0), 5,700+ GitHub stars
-- **Test Coverage**: vitest suite (store, mcp, collections, formatter, cli, eval)
-- **Plugin Distribution**: Claude Code marketplace
-- **Community**: Active (256 PRs merged, external contributors)
+- **Maturity**: Stable (v2.0.1), 5,700+ GitHub stars
+- **Test Coverage**: vitest suite with 1,286-line SDK test (store, mcp, collections, formatter, cli, sdk, eval)
+- **Plugin Distribution**: Claude Code marketplace + `qmd skill install`
+- **Community**: Active (362+ PRs, external contributors)
 
 ---
 
@@ -62,79 +66,111 @@ content_vectors (chunk metadata: hash, seq, pos, model)
 vectors_vec (sqlite-vec native KNN index, cosine distance)
     ↓
 llm_cache (hash-keyed deterministic response cache)
+    ↓
+store_collections (self-contained collection config in DB)  [NEW in v2.0]
+    ↓
+store_config (key-value metadata, e.g. config_hash)  [NEW in v2.0]
 ```
 
-### Key Design Patterns (New)
+### Key Design Patterns
 
-1. **Query Document Format** (`docs/SYNTAX.md:1-100`): EBNF grammar for structured queries. Lines typed as `lex:`, `vec:`, or `hyde:` route to different backends. Plain text defaults to `expand:` (LLM-generated variants).
+1. **SDK-First Architecture** (`src/index.ts`): Public `QMDStore` interface is the contract. CLI and MCP are consumers, not peers. Internal store exposed via `.internal` for advanced use only.
 
-2. **Two-Step Vector Query** (`store.ts:1912-1915`): JOINs with sqlite-vec virtual tables hang indefinitely. QMD uses separate queries:
-   ```typescript
-   // Step 1: KNN from vec table
-   const vecResults = db.prepare(
-     `SELECT hash_seq, distance FROM vectors_vec WHERE embedding MATCH ? AND k = ?`
-   ).all(embedding, limit * 3);
-   // Step 2: Join with documents separately
-   ```
+2. **Per-Store LLM Instance** (`src/index.ts:361-364`): Each SDK store creates its own `LlamaCpp` instance with lazy loading and 5-min inactivity timeout. No global singletons — enables concurrent stores.
 
-3. **Smart Chunking** (`store.ts:53-219`): 900 tokens/chunk, 15% overlap, markdown-aware break points with scored pattern matching (h1=100, h2=90, paragraph=20). Distance decay prevents splitting inside code fences.
+3. **Write-Through Config** (`src/index.ts:417-465`): Collection/context mutations write to both SQLite and YAML/inline config if configured. DB is source of truth; YAML is optional persistence layer.
 
-4. **Dynamic MCP Instructions** (`mcp.ts:91-98`): `buildInstructions()` generates context-aware server instructions from actual index state, injected into LLM system prompt.
+4. **Two-Step Vector Query** (`store.ts`): JOINs with sqlite-vec virtual tables hang. Separate KNN query then batch hydration.
 
-5. **Dual Runtime Compatibility** (`db.ts:9-24`): Cross-runtime SQLite layer that works under both Bun (bun:sqlite) and Node.js (better-sqlite3).
+5. **Smart Chunking** (`store.ts:53-219`): 900 tokens/chunk, 15% overlap, markdown-aware break points with scored pattern matching.
+
+6. **Dynamic MCP Instructions** (`src/mcp/server.ts:92-152`): `buildInstructions()` generates context-aware instructions from actual index state including collection names, document counts, capability gaps, search examples, and retrieval workflow.
+
+7. **MCP Resource Templates** (`src/mcp/server.ts:172-207`): Documents accessible via `qmd://{+path}` URI scheme. Resources return structured content with context annotations.
 
 ### Comparison with ClaudeMemory
 
-| Aspect | QMD (1.1.0) | ClaudeMemory | Notes |
+| Aspect | QMD (2.0.1) | ClaudeMemory | Notes |
 |--------|-------------|--------------|-------|
+| **API** | SDK-first (`QMDStore` interface) | CLI-first + MCP tools | QMD more composable |
 | **Data Model** | Content-addressable chunks | Subject-predicate-object facts | QMD stores documents; we store knowledge |
-| **Storage** | SQLite + sqlite-vec | SQLite + Sequel + fastembed-rb | Both use FTS5 |
-| **Vector Search** | sqlite-vec (native C) | JSON embeddings (Ruby) | QMD 10-100x faster |
-| **Query Language** | Typed sub-queries (lex/vec/hyde) | Free-text search | QMD more expressive |
-| **Chunking** | Smart (900 tok, markdown-aware) | None (fact-level) | Different granularity |
-| **Plugin Format** | marketplace.json | Ruby gem + MCP + hooks | QMD easier to install |
-| **MCP Transport** | stdio + HTTP | stdio only | HTTP enables shared server |
+| **Storage** | SQLite + sqlite-vec | SQLite + Sequel + sqlite-vec | Both use FTS5 + vec0 |
+| **Config** | Self-contained DB + optional YAML | Dual-database (global + project) | Different scoping models |
+| **Query** | Typed sub-queries (lex/vec/hyde) | Free-text + hybrid search | QMD more expressive |
+| **Maintenance** | Dedicated `Maintenance` class | `Sweep` module + compact command | Similar approach |
+| **Plugin Format** | marketplace.json + embedded skills | Ruby gem + MCP + hooks | QMD adds skill install |
+| **MCP Transport** | stdio + HTTP + REST | stdio only | QMD more flexible |
+| **Tests** | 1,286-line SDK test suite | RSpec suite + evals + benchmarks | Both comprehensive |
 
 ---
 
 ## Key Components Deep-Dive
 
-### Component 1: Query Document Parser
+### Component 1: SDK API (`src/index.ts`)
 
-**Purpose**: Parse structured multi-line queries into typed sub-queries for routing to appropriate search backends.
+**Purpose**: Stable programmatic interface for all QMD operations.
 
-**Location**: `docs/SYNTAX.md`, `src/store.ts`
+**Key Design Decisions**:
+- `QMDStore` interface with 20+ methods across 6 categories (Search, Retrieval, Collections, Context, Indexing, Lifecycle)
+- `createStore()` factory with three modes: YAML config, inline config, DB-only
+- Per-store `LlamaCpp` with lazy loading and auto-disposal
+- Write-through config pattern for collection mutations
+- Re-exports types for SDK consumers
 
-**Design Decisions**:
-- Typed lines (`lex:`, `vec:`, `hyde:`) enable precise control over search routing
-- First sub-query gets 2x weight in RRF fusion
-- Plain text auto-expands via LLM to generate all three types
-- Lex supports phrase matching and negation for disambiguation
+**Code Example** (`src/index.ts:331-524`):
+```typescript
+export async function createStore(options: StoreOptions): Promise<QMDStore> {
+  const internal = createStoreInternal(options.dbPath);
+  const llm = new LlamaCpp({
+    inactivityTimeoutMs: 5 * 60 * 1000,
+    disposeModelsOnInactivity: true,
+  });
+  internal.llm = llm;
+  // ... builds QMDStore with all methods delegating to internal
+}
+```
 
-### Component 2: HTTP MCP Transport
+### Component 2: MCP Server as SDK Consumer (`src/mcp/server.ts`)
 
-**Purpose**: Long-lived MCP server that avoids repeated model loading.
+**Purpose**: Expose QMD search via MCP protocol, consuming only the public SDK.
 
-**Location**: `src/mcp.ts:119-137`
+**Key Design Decisions**:
+- Zero internal store access — uses `QMDStore` interface exclusively
+- `createMcpServer()` shared by both stdio and HTTP transports
+- Multi-session HTTP with session map (`Map<string, Transport>`)
+- REST `/query` endpoint alongside MCP for non-MCP clients
+- Rich `buildInstructions()` with collection stats, context, capability gaps, search examples
 
-**Design Decisions**:
-- WebStandardStreamableHTTPServerTransport for stateless HTTP
-- Models stay loaded in VRAM across requests
-- Idle disposal after 5 min (transparent recreation ~1s)
-- Health endpoint for liveness checks
-- Daemon mode with PID file management
+**Code Example** (`src/mcp/server.ts:158-166`):
+```typescript
+async function createMcpServer(store: QMDStore): Promise<McpServer> {
+  const server = new McpServer(
+    { name: "qmd", version: "0.9.9" },
+    { instructions: await buildInstructions(store) },
+  );
+  // ... registers tools using only store.search(), store.get(), etc.
+}
+```
 
-### Component 3: Smart Chunking
+### Component 3: Self-Contained Database (`src/store.ts:699-767`)
 
-**Purpose**: Split documents at natural boundaries for better embeddings.
+**Purpose**: Make the database self-contained so SDK consumers don't need external config files.
 
-**Location**: `src/store.ts:68-219`
+**Key Design Decisions**:
+- `store_collections` table replaces YAML as the primary config store
+- `store_config` key-value table for metadata (e.g., `config_hash` for sync optimization)
+- `syncConfigToDb()` function syncs external config into SQLite on store creation
+- Collection accessor functions (`getStoreCollections`, `upsertStoreCollection`, etc.) replace direct YAML reads
 
-**Design Decisions**:
-- Scored break points (h1=100 → newline=1) with distance decay
-- Code fence detection prevents splitting mid-block
-- 200-token search window for finding optimal cut points
-- Squared distance decay for gentle early, steep late penalties
+### Component 4: Maintenance Class (`src/maintenance.ts`)
+
+**Purpose**: Wrap low-level store cleanup operations for CLI housekeeping.
+
+**Key Design Decisions**:
+- Takes internal `Store` in constructor — allowed direct DB access
+- 6 operations: vacuum, orphaned content, orphaned vectors, LLM cache, inactive docs, clear embeddings
+- Each method returns count of affected rows for reporting
+- Used by CLI's `clean` subcommands
 
 ---
 
@@ -142,19 +178,23 @@ llm_cache (hash-keyed deterministic response cache)
 
 ### What They Do Well
 
-1. **Native Vector Queries**: sqlite-vec provides sub-millisecond KNN with C-level performance
-2. **Typed Query Language**: Explicit control over search routing reduces ambiguity
-3. **Smart Chunking**: Markdown-aware splitting produces better embeddings
-4. **HTTP MCP Transport**: Shared server avoids repeated model loading
-5. **Dynamic Instructions**: Index-aware MCP instructions give LLM immediate context
+1. **SDK-First Architecture**: Clean separation between API contract and consumers (CLI, MCP). Makes QMD embeddable in other tools.
+2. **Self-Contained Database**: DB stores its own config — no external files needed to reopen a store.
+3. **MCP as Pure Consumer**: MCP server has zero internal knowledge, proving the SDK is complete.
+4. **REST API Alongside MCP**: POST `/query` for non-MCP clients (curl, scripts, other tools).
+5. **Dynamic MCP Instructions**: Rich context about collections, doc counts, capability gaps — eliminates discovery calls.
+6. **Embedded Skill Distribution**: `qmd skill install` copies skill files — no manual setup.
+7. **Comprehensive SDK Tests**: 1,286-line test file covers constructor, search, collections, contexts, indexing, health.
 
 ### What We Do Well
 
 1. **Knowledge Representation**: Facts with provenance > raw document chunks
 2. **Truth Maintenance**: Supersession and conflict resolution
-3. **Dual-Database System**: Project/global scope separation
+3. **Dual-Database System**: Project/global scope separation is cleaner than single-DB
 4. **Distillation Pipeline**: Extract structured knowledge from transcripts
 5. **Temporal Validity**: Facts have valid_from/valid_to windows
+6. **Hook Integration**: Deep integration with Claude Code lifecycle events
+7. **21 MCP Tools**: More granular tool surface than QMD's 4 tools
 
 ---
 
@@ -162,54 +202,73 @@ llm_cache (hash-keyed deterministic response cache)
 
 ### High Priority ⭐
 
-#### 1. Native Vector Storage (sqlite-vec)
-- **Value**: 10-100x faster KNN queries, eliminates O(n) Ruby similarity
-- **Evidence**: `db.ts:52-54` — single function call to load extension
-- **Implementation**: Add sqlite-vec gem, create `facts_vec` virtual table, two-step query pattern
-- **Effort**: 3-5 days
-- **Trade-off**: Native dependency (but well-maintained, cross-platform)
-- **Recommendation**: **ADOPT** — Critical for scaling beyond 1000 facts
+#### 1. Dedicated Maintenance Class ⭐
+- **Value**: Clean separation of maintenance operations from main store. QMD's `Maintenance` class wraps 6 cleanup operations with return counts.
+- **Evidence**: `src/maintenance.ts:1-54` — constructor takes internal store, each method returns affected count
+- **Implementation**: Extract our `Sweep` module operations into a `Maintenance` class. Methods: `vacuum`, `cleanup_orphaned_content`, `cleanup_orphaned_vectors`, `cleanup_expired_facts`, `cleanup_superseded_facts`, `compact`. Return affected counts for reporting.
+- **Effort**: 1 day
+- **Trade-off**: Minor refactoring
+- **Recommendation**: **ADOPT** — Our sweep is already similar, just needs cleaner wrapping
 
-#### 2. Smart Chunking for Long Content
-- **Value**: Better embeddings for transcripts > 3000 chars
-- **Evidence**: `store.ts:53-219` — scored break points, code fence awareness
-- **Implementation**: Port chunking algorithm to Ruby for transcript ingestion
-- **Effort**: 2-3 days
-- **Trade-off**: Complexity; only needed for long content
-- **Recommendation**: **CONSIDER** — Adopt if users report long transcript issues
+#### 2. Dynamic MCP Instructions Enhancement ⭐
+- **Value**: QMD v2.0 builds rich instructions including collection stats, document counts, capability gaps, search examples, and retrieval workflow tips. Our MCP server has a static query guide prompt but no dynamic instructions.
+- **Evidence**: `src/mcp/server.ts:92-152` — `buildInstructions()` with collections, counts, gaps, examples, tips
+- **Implementation**: Add `buildInstructions()` to our MCP server that generates dynamic instructions with: fact counts (global/project), active conflict count, recent decision count, convention count, database health, and usage tips.
+- **Effort**: 1 day
+- **Trade-off**: Minimal — enhances existing MCP server instructions
+- **Recommendation**: **ADOPT** — Free context for LLMs, eliminates need for `memory.status` call
 
-#### 3. HTTP MCP Transport
-- **Value**: Shared server, models stay loaded, faster subsequent queries
-- **Evidence**: `mcp.ts:119-137` — WebStandardStreamableHTTPServerTransport
-- **Implementation**: Add HTTP transport option alongside stdio
-- **Effort**: 2-3 days
-- **Trade-off**: Process management complexity
-- **Recommendation**: **CONSIDER** — Useful if MCP startup latency becomes an issue
+#### 3. Embedded Skill Distribution ⭐
+- **Value**: `qmd skill install` copies packaged skill files to `~/.claude/commands/` — zero-config setup. Skills are embedded as base64 in source code and extracted at install time.
+- **Evidence**: `src/embedded-skills.ts:1-22` — base64-encoded SKILL.md + references; `src/cli/qmd.ts` — `skill install` command
+- **Implementation**: Add `claude-memory install-skill` command that writes our memory recall agent (`agents/memory-recall.md`) to `~/.claude/commands/memory-recall.md`. Embed skill content in a Ruby constant.
+- **Effort**: 1-2 days
+- **Trade-off**: Adds a constant with skill content to codebase
+- **Recommendation**: **ADOPT** — Pairs with Search Agent Delegation Pattern (#8 in improvements.md)
+
+#### 4. REST API Endpoint ⭐
+- **Value**: QMD v2.0 adds POST `/query` alongside MCP — enables search from curl, scripts, CI, and non-MCP clients without the full MCP protocol handshake.
+- **Evidence**: `src/mcp/server.ts:626-675` — `/query` and `/search` endpoints with structured JSON request/response
+- **Implementation**: Add optional HTTP server mode to `claude-memory serve-mcp --http` with POST `/recall` endpoint. Accept `{ query, scope, limit }`, return JSON facts.
+- **Effort**: 2 days
+- **Trade-off**: Requires WEBrick or similar Ruby HTTP server dependency
+- **Recommendation**: **CONSIDER** — Useful for CI/scripting, but MCP covers primary use case
 
 ### Medium Priority
 
-#### 4. Dynamic MCP Server Instructions
-- **Value**: Give LLM immediate context about database state without extra tool call
-- **Evidence**: `mcp.ts:91-98` — builds instructions from actual index state
-- **Implementation**: Generate instructions showing fact counts, recent decisions, active conflicts
-- **Effort**: 1 day
-- **Trade-off**: Minimal
-- **Recommendation**: **ADOPT**
-
-#### 5. Query Document Format
-- **Value**: More expressive queries with explicit search routing
-- **Evidence**: `docs/SYNTAX.md:1-100` — formal EBNF grammar
-- **Implementation**: Support typed queries in recall (e.g., `lex: exact term` vs `vec: semantic query`)
+#### 5. SDK-First Architecture Pattern
+- **Value**: QMD's `QMDStore` interface proves the core API is complete by having MCP consume only the public surface. Our MCP server directly accesses `Store`, `Recall`, `Sweep` internals.
+- **Evidence**: `src/index.ts:212-304` — full `QMDStore` interface; `src/mcp/server.ts` — zero internal imports
+- **Implementation**: Define a `ClaudeMemory::API` module that wraps all public operations. Refactor MCP server to consume only this API.
 - **Effort**: 3-5 days
-- **Trade-off**: Complexity; current free-text may be sufficient
-- **Recommendation**: **DEFER** — Over-engineering for fact retrieval
+- **Trade-off**: Significant refactoring; current approach works fine
+- **Recommendation**: **CONSIDER** — Good engineering but not urgent
+
+#### 6. Self-Contained Database Config
+- **Value**: QMD v2.0 stores collection config in SQLite tables (`store_collections`, `store_config`). Database is reopenable without external files.
+- **Evidence**: `src/store.ts:699-727` — `store_collections` and `store_config` tables
+- **Implementation**: Store configuration metadata (last ingest, publish mode, active scope) in a `config` table in our SQLite databases.
+- **Effort**: 1-2 days
+- **Trade-off**: Some config is better in ENV (paths, flags)
+- **Recommendation**: **CONSIDER** — Useful for metadata like last_ingest_at, schema_version already tracked
+
+#### 7. Per-Instance Resource Management
+- **Value**: QMD creates per-store `LlamaCpp` instances with lazy loading and 5-min inactivity timeout. No global singletons. Enables concurrent stores safely.
+- **Evidence**: `src/index.ts:361-364` — per-store LLM with `disposeModelsOnInactivity: true`
+- **Implementation**: Ensure our `StoreManager` properly manages per-instance resources. Currently it's a singleton — consider making it closeable.
+- **Effort**: 1 day
+- **Trade-off**: Minimal for our use case (single process)
+- **Recommendation**: **CONSIDER** — Good hygiene, low effort
 
 ### Features to Avoid
 
 - **Custom Fine-Tuned Query Expansion (Qwen3-1.7B)**: Too heavy for fact retrieval
-- **EmbeddingGemma**: We use fastembed-rb (BAAI/bge-small-en-v1.5) which is lighter
+- **EmbeddingGemma / Qwen3-Embedding**: We use fastembed-rb (BAAI/bge-small-en-v1.5) which is lighter and requires no GPU
 - **Content-Addressable Storage**: Our facts are deduplicated by signature, not content hash
-- **LLM Reranking**: Cross-encoder reranking is over-engineering for our use case
+- **LLM Reranking (Qwen3-Reranker-0.6B)**: Cross-encoder reranking is over-engineering for our use case
+- **Query Document Format**: Over-engineering for fact retrieval (lex/vec/hyde routing unnecessary for SPO facts)
+- **Write-Through YAML Config**: We don't use YAML config files; dual-database is our config model
+- **Multi-Session HTTP Transport**: Our MCP server is lightweight enough for stdio; no model loading latency
 
 ---
 
@@ -219,37 +278,49 @@ llm_cache (hash-keyed deterministic response cache)
 - **Fact-based knowledge model**: More valuable than raw document chunks
 - **Dual-database system**: Clean project/global separation
 - **Ruby + Sequel**: Mature, stable, well-tested
+- **21 MCP tools**: More granular than QMD's 4 tools
 
 ### What to Adopt
-- **sqlite-vec**: Critical for vector query performance
-- **Two-step vector query pattern**: Avoid JOIN hangs
-- **Dynamic MCP instructions**: Free context for LLMs
+- **Dedicated maintenance class**: Clean operation wrapping with counts
+- **Dynamic MCP instructions**: Rich context about database state
+- **Embedded skill distribution**: `install-skill` command for zero-config setup
 
 ### What to Reject
-- **YAML collection system**: Our dual-database is cleaner
-- **Custom fine-tuned models**: Too heavy for our use case
-- **Query document format**: Over-engineering for fact retrieval
+- **SDK-first refactor**: Over-engineering for a gem that's already well-structured
+- **Self-contained DB config**: Our dual-database + ENV is already clean
+- **REST API**: MCP covers our use case; REST adds complexity
 
 ---
 
 ## Key Takeaways
 
 ### Main Learnings
-1. sqlite-vec is production-ready (v0.1.7-alpha.2) and used by multiple projects
-2. Two-step query pattern is mandatory (JOINs hang with vec tables)
-3. Query document format is elegant but over-engineering for fact retrieval
-4. HTTP MCP transport enables shared server mode
+1. SDK-first architecture proves API completeness by having consumers use only the public surface
+2. Dynamic MCP instructions with database stats eliminate discovery tool calls
+3. Embedded skill distribution is a clean pattern for zero-config plugin setup
+4. Dedicated maintenance class improves separation of concerns
+5. REST endpoint alongside MCP is pragmatic for non-MCP consumers
 
-### Changes Since Last Analysis (2026-02-02)
-- v1.1.0 released with query document format
-- Lex syntax with phrase matching and negation
-- Unified `query` MCP tool replacing 3 separate tools
-- HTTP MCP transport with daemon mode
-- Dual Node.js/Bun runtime support
-- Collection include/exclude management
+### Changes Since Last Analysis (2026-03-02)
+- v2.0.0 and v2.0.1 released
+- Stable SDK API with `QMDStore` interface and `createStore()` factory
+- MCP server rewritten as pure SDK consumer (zero internal access)
+- CLI and MCP organized into `src/cli/` and `src/mcp/` subdirectories
+- Self-contained database with `store_collections` and `store_config` tables
+- `Maintenance` class wrapping cleanup operations
+- `embedded-skills.ts` with base64-encoded skill files
+- `qmd skill install` command
+- REST `/query` endpoint alongside MCP
+- Runtime-aware `bin/qmd` wrapper for Bun/Node compatibility
+- `better-sqlite3` bumped to ^12.4.5 for Node 25
+- Comprehensive 1,286-line SDK test suite
+- GPU init replaced with node-llama-cpp `autoAttempt`
+- Collection ignore patterns
+- Configurable `candidateLimit` for reranker
+- Multi-session HTTP transport
 
 ---
 
-*Analysis completed: 2026-03-02*
+*Analysis completed: 2026-03-10*
 *Analyst: Claude Code*
 *Review Status: Draft*

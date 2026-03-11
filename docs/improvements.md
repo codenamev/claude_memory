@@ -1,12 +1,12 @@
 # Improvements to Consider
 
-*Updated: 2026-03-09 - Re-studied all 6 influencer repos. New findings from QMD v1.1.5 (intent parameter, score traces), claude-mem v10.5.5 (mode system, stdout protection), claude-supermemory v2.0.1 (context extraction, worktree support, error classification), grepai (shell completion, skills, dedup), episodic-memory (tool annotations, agent delegation, self-exclusion). KBS unchanged.*
+*Updated: 2026-03-10 - Re-studied QMD (v2.0.1, up from v1.1.5). New findings: SDK-first architecture, dedicated Maintenance class, dynamic MCP instructions enhancement, embedded skill distribution, REST API endpoint. Other 5 repos unchanged since 2026-03-09.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5, studied 2026-03-09)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, studied 2026-03-09)*
 - *[yoanbernabeu/grepai](https://github.com/yoanbernabeu/grepai) - Semantic code search (latest, studied 2026-03-09)*
 - *[supermemoryai/claude-supermemory](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed persistent memory (v2.0.1, studied 2026-03-09)*
-- *[tobi/qmd](https://github.com/tobi/qmd) - On-device hybrid search engine (v1.1.5, studied 2026-03-09)*
+- *[tobi/qmd](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1, studied 2026-03-10)*
 - *[MadBomber/kbs](https://github.com/MadBomber/kbs) - Knowledge-Based System with RETE inference (v0.2.1, studied 2026-03-09 — no changes)*
 
 This document contains only unimplemented improvements. Completed items are removed.
@@ -69,7 +69,37 @@ Source: episodic-memory study (2026-03-09)
 
 Added `SELF_CONTEXT_MARKER` constant (`claude-memory-self`) to ClaudeMemory module. Added to ingester EXCLUSION_TAGS. Transcripts containing `<claude-memory-self>` are skipped entirely, preventing meta-conversation pollution.
 
-### 10. Structured Error Classification
+### 10. Dedicated Maintenance Class ⭐
+
+Source: QMD v2.0.1 study (2026-03-10)
+
+- **Value**: Clean separation of maintenance operations from main store with return counts. QMD's `Maintenance` class wraps 6 cleanup operations (vacuum, orphaned content/vectors, LLM cache, inactive docs, clear embeddings)
+- **Implementation**: Extract `Sweep` module operations into a `Maintenance` class. Methods: `vacuum`, `cleanup_orphaned_vectors`, `cleanup_expired_facts`, `cleanup_superseded_facts`, `compact`. Return affected counts for reporting
+- **Evidence**: QMD `src/maintenance.ts:1-54` — constructor takes internal store, each method returns affected count
+- **Effort**: 1 day
+- **Recommendation**: ADOPT
+
+### 11. Dynamic MCP Instructions Enhancement ⭐
+
+Source: QMD v2.0.1 study (2026-03-10)
+
+- **Value**: QMD v2.0 builds rich MCP server instructions with collection stats, document counts, capability gaps, search examples, and retrieval workflow tips. Our MCP server has a static query guide prompt but no dynamic instructions
+- **Implementation**: Add `build_instructions` to MCP server that generates dynamic instructions with: fact counts (global/project), active conflict count, recent decision count, convention count, database health, and usage tips
+- **Evidence**: QMD `src/mcp/server.ts:92-152` — `buildInstructions()` with collections, counts, gaps, examples, tips
+- **Effort**: 1 day
+- **Recommendation**: ADOPT
+
+### 12. Embedded Skill Distribution ⭐
+
+Source: QMD v2.0.1 study (2026-03-10)
+
+- **Value**: `qmd skill install` copies packaged skill files to `~/.claude/commands/` — zero-config setup. Skills are embedded as base64 in source code and extracted at install time
+- **Implementation**: Add `claude-memory install-skill` command that writes our memory recall agent to `~/.claude/commands/memory-recall.md`. Embed skill content in a Ruby constant. Pairs with Search Agent Delegation Pattern (#8)
+- **Evidence**: QMD `src/embedded-skills.ts:1-22` — base64-encoded SKILL.md + references; CLI `skill install` command
+- **Effort**: 1-2 days
+- **Recommendation**: ADOPT
+
+### 13. Structured Error Classification
 
 Source: claude-supermemory v2.0.1 study (2026-03-09)
 
@@ -79,7 +109,7 @@ Source: claude-supermemory v2.0.1 study (2026-03-09)
 - **Effort**: 1 day
 - **Recommendation**: ADOPT
 
-### 11. Entity Context Extraction Prompts
+### 14. Entity Context Extraction Prompts
 
 Source: claude-supermemory v2.0.1 study (2026-03-09)
 
@@ -93,7 +123,7 @@ Source: claude-supermemory v2.0.1 study (2026-03-09)
 
 ## Medium Priority
 
-### 12. Shell Completion for CLI
+### 15. Shell Completion for CLI
 
 Source: grepai study (2026-03-09)
 
@@ -103,7 +133,7 @@ Source: grepai study (2026-03-09)
 - **Effort**: 1-2 days
 - **Recommendation**: CONSIDER
 
-### 13. Content-Addressed Deduplication for Embeddings
+### 16. Content-Addressed Deduplication for Embeddings
 
 Source: grepai study (2026-03-09)
 
@@ -113,7 +143,7 @@ Source: grepai study (2026-03-09)
 - **Effort**: 1 day
 - **Recommendation**: CONSIDER — quick win, infrastructure already exists
 
-### 14. Deduplication Before Vector Scoring
+### 17. Deduplication Before Vector Scoring
 
 Source: QMD v1.1.5 study (2026-03-09)
 
@@ -123,7 +153,7 @@ Source: QMD v1.1.5 study (2026-03-09)
 - **Effort**: 1 day
 - **Recommendation**: CONSIDER
 
-### 15. Incremental Indexing with File Watching
+### 18. Incremental Indexing with File Watching
 
 Source: grepai study (reinforced 2026-03-02)
 
@@ -133,7 +163,7 @@ Source: grepai study (reinforced 2026-03-02)
 - **Effort**: 2-3 days
 - **Trade-off**: Background process ~10MB memory overhead
 
-### 16. Document Chunking for Long Transcripts
+### 19. Document Chunking for Long Transcripts
 
 Source: QMD study (updated 2026-03-02)
 
@@ -151,7 +181,18 @@ Source: QMD study (updated 2026-03-02)
 
 ## Low Priority / Defer
 
-### 17. Signal-Based Ingestion Filtering
+### 20. REST API Endpoint
+
+Source: QMD v2.0.1 study (2026-03-10)
+
+- **Value**: POST `/query` alongside MCP — enables search from curl, scripts, CI, and non-MCP clients without the full MCP protocol handshake
+- **Implementation**: Add optional HTTP server mode to `claude-memory serve-mcp --http` with POST `/recall` endpoint. Accept `{ query, scope, limit }`, return JSON facts
+- **Evidence**: QMD `src/mcp/server.ts:626-675` — `/query` and `/search` endpoints with structured JSON
+- **Effort**: 2 days
+- **Trade-off**: Requires WEBrick or similar Ruby HTTP server dependency
+- **Recommendation**: CONSIDER — Useful for CI/scripting, but MCP covers primary use case
+
+### 21. Signal-Based Ingestion Filtering
 
 Source: claude-supermemory study (2026-03-02)
 
@@ -162,7 +203,7 @@ Source: claude-supermemory study (2026-03-02)
 - **Trade-off**: May miss important but subtly-expressed facts. Our distiller already extracts structured facts, which inherently filters noise.
 - **Recommendation**: DEFER — Distiller handles this naturally
 
-### 18. HTTP MCP Transport
+### 22. HTTP MCP Transport
 
 Source: QMD study (2026-03-02)
 
@@ -217,6 +258,9 @@ Added `claude-memory export` command. Dumps facts with entities and provenance t
 - **Config Inheritance Pattern** — claude-mem's `parent--override` naming with deep merge. Not enough configuration variants to justify the complexity
 - **HMAC Request Signing** — supermemory's `validate.js` uses HMAC but hardcodes the secret in a minified bundle. Security through obscurity, and we have no cloud API to protect
 - **Codebase Indexing Command** — supermemory's `/index` actively explores codebases. Our hook-based passive capture is more appropriate; active indexing risks generating low-quality facts from code structure
+- **SDK-First Architecture Refactor** — QMD v2.0 refactored to SDK-first with `QMDStore` interface consumed by CLI and MCP. Our gem + MCP architecture is already well-structured; major refactor for marginal gain
+- **Write-Through YAML Config** — QMD v2.0 writes collection mutations to both SQLite and YAML. We don't use YAML config; dual-database is our config model
+- **Multi-Session HTTP Transport** — QMD v2.0 supports concurrent MCP sessions via session map. Our MCP server is lightweight enough for stdio; no model loading latency to amortize
 
 ---
 
@@ -242,11 +286,11 @@ Added `claude-memory export` command. Dumps facts with entities and provenance t
 - [claude-mem GitHub](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5)
 - [grepai GitHub](https://github.com/yoanbernabeu/grepai) - Semantic code search (latest)
 - [claude-supermemory GitHub](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed memory (v2.0.1)
-- [QMD GitHub](https://github.com/tobi/qmd) - On-device hybrid search engine (v1.1.5)
+- [QMD GitHub](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1)
 - [KBS GitHub](https://github.com/MadBomber/kbs) - Knowledge-Based System with RETE inference (v0.2.1)
 
 Influence documents:
-- [docs/influence/qmd.md](influence/qmd.md) - Updated 2026-03-09
+- [docs/influence/qmd.md](influence/qmd.md) - Updated 2026-03-10
 - [docs/influence/episodic-memory.md](influence/episodic-memory.md) - Updated 2026-03-09
 - [docs/influence/claude-mem.md](influence/claude-mem.md) - Updated 2026-03-09
 - [docs/influence/grepai.md](influence/grepai.md) - Updated 2026-03-09
@@ -255,4 +299,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-09 - Implemented 4 features: MCP Tool Annotations (#4), MCP Stdout Protection (#6), Worktree-Aware Git Root (#7), Self-Excluding Conversations (#9). Previously: Re-studied all 6 influencer repos. Added 9 new high-priority items (#3-11). Added 3 medium-priority items (#12-14). Added 4 new Features to Avoid. Previous: Claude Code Plugin Distribution Format, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
+*Last updated: 2026-03-10 - Re-studied QMD (v2.0.1). Added 3 new high-priority items: Dedicated Maintenance Class (#10), Dynamic MCP Instructions Enhancement (#11), Embedded Skill Distribution (#12). Added 1 medium-priority item: REST API Endpoint (#20). Previously: Implemented 4 features: MCP Tool Annotations (#4), MCP Stdout Protection (#6), Worktree-Aware Git Root (#7), Self-Excluding Conversations (#9). Re-studied all 6 influencer repos. Previous: Claude Code Plugin Distribution Format, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
