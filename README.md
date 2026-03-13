@@ -257,7 +257,7 @@ The benchmark dataset draws from real CLAUDE.md patterns and is designed specifi
 
 - **Language:** Ruby 3.2+
 - **Storage:** SQLite3 (no external services)
-- **Testing:** 1316 examples, 100% core coverage
+- **Testing:** 1435 examples, 100% core coverage
 - **Code Style:** Standard Ruby
 
 ```bash

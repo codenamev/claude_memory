@@ -133,7 +133,7 @@ Transcripts → Ingest → Index (FTS5)
   - Each command is a separate class (HelpCommand, DoctorCommand, etc.)
   - All commands inherit from BaseCommand
   - Dependency injection for I/O (stdout, stderr, stdin)
-  - 20 commands total, each focused on single responsibility
+  - 22 commands total, each focused on single responsibility
 
 - **`Configuration`**: Centralized ENV access (`configuration.rb`)
   - Single source of truth for paths and environment variables

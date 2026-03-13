@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-12
+
+### Added
+
+**FTS5 Contentless Mode**
+- FTS5 tables now created with `content=''` for ~40% smaller databases
+- Auto-detection: both legacy and contentless formats work seamlessly
+- `compact` command rebuilds FTS index to contentless format
+- `stats` command reports FTS format and optimization hints
+
+**Worktree-Aware Project Paths**
+- Project database now resolves to main repository root across git worktrees
+- Prevents duplicate project databases when using `git worktree`
+- Opt-out: set `CLAUDE_MEMORY_ISOLATE_WORKTREES=1` for per-worktree isolation
+
+**MCP Enhancements**
+- Tool annotations: `readOnlyHint`, `idempotentHint`, `destructiveHint` on all 21 tools
+- Stdout protection: MCP server redirects `$stdout` to `$stderr` to prevent protocol corruption from accidental `puts`/`print` calls
+- Self-excluding agent conversations via `SELF_CONTEXT_MARKER` to prevent meta-pollution
+
+**New Commands**
+- `git-lfs` command for setting up git-lfs tracking of project memory databases
+
+### Fixed
+
+- Narrowed rescue clauses in `discover_other_projects` (was bare `rescue`, now catches specific `Sequel::DatabaseError`, `Extralite::Error`, `IOError`)
+- FTS entries now cleaned up when content is pruned by sweeper (prevents orphaned index entries)
+- FTS index rebuilt during `compact` for consistent state after upgrades
+- Real evals CI: install gem and use correct release API
+
+### Internal
+- Resolver refactored to pass `project_path`/`scope` as parameters instead of instance variables (better thread safety)
+- `SnippetExtractor` refactored to eliminate duplication between `extract` and `extract_with_lines`
+- `StoreManager.promote_fact` inlined `copy_provenance` for single-transaction safety
+- Influence study: QMD v2.0.1 SDK-first architecture analysis
+
 ## [0.6.0] - 2026-03-06
 
 ### Added
