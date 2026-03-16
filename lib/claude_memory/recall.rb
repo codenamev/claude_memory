@@ -561,13 +561,15 @@ module ClaudeMemory
       facts_data = store.facts_with_embeddings(limit: 5000)
       return [] if facts_data.empty?
 
-      # Parse embeddings and prepare candidates
-      candidates = Core::EmbeddingCandidateBuilder.build_candidates(facts_data)
+      # Deduplicate: group facts by embedding, score unique embeddings only, fan out
+      unique_candidates, fact_groups = dedup_candidates(facts_data)
+      return [] if unique_candidates.empty?
 
-      return [] if candidates.empty?
+      # Calculate similarities on unique embeddings only
+      top_unique = Embeddings::Similarity.top_k(query_embedding, unique_candidates, limit)
 
-      # Calculate similarities and rank
-      top_matches = Embeddings::Similarity.top_k(query_embedding, candidates, limit)
+      # Fan out: expand unique matches back to all fact_ids sharing that embedding
+      top_matches = fan_out_matches(top_unique, fact_groups, limit)
 
       # Batch fetch full fact details
       fact_ids = top_matches.map { |m| m[:candidate][:fact_id] }
@@ -581,6 +583,50 @@ module ClaudeMemory
         receipts_by_fact_id: receipts_by_fact_id,
         source: source
       )
+    end
+
+    # Group facts by embedding_json, return unique candidates + mapping
+    def dedup_candidates(facts_data)
+      groups = {}   # embedding_json → [fact_ids]
+      unique = {}   # embedding_json → parsed candidate (first occurrence)
+
+      facts_data.each do |row|
+        key = row[:embedding_json]
+        if unique.key?(key)
+          groups[key] << row[:id]
+        else
+          candidate = Core::EmbeddingCandidateBuilder.parse_candidate(row)
+          next unless candidate
+          unique[key] = candidate
+          groups[key] = [row[:id]]
+        end
+      end
+
+      [unique.values, groups]
+    end
+
+    # Expand unique matches back to all fact_ids sharing the same embedding
+    def fan_out_matches(top_unique, fact_groups, limit)
+      results = []
+      top_unique.each do |match|
+        candidate = match[:candidate]
+        similarity = match[:similarity]
+
+        # Find the group key for this candidate's embedding
+        group_key = fact_groups.find { |_key, ids| ids.include?(candidate[:fact_id]) }&.first
+        next unless group_key
+
+        fact_groups[group_key].each do |fact_id|
+          results << {
+            candidate: candidate.merge(fact_id: fact_id),
+            similarity: similarity
+          }
+          break if results.size >= limit
+        end
+        break if results.size >= limit
+      end
+
+      results
     end
 
     def search_by_fts(store, query_text, limit, source)
