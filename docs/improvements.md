@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-03-16 - Studied lossless-claw (v0.3.0). New findings: depth-aware prompt templates, three-level escalation pattern, tool escalation workflow. Other 6 repos unchanged since 2026-03-10.*
+*Updated: 2026-03-16 - Implemented 4 features: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup for Embeddings (#19), Dedup Before Vector Scoring (#20). Studied lossless-claw (v0.3.0). Other 6 repos unchanged since 2026-03-10.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5, studied 2026-03-09)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, studied 2026-03-09)*
@@ -74,15 +74,9 @@ Added `SELF_CONTEXT_MARKER` constant (`claude-memory-self`) to ClaudeMemory modu
 
 Extracted `Sweep::Maintenance` class from Sweeper with 8 individual operations, each returning affected counts: `expire_proposed_facts`, `expire_disputed_facts`, `prune_orphaned_provenance`, `prune_old_content`, `backfill_vec_index`, `cleanup_vec_expired`, `checkpoint_wal`, `vacuum`. Sweeper now delegates to Maintenance internally.
 
-### 11. Dynamic MCP Instructions Enhancement ⭐
+### ~~11. Dynamic MCP Instructions Enhancement~~ ✅ Implemented 2026-03-16
 
-Source: QMD v2.0.1 study (2026-03-10)
-
-- **Value**: QMD v2.0 builds rich MCP server instructions with collection stats, document counts, capability gaps, search examples, and retrieval workflow tips. Our MCP server has a static query guide prompt but no dynamic instructions
-- **Implementation**: Add `build_instructions` to MCP server that generates dynamic instructions with: fact counts (global/project), active conflict count, recent decision count, convention count, database health, and usage tips
-- **Evidence**: QMD `src/mcp/server.ts:92-152` — `buildInstructions()` with collections, counts, gaps, examples, tips
-- **Effort**: 1 day
-- **Recommendation**: ADOPT
+Enhanced InstructionsBuilder with knowledge summary (decision/convention/entity counts by predicate pattern), vec availability detection, and dynamic usage tips that adapt based on available capabilities. Semantic search guidance included when sqlite-vec is loaded.
 
 ### 12. Embedded Skill Distribution ⭐
 
@@ -112,15 +106,9 @@ Added `run_with_escalation!` to Sweeper: normal (standard TTLs) → aggressive (
 
 Restructured QueryGuide with 4-tier escalation hierarchy (Fast Lookup → Broad Search → Targeted Deep Dive → Relationship Exploration). Each tool annotated with cost estimates (tokens per call). Added "Recommended Workflow" section. InstructionsBuilder usage hint updated with escalation guidance.
 
-### 16. Structured Error Classification
+### ~~16. Structured Error Classification~~ ✅ Implemented 2026-03-16
 
-Source: claude-supermemory v2.0.1 study (2026-03-09)
-
-- **Value**: Clean error handling in MCP server and hooks — benign errors silent, retryable logged, fatal with clear messages
-- **Implementation**: Three-tier classification: benign (empty results, first use), retryable (rate limits, server errors), fatal (auth failures, schema corruption)
-- **Evidence**: supermemory `src/lib/error-helpers.js:1-72` — error classification with user-friendly messages
-- **Effort**: 1 day
-- **Recommendation**: ADOPT
+Added `MCP::ErrorClassifier` with three-tier classification: benign (empty results, first use — no alarm), retryable (DB locked, I/O errors — retry flag), fatal (disk full, corruption — recommendations). MCP tools use classified errors with severity, retry hints, and actionable recommendations.
 
 ### 17. Entity Context Extraction Prompts
 
@@ -146,25 +134,13 @@ Source: grepai study (2026-03-09)
 - **Effort**: 1-2 days
 - **Recommendation**: CONSIDER
 
-### 19. Content-Addressed Deduplication for Embeddings
+### ~~19. Content-Addressed Deduplication for Embeddings~~ ✅ Implemented 2026-03-16
 
-Source: grepai study (2026-03-09)
+IndexCommand builds text→embedding cache from already-embedded facts before indexing. Identical fact texts reuse cached vectors, skipping generation. Cache hits tracked and reported (e.g., "Cache hits: 3/10 (30% dedup)").
 
-- **Value**: Skip re-embedding unchanged content using existing `text_hash` in `content_items`
-- **Implementation**: Check `text_hash` before computing embeddings; reuse cached vectors for identical content
-- **Evidence**: grepai `store/store.go:105-109` — EmbeddingCache interface
-- **Effort**: 1 day
-- **Recommendation**: CONSIDER — quick win, infrastructure already exists
+### ~~20. Deduplication Before Vector Scoring~~ ✅ Implemented 2026-03-16
 
-### 20. Deduplication Before Vector Scoring
-
-Source: QMD v1.1.5 study (2026-03-09)
-
-- **Value**: Free performance win — deduplicate fact texts before computing cosine similarity, map scores back
-- **Implementation**: In `VectorIndex#search`, group facts by text, score unique texts only, fan out results
-- **Evidence**: QMD `llm.ts:1098-1109` — reranker deduplication (identical chunks scored once, fanned out)
-- **Effort**: 1 day
-- **Recommendation**: CONSIDER
+In Ruby fallback path (`search_by_vector_fallback`), facts are grouped by `embedding_json` before cosine similarity computation. Unique embeddings scored once, results fanned out to all matching fact_ids. Native sqlite-vec path unaffected (handles own dedup).
 
 ### 21. Incremental Indexing with File Watching
 
@@ -321,4 +297,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-16 - Implemented 3 features: Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0), added Depth-Aware Prompt Templates (#13). Previously: Re-studied QMD (v2.0.1). Added Dynamic MCP Instructions Enhancement (#11), Embedded Skill Distribution (#12), REST API Endpoint (#23). Implemented: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
+*Last updated: 2026-03-16 - Implemented 7 features total: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup (#19), Dedup Before Vector Scoring (#20), Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0), added Depth-Aware Prompt Templates (#13). Previously: Re-studied QMD (v2.0.1). Implemented: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
