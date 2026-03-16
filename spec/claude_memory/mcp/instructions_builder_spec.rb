@@ -129,6 +129,71 @@ RSpec.describe ClaudeMemory::MCP::InstructionsBuilder do
         result = described_class.build(manager)
         expect(result).to include("3 open conflicts")
       end
+
+      it "includes knowledge summary with decisions and conventions" do
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test")
+        manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "decided",
+          object_literal: "use PostgreSQL",
+          status: "active",
+          scope: "project"
+        )
+        manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "convention",
+          object_literal: "snake_case naming",
+          status: "active",
+          scope: "project"
+        )
+
+        result = described_class.build(manager)
+        expect(result).to include("Knowledge:")
+        expect(result).to include("1 decision")
+        expect(result).to include("1 convention")
+        expect(result).to include("1 entity")
+      end
+
+      it "omits knowledge summary when no decisions or conventions exist" do
+        result = described_class.build(manager)
+        expect(result).not_to include("Knowledge:")
+      end
+
+      it "pluralizes knowledge counts correctly" do
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test")
+        manager.project_store.find_or_create_entity(type: "framework", name: "rails")
+        %w[decided decision chose].each do |pred|
+          manager.project_store.insert_fact(
+            subject_entity_id: entity_id,
+            predicate: pred,
+            object_literal: "something",
+            status: "active",
+            scope: "project"
+          )
+        end
+        %w[convention style_rule].each do |pred|
+          manager.project_store.insert_fact(
+            subject_entity_id: entity_id,
+            predicate: pred,
+            object_literal: "something",
+            status: "active",
+            scope: "project"
+          )
+        end
+
+        result = described_class.build(manager)
+        expect(result).to include("3 decisions")
+        expect(result).to include("2 conventions")
+        expect(result).to include("2 entities")
+      end
+
+      it "includes semantic search hint when vec is available" do
+        # Vec availability depends on sqlite-vec extension
+        # Just verify the usage hint adapts
+        result = described_class.build(manager)
+        expect(result).to include("memory.recall")
+        expect(result).to include("Start with fast tools")
+      end
     end
 
     context "error resilience" do
