@@ -4,6 +4,7 @@ require "json"
 require_relative "instructions_builder"
 require_relative "query_guide"
 require_relative "text_summary"
+require_relative "error_classifier"
 
 module ClaudeMemory
   module MCP

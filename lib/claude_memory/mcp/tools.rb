@@ -6,6 +6,7 @@ require_relative "tool_helpers"
 require_relative "response_formatter"
 require_relative "tool_definitions"
 require_relative "setup_status_analyzer"
+require_relative "error_classifier"
 
 module ClaudeMemory
   module MCP
@@ -79,7 +80,7 @@ module ClaudeMemory
 
       def recall(args)
         # Check if databases exist before querying
-        return database_not_found_error(StandardError.new("Database not initialized")) unless databases_exist?
+        return database_not_found_error unless databases_exist?
 
         scope = extract_scope(args)
         limit = extract_limit(args)
@@ -87,8 +88,8 @@ module ClaudeMemory
         query = args["query"]
         results = @recall.query(query, limit: limit, scope: scope, include_raw_text: !compact)
         ResponseFormatter.format_recall_results(results, compact: compact, query: query)
-      rescue Sequel::DatabaseError, Sequel::DatabaseConnectionError, SQLite3::CantOpenException, Errno::ENOENT => e
-        database_not_found_error(e)
+      rescue Sequel::DatabaseError, Sequel::DatabaseConnectionError, Errno::ENOENT => e
+        classified_error(e, tool_name: "memory.recall")
       end
 
       def recall_index(args)
@@ -404,17 +405,16 @@ module ClaudeMemory
         end
       end
 
-      def database_not_found_error(error)
-        {
-          error: "Database not found or not accessible",
-          message: "ClaudeMemory may not be initialized. Run memory.check_setup for detailed status.",
-          details: error.message,
-          recommendations: [
-            "Run memory.check_setup to diagnose the issue",
-            "If not initialized, run: claude-memory init",
-            "For help: claude-memory doctor"
-          ]
-        }
+      def database_not_found_error(error = nil)
+        if error
+          ErrorClassifier.build_error_response(error, tool_name: "recall")
+        else
+          ErrorClassifier.build_benign_response(:not_initialized, tool_name: "recall")
+        end
+      end
+
+      def classified_error(error, tool_name: nil)
+        ErrorClassifier.build_error_response(error, tool_name: tool_name)
       end
 
       def check_setup

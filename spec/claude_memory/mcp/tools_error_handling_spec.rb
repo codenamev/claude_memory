@@ -15,8 +15,7 @@ RSpec.describe ClaudeMemory::MCP::Tools, "error handling" do
   end
 
   describe "when databases don't exist" do
-    it "returns helpful error for memory.recall" do
-      # Try to create tools with non-existent database path
+    it "returns benign response for memory.recall when not initialized" do
       db_path = File.join(@tmpdir, "nonexistent.db")
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
       tools = described_class.new(store)
@@ -27,14 +26,11 @@ RSpec.describe ClaudeMemory::MCP::Tools, "error handling" do
 
       result = tools.call("memory.recall", {"query" => "test"})
 
-      expect(result).to have_key(:error)
-      expect(result[:error]).to match(/Database not found/)
-      expect(result[:message]).to match(/Run memory.check_setup/)
-      expect(result[:recommendations]).to be_an(Array)
-      expect(result[:recommendations]).to include(match(/claude-memory init/))
+      expect(result[:severity]).to eq("benign")
+      expect(result[:message]).to match(/not yet initialized/)
     end
 
-    it "includes actionable recommendations" do
+    it "includes tool name in response" do
       db_path = File.join(@tmpdir, "nonexistent.db")
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
       tools = described_class.new(store)
@@ -44,12 +40,10 @@ RSpec.describe ClaudeMemory::MCP::Tools, "error handling" do
 
       result = tools.call("memory.recall", {"query" => "test"})
 
-      expect(result[:recommendations]).to include("Run memory.check_setup to diagnose the issue")
-      expect(result[:recommendations]).to include("If not initialized, run: claude-memory init")
-      expect(result[:recommendations]).to include("For help: claude-memory doctor")
+      expect(result[:tool]).to eq("recall")
     end
 
-    it "provides error details" do
+    it "returns empty results array for benign response" do
       db_path = File.join(@tmpdir, "nonexistent.db")
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
       tools = described_class.new(store)
@@ -59,8 +53,7 @@ RSpec.describe ClaudeMemory::MCP::Tools, "error handling" do
 
       result = tools.call("memory.recall", {"query" => "test"})
 
-      expect(result).to have_key(:details)
-      expect(result[:details]).to be_a(String)
+      expect(result[:results]).to eq([])
     end
   end
 
