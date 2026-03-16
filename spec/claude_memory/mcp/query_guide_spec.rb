@@ -41,6 +41,31 @@ RSpec.describe ClaudeMemory::MCP::QueryGuide do
       expect(text).to include("memory.conventions")
     end
 
+    it "includes tool escalation tiers" do
+      text = described_class.content[:messages][0][:content][:text]
+
+      expect(text).to include("Tier 1")
+      expect(text).to include("Tier 2")
+      expect(text).to include("Tier 3")
+      expect(text).to include("Tier 4")
+      expect(text).to include("Cheap to Expensive")
+    end
+
+    it "includes recommended workflow" do
+      text = described_class.content[:messages][0][:content][:text]
+
+      expect(text).to include("Recommended Workflow")
+      expect(text).to include("Start broad")
+      expect(text).to include("Drill into specifics")
+    end
+
+    it "includes cost annotations" do
+      text = described_class.content[:messages][0][:content][:text]
+
+      expect(text).to include("Cost:")
+      expect(text).to include("tokens per call")
+    end
+
     it "includes score interpretation" do
       text = described_class.content[:messages][0][:content][:text]
 

@@ -69,7 +69,8 @@ module ClaudeMemory
       end
 
       def usage_hint
-        "Use memory.recall to search facts, memory.decisions for architectural decisions, memory.conventions for coding style."
+        "Use memory.recall to search facts, memory.decisions for architectural decisions, memory.conventions for coding style.\n" \
+          "Start with fast tools (recall, decisions, conventions) before escalating to recall_semantic, explain, or fact_graph."
       end
     end
   end

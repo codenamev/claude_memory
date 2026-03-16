@@ -11,50 +11,69 @@ module ClaudeMemory
       PROMPT_TEXT = <<~GUIDE
         # ClaudeMemory Search Strategy Guide
 
-        ## Tool Selection
+        ## Tool Escalation — Cheap to Expensive
 
-        **memory.recall** — Full-text keyword search (fastest)
+        Start with fast, cheap tools. Escalate only when you need more detail.
+
+        ### Tier 1: Fast Lookup (< 50ms, low tokens)
+
+        **memory.recall** — Full-text keyword search
         - Use for: exact terms, known predicates, specific entity names
         - Example: "PostgreSQL", "authentication", "deployment"
         - Returns: facts with provenance receipts
+        - Cost: ~200-500 tokens per call
+
+        **memory.decisions** / **memory.conventions** / **memory.architecture**
+        - Use for: quick access to known categories
+        - Cost: ~100-300 tokens per call
+
+        ### Tier 2: Broad Search (< 200ms, moderate tokens)
 
         **memory.recall_semantic** — Vector similarity search
         - Use for: conceptual queries, paraphrased questions, "find things like X"
         - Modes: `vector` (embeddings only), `text` (FTS only), `both` (hybrid, recommended)
-        - Example: "how does the app handle user sessions" (no exact keyword match needed)
+        - Example: "how does the app handle user sessions"
         - Returns: facts ranked by similarity score (0.0-1.0)
+        - Cost: ~300-800 tokens per call
 
         **memory.search_concepts** — Multi-concept AND query
         - Use for: intersection of 2-5 concepts that must ALL be present
         - Example: concepts=["authentication", "JWT", "middleware"]
-        - Returns: facts matching all concepts, ranked by average similarity
+        - Cost: ~300-800 tokens per call
 
-        **memory.recall_index** → **memory.recall_details** — Progressive disclosure
-        - Use for: browsing large result sets efficiently
-        - Step 1: `recall_index` returns lightweight previews with token estimates
-        - Step 2: `recall_details` fetches full data for selected fact IDs
-        - Saves tokens when you only need a few facts from many matches
+        **memory.recall_index** — Lightweight previews
+        - Use for: browsing large result sets before committing to full details
+        - Cost: ~100-200 tokens (compact previews)
 
-        ## Shortcut Tools
+        ### Tier 3: Targeted Deep Dive (moderate tokens)
 
-        **memory.decisions** — Architectural decisions and constraints
-        **memory.conventions** — Coding style preferences and rules
-        **memory.architecture** — Framework choices and patterns
+        **memory.recall_details** — Full details for selected fact IDs
+        - Use after: `recall_index` to fetch only the facts you need
+        - Cost: ~200-600 tokens per call
 
-        ## Context-Aware Tools
+        **memory.explain** — Detailed provenance for a specific fact
+        - Use when: you need to know where a fact came from and how confident it is
+        - Cost: ~300-500 tokens per call
+
+        ### Tier 4: Relationship Exploration (higher tokens)
+
+        **memory.fact_graph** — Dependency graph visualization
+        - Use when: you need to understand how facts relate (supersession chains, conflicts)
+        - Cost: ~400-1000 tokens per call
 
         **memory.facts_by_tool** — Facts discovered via specific tool (Read, Edit, Bash)
         **memory.facts_by_context** — Facts from specific git branch or directory
+        - Use when: you need facts from a specific workflow context
+        - Cost: ~300-800 tokens per call
 
-        ## Decision Tree
+        ## Recommended Workflow
 
-        1. Know the exact keyword? → `memory.recall`
-        2. Conceptual/fuzzy question? → `memory.recall_semantic` (mode: both)
-        3. Need intersection of topics? → `memory.search_concepts`
-        4. Looking for decisions? → `memory.decisions`
-        5. Looking for conventions? → `memory.conventions`
-        6. Many results expected? → `memory.recall_index` then `memory.recall_details`
-        7. Need provenance? → `memory.explain` with fact ID
+        1. **Start broad**: `memory.recall` or shortcut tools (decisions/conventions/architecture)
+        2. **Refine if needed**: `memory.recall_semantic` for fuzzy matches
+        3. **Drill into specifics**: `memory.recall_details` or `memory.explain` for selected facts
+        4. **Explore relationships**: `memory.fact_graph` only when you need lineage/conflicts
+
+        Do NOT jump to Tier 3-4 tools first. Tier 1 tools answer most questions.
 
         ## Score Interpretation (semantic search)
 
