@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-03-10 - Re-studied QMD (v2.0.1, up from v1.1.5). New findings: SDK-first architecture, dedicated Maintenance class, dynamic MCP instructions enhancement, embedded skill distribution, REST API endpoint. Other 5 repos unchanged since 2026-03-09.*
+*Updated: 2026-03-16 - Studied lossless-claw (v0.3.0). New findings: depth-aware prompt templates, three-level escalation pattern, tool escalation workflow. Other 6 repos unchanged since 2026-03-10.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5, studied 2026-03-09)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, studied 2026-03-09)*
@@ -8,6 +8,7 @@
 - *[supermemoryai/claude-supermemory](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed persistent memory (v2.0.1, studied 2026-03-09)*
 - *[tobi/qmd](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1, studied 2026-03-10)*
 - *[MadBomber/kbs](https://github.com/MadBomber/kbs) - Knowledge-Based System with RETE inference (v0.2.1, studied 2026-03-09 — no changes)*
+- *[martian-engineering/lossless-claw](https://github.com/martian-engineering/lossless-claw) - DAG-based lossless context management (v0.3.0, studied 2026-03-16)*
 
 This document contains only unimplemented improvements. Completed items are removed.
 
@@ -69,15 +70,9 @@ Source: episodic-memory study (2026-03-09)
 
 Added `SELF_CONTEXT_MARKER` constant (`claude-memory-self`) to ClaudeMemory module. Added to ingester EXCLUSION_TAGS. Transcripts containing `<claude-memory-self>` are skipped entirely, preventing meta-conversation pollution.
 
-### 10. Dedicated Maintenance Class ⭐
+### ~~10. Dedicated Maintenance Class~~ ✅ Implemented 2026-03-16
 
-Source: QMD v2.0.1 study (2026-03-10)
-
-- **Value**: Clean separation of maintenance operations from main store with return counts. QMD's `Maintenance` class wraps 6 cleanup operations (vacuum, orphaned content/vectors, LLM cache, inactive docs, clear embeddings)
-- **Implementation**: Extract `Sweep` module operations into a `Maintenance` class. Methods: `vacuum`, `cleanup_orphaned_vectors`, `cleanup_expired_facts`, `cleanup_superseded_facts`, `compact`. Return affected counts for reporting
-- **Evidence**: QMD `src/maintenance.ts:1-54` — constructor takes internal store, each method returns affected count
-- **Effort**: 1 day
-- **Recommendation**: ADOPT
+Extracted `Sweep::Maintenance` class from Sweeper with 8 individual operations, each returning affected counts: `expire_proposed_facts`, `expire_disputed_facts`, `prune_orphaned_provenance`, `prune_old_content`, `backfill_vec_index`, `cleanup_vec_expired`, `checkpoint_wal`, `vacuum`. Sweeper now delegates to Maintenance internally.
 
 ### 11. Dynamic MCP Instructions Enhancement ⭐
 
@@ -99,7 +94,25 @@ Source: QMD v2.0.1 study (2026-03-10)
 - **Effort**: 1-2 days
 - **Recommendation**: ADOPT
 
-### 13. Structured Error Classification
+### 13. Depth-Aware Prompt Templates for Distiller ⭐
+
+Source: lossless-claw v0.3.0 study (2026-03-16)
+
+- **Value**: Graduated extraction prompts based on context depth — fresh conversations get detailed extraction, well-established facts get consolidation prompts. Parallels lossless-claw's leaf/d1/d2/d3+ prompt hierarchy
+- **Implementation**: Create prompt templates for distiller stages: initial extraction (detailed), re-extraction (consolidation), contradiction resolution (focused). Use depth/freshness to select template
+- **Evidence**: `tui/prompts/leaf.tmpl`, `tui/prompts/condensed-d1.tmpl`, `condensed-d2.tmpl`, `condensed-d3.tmpl` — four distinct prompt templates with increasing abstraction
+- **Effort**: 1-2 days (when building real distiller)
+- **Recommendation**: ADOPT
+
+### ~~14. Three-Level Escalation for Sweep/Maintenance~~ ✅ Implemented 2026-03-16
+
+Added `run_with_escalation!` to Sweeper: normal (standard TTLs) → aggressive (halved TTLs) → fallback (force-expire oldest 10 proposed/disputed). Stats include `:escalation_level`. MCP `memory.sweep_now` gains `escalate: true` parameter. TextSummary shows escalation level in output.
+
+### ~~15. Tool Escalation Workflow in MCP Instructions~~ ✅ Implemented 2026-03-16
+
+Restructured QueryGuide with 4-tier escalation hierarchy (Fast Lookup → Broad Search → Targeted Deep Dive → Relationship Exploration). Each tool annotated with cost estimates (tokens per call). Added "Recommended Workflow" section. InstructionsBuilder usage hint updated with escalation guidance.
+
+### 16. Structured Error Classification
 
 Source: claude-supermemory v2.0.1 study (2026-03-09)
 
@@ -109,7 +122,7 @@ Source: claude-supermemory v2.0.1 study (2026-03-09)
 - **Effort**: 1 day
 - **Recommendation**: ADOPT
 
-### 14. Entity Context Extraction Prompts
+### 17. Entity Context Extraction Prompts
 
 Source: claude-supermemory v2.0.1 study (2026-03-09)
 
@@ -123,7 +136,7 @@ Source: claude-supermemory v2.0.1 study (2026-03-09)
 
 ## Medium Priority
 
-### 15. Shell Completion for CLI
+### 18. Shell Completion for CLI
 
 Source: grepai study (2026-03-09)
 
@@ -133,7 +146,7 @@ Source: grepai study (2026-03-09)
 - **Effort**: 1-2 days
 - **Recommendation**: CONSIDER
 
-### 16. Content-Addressed Deduplication for Embeddings
+### 19. Content-Addressed Deduplication for Embeddings
 
 Source: grepai study (2026-03-09)
 
@@ -143,7 +156,7 @@ Source: grepai study (2026-03-09)
 - **Effort**: 1 day
 - **Recommendation**: CONSIDER — quick win, infrastructure already exists
 
-### 17. Deduplication Before Vector Scoring
+### 20. Deduplication Before Vector Scoring
 
 Source: QMD v1.1.5 study (2026-03-09)
 
@@ -153,7 +166,7 @@ Source: QMD v1.1.5 study (2026-03-09)
 - **Effort**: 1 day
 - **Recommendation**: CONSIDER
 
-### 18. Incremental Indexing with File Watching
+### 21. Incremental Indexing with File Watching
 
 Source: grepai study (reinforced 2026-03-02)
 
@@ -163,7 +176,7 @@ Source: grepai study (reinforced 2026-03-02)
 - **Effort**: 2-3 days
 - **Trade-off**: Background process ~10MB memory overhead
 
-### 19. Document Chunking for Long Transcripts
+### 22. Document Chunking for Long Transcripts
 
 Source: QMD study (updated 2026-03-02)
 
@@ -181,7 +194,7 @@ Source: QMD study (updated 2026-03-02)
 
 ## Low Priority / Defer
 
-### 20. REST API Endpoint
+### 23. REST API Endpoint
 
 Source: QMD v2.0.1 study (2026-03-10)
 
@@ -192,7 +205,7 @@ Source: QMD v2.0.1 study (2026-03-10)
 - **Trade-off**: Requires WEBrick or similar Ruby HTTP server dependency
 - **Recommendation**: CONSIDER — Useful for CI/scripting, but MCP covers primary use case
 
-### 21. Signal-Based Ingestion Filtering
+### 24. Signal-Based Ingestion Filtering
 
 Source: claude-supermemory study (2026-03-02)
 
@@ -203,7 +216,7 @@ Source: claude-supermemory study (2026-03-02)
 - **Trade-off**: May miss important but subtly-expressed facts. Our distiller already extracts structured facts, which inherently filters noise.
 - **Recommendation**: DEFER — Distiller handles this naturally
 
-### 22. HTTP MCP Transport
+### 25. HTTP MCP Transport
 
 Source: QMD study (2026-03-02)
 
@@ -261,6 +274,13 @@ Added `claude-memory export` command. Dumps facts with entities and provenance t
 - **SDK-First Architecture Refactor** — QMD v2.0 refactored to SDK-first with `QMDStore` interface consumed by CLI and MCP. Our gem + MCP architecture is already well-structured; major refactor for marginal gain
 - **Write-Through YAML Config** — QMD v2.0 writes collection mutations to both SQLite and YAML. We don't use YAML config; dual-database is our config model
 - **Multi-Session HTTP Transport** — QMD v2.0 supports concurrent MCP sessions via session map. Our MCP server is lightweight enough for stdio; no model loading latency to amortize
+- **DAG-Based Conversation Compaction** — lossless-claw compresses conversations into a summary hierarchy; we distill structured facts. Fundamentally different paradigms that are complementary, not competing
+- **LLM-Heavy Compaction Pipeline** — Every compaction in lossless-claw requires LLM summarization calls. Our no-LLM retrieval path is a significant cost and latency advantage
+- **Go TUI for Debugging** — Adding a second language for an interactive debugging tool is over-engineering. CLI commands are sufficient (lossless-claw)
+- **Per-Conversation Scoping** — lossless-claw scopes knowledge per-conversation only. Our dual-database (global/project) is more useful for knowledge spanning conversations
+- **Sub-Agent Delegation for Deep Recall** — lossless-claw spawns sub-agents for DAG traversal. Adds latency and complexity; our direct MCP tool responses are simpler and faster
+- **Message Parts Polymorphism** — lossless-claw's 10-column message_parts for tool calls, reasoning, patches. We don't store raw messages, so irrelevant
+- **OpenClaw ContextEngine Interface** — Tight framework coupling. Our MCP + hooks approach is more portable
 
 ---
 
@@ -288,6 +308,7 @@ Added `claude-memory export` command. Dumps facts with entities and provenance t
 - [claude-supermemory GitHub](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed memory (v2.0.1)
 - [QMD GitHub](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1)
 - [KBS GitHub](https://github.com/MadBomber/kbs) - Knowledge-Based System with RETE inference (v0.2.1)
+- [lossless-claw GitHub](https://github.com/martian-engineering/lossless-claw) - DAG-based lossless context management (v0.3.0)
 
 Influence documents:
 - [docs/influence/qmd.md](influence/qmd.md) - Updated 2026-03-10
@@ -296,7 +317,8 @@ Influence documents:
 - [docs/influence/grepai.md](influence/grepai.md) - Updated 2026-03-09
 - [docs/influence/claude-supermemory.md](influence/claude-supermemory.md) - Updated 2026-03-09
 - [docs/influence/kbs.md](influence/kbs.md) - Updated 2026-03-09 (no changes)
+- [docs/influence/lossless-claw.md](influence/lossless-claw.md) - Updated 2026-03-16
 
 ---
 
-*Last updated: 2026-03-10 - Re-studied QMD (v2.0.1). Added 3 new high-priority items: Dedicated Maintenance Class (#10), Dynamic MCP Instructions Enhancement (#11), Embedded Skill Distribution (#12). Added 1 medium-priority item: REST API Endpoint (#20). Previously: Implemented 4 features: MCP Tool Annotations (#4), MCP Stdout Protection (#6), Worktree-Aware Git Root (#7), Self-Excluding Conversations (#9). Re-studied all 6 influencer repos. Previous: Claude Code Plugin Distribution Format, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
+*Last updated: 2026-03-16 - Implemented 3 features: Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0), added Depth-Aware Prompt Templates (#13). Previously: Re-studied QMD (v2.0.1). Added Dynamic MCP Instructions Enhancement (#11), Embedded Skill Distribution (#12), REST API Endpoint (#23). Implemented: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
