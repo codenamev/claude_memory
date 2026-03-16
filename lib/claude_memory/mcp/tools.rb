@@ -143,7 +143,12 @@ module ClaudeMemory
         return {error: "Database not available"} unless store
 
         sweeper = Sweep::Sweeper.new(store)
-        stats = sweeper.run!(budget_seconds: args["budget_seconds"] || 5)
+        budget = args["budget_seconds"] || 5
+        stats = if args["escalate"]
+          sweeper.run_with_escalation!(budget_seconds: budget)
+        else
+          sweeper.run!(budget_seconds: budget)
+        end
         ResponseFormatter.format_sweep_stats(scope, stats)
       end
 

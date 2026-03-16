@@ -104,7 +104,8 @@ module ClaudeMemory
       end
 
       def self.summarize_sweep(result)
-        "Sweep (#{result[:scope]}): #{result[:proposed_expired]} proposed expired, " \
+        escalation = result[:escalation_level] ? " [#{result[:escalation_level]}]" : ""
+        "Sweep (#{result[:scope]})#{escalation}: #{result[:proposed_expired]} proposed expired, " \
           "#{result[:disputed_expired]} disputed expired, " \
           "#{result[:orphaned_deleted]} orphaned deleted, " \
           "#{result[:content_pruned]} content pruned " \

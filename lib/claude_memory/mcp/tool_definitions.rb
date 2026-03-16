@@ -99,12 +99,13 @@ module ClaudeMemory
           },
           {
             name: "memory.sweep_now",
-            description: "Run maintenance sweep on a database",
+            description: "Run maintenance sweep on a database. Use escalate: true for guaranteed progress (normal → aggressive → fallback).",
             inputSchema: {
               type: "object",
               properties: {
                 budget_seconds: {type: "integer", default: 5},
-                scope: {type: "string", enum: ["global", "project"], default: "project"}
+                scope: {type: "string", enum: ["global", "project"], default: "project"},
+                escalate: {type: "boolean", default: false, description: "Enable three-level escalation (normal → aggressive → fallback) to guarantee progress"}
               }
             },
             annotations: WRITE

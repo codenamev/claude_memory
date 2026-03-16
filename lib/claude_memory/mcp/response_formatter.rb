@@ -233,7 +233,7 @@ module ClaudeMemory
       # @param stats [Hash] Sweeper stats
       # @return [Hash] Formatted sweep response
       def self.format_sweep_stats(scope, stats)
-        {
+        result = {
           scope: scope,
           proposed_expired: stats[:proposed_facts_expired],
           disputed_expired: stats[:disputed_facts_expired],
@@ -241,6 +241,8 @@ module ClaudeMemory
           content_pruned: stats[:old_content_pruned],
           elapsed_seconds: stats[:elapsed_seconds].round(3)
         }
+        result[:escalation_level] = stats[:escalation_level].to_s if stats[:escalation_level]
+        result
       end
 
       # Format semantic search results with similarity scores
