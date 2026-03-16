@@ -107,6 +107,10 @@ module ClaudeMemory
           stdout.puts "  sqlite-vec available, dual-writing to vec0 index"
         end
 
+        # Build embedding cache from already-embedded facts for content-addressed dedup
+        embedding_cache = build_embedding_cache(store)
+        cache_hits = 0
+
         processed = checkpoint ? checkpoint[:processed_items] : 0
         begin
           facts.each_slice(opts[:batch_size]) do |batch|
@@ -116,8 +120,14 @@ module ClaudeMemory
                 # Generate text representation
                 text = build_fact_text(fact, store)
 
-                # Generate embedding
-                embedding = generator.generate(text)
+                # Content-addressed dedup: reuse embedding if identical text exists
+                embedding = embedding_cache[text]
+                if embedding
+                  cache_hits += 1
+                else
+                  embedding = generator.generate(text)
+                  embedding_cache[text] = embedding
+                end
 
                 # Store embedding (JSON column)
                 store.update_fact_embedding(fact[:id], embedding)
@@ -138,6 +148,11 @@ module ClaudeMemory
             end
 
             stdout.puts "  Processed #{processed} facts..."
+          end
+
+          if processed > 0
+            pct = (cache_hits > 0) ? "#{(cache_hits * 100.0 / processed).round(1)}%" : "0%"
+            stdout.puts "  Cache hits: #{cache_hits}/#{processed} (#{pct} dedup)"
           end
 
           # Mark operation as completed
@@ -190,6 +205,19 @@ module ClaudeMemory
         end
 
         0
+      end
+
+      def build_embedding_cache(store)
+        cache = {}
+        store.facts
+          .where(status: "active")
+          .where(Sequel.~(embedding_json: nil))
+          .select(:id, :subject_entity_id, :predicate, :object_entity_id, :object_literal, :embedding_json)
+          .each do |fact|
+            text = build_fact_text(fact, store)
+            cache[text] ||= JSON.parse(fact[:embedding_json])
+          end
+        cache
       end
 
       def build_fact_text(fact, store)

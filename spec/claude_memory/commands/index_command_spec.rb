@@ -171,6 +171,37 @@ RSpec.describe ClaudeMemory::Commands::IndexCommand do
       expect(output).to include("Global database: Indexing 1 facts")
     end
 
+    it "deduplicates embeddings for identical fact texts" do
+      # Create duplicate facts with same text in project db
+      project_store = ClaudeMemory::Store::SQLiteStore.new(project_db_path)
+      entity_id = project_store.entities.where(canonical_name: "PostgreSQL").first[:id]
+      3.times do
+        project_store.facts.insert(
+          subject_entity_id: entity_id,
+          predicate: "uses_version",
+          object_literal: "15",
+          created_at: Time.now.utc.iso8601,
+          scope: "project"
+        )
+      end
+      project_store.close
+
+      exit_code = command.call(["--scope=project"])
+
+      expect(exit_code).to eq(0)
+      output = stdout.string
+      # 4 total facts (1 original + 3 duplicates), but only 1 unique text
+      expect(output).to include("Indexing 4 facts")
+      expect(output).to include("Cache hits:")
+      expect(output).to include("dedup")
+
+      # Verify all facts have identical embeddings
+      project_store = ClaudeMemory::Store::SQLiteStore.new(project_db_path)
+      embeddings = project_store.facts.select(:embedding_json).all.map { |f| f[:embedding_json] }
+      expect(embeddings.uniq.size).to eq(1)
+      project_store.close
+    end
+
     it "builds rich fact text from entities" do
       exit_code = command.call(["--scope=global"])
 
