@@ -116,6 +116,7 @@ require_relative "claude_memory/resolve/predicate_policy"
 require_relative "claude_memory/resolve/resolver"
 require_relative "claude_memory/store/sqlite_store"
 require_relative "claude_memory/store/store_manager"
+require_relative "claude_memory/sweep/maintenance"
 require_relative "claude_memory/sweep/sweeper"
 require_relative "claude_memory/version"
 

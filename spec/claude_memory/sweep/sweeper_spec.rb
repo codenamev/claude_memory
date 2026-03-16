@@ -124,5 +124,44 @@ RSpec.describe ClaudeMemory::Sweep::Sweeper do
         expect(stats[:proposed_facts_expired]).to eq(1)
       end
     end
+
+    it "includes escalation_level in stats" do
+      stats = sweeper.run!
+      expect(stats[:escalation_level]).to eq(:normal)
+    end
+  end
+
+  describe "#run_with_escalation!" do
+    it "stays at normal level when normal sweep makes progress" do
+      create_fact(status: "proposed", days_ago: 20)
+      stats = sweeper.run_with_escalation!
+      expect(stats[:escalation_level]).to eq(:normal)
+      expect(stats[:proposed_facts_expired]).to eq(1)
+    end
+
+    it "escalates to aggressive when normal finds nothing" do
+      # Fact at 10 days — too recent for normal (14-day TTL)
+      # but old enough for aggressive (7-day TTL = 14/2)
+      create_fact(status: "proposed", days_ago: 10)
+      stats = sweeper.run_with_escalation!
+      expect(stats[:escalation_level]).to eq(:aggressive)
+      expect(stats[:proposed_facts_expired]).to be >= 1
+    end
+
+    it "escalates to fallback when aggressive finds nothing" do
+      # Fact at 3 days — too recent for even aggressive TTL (7 days)
+      create_fact(status: "proposed", days_ago: 3)
+      stats = sweeper.run_with_escalation!
+      expect(stats[:escalation_level]).to eq(:fallback)
+      expect(stats[:proposed_facts_expired]).to eq(1)
+    end
+
+    it "stays at normal when nothing to sweep at all" do
+      # Only active facts — no proposed/disputed to expire
+      create_fact(status: "active", days_ago: 100)
+      stats = sweeper.run_with_escalation!
+      # No progress at any level, but no proposed/disputed facts exist
+      expect(stats[:escalation_level]).to eq(:normal)
+    end
   end
 end
