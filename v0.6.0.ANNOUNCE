@@ -1,0 +1,32 @@
+**ClaudeMemory v0.6.0 — Native Vector Search, Benchmarks, and Critical Bug Fixes**
+
+New release of ClaudeMemory, the long-term self-managed memory gem for Claude Code.
+
+**What's new:**
+
+**sqlite-vec Native Vector Storage** — Vector search is now backed by sqlite-vec for fast KNN queries instead of loading all embeddings into Ruby. Embeddings are dual-written to both JSON and vec0 virtual tables, with automatic fallback if sqlite-vec isn't available. The `doctor` command reports vec coverage and the sweeper cleans up stale entries.
+
+**SessionStart Context Injection** — Memory now automatically injects relevant facts at the start of each session via `hookSpecificOutput.additionalContext`, so Claude has context before you even ask.
+
+**Database Maintenance** — New `compact` (VACUUM + integrity check) and `export` (JSON backup) commands for database housekeeping.
+
+**Comparative Benchmarks (DevMemBench)** — Head-to-head retrieval benchmarks against QMD and grepai across 50 queries at 3 difficulty levels:
+
+```
+Adapter                  Recall@5   MRR
+QMD-Vector               0.842      0.930
+ClaudeMemory (hybrid)    0.712      0.732
+FTS-only                 0.712      0.732
+QMD-BM25                 0.350      0.400
+grepai                   0.000      0.000
+```
+
+QMD-Vector leads on easy/medium queries thanks to its custom fine-tuned query expansion model (Qwen3-1.7B). ClaudeMemory edges ahead on hard cross-category queries (0.358 vs 0.352 Recall@5) where multi-fact reasoning matters. Truth maintenance remains at 100% accuracy across all 100 test cases. Full benchmark suite runs locally at zero cost.
+
+**Critical Bug Fixes:**
+- **Recall returned no results** — `DualQueryTemplate` accessed stores before initializing them, silently returning empty arrays for all queries. This was the root cause of `claude-memory recall` never finding facts.
+- **Doctor crashed with `no such module: vec0`** — Schema health checks tried to count rows in sqlite-vec virtual tables without loading the extension first.
+
+21 MCP tools · 22 CLI commands · 1,316 tests
+
+<https://github.com/codenamev/claude_memory/releases/tag/v0.6.0>

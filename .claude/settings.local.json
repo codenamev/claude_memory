@@ -46,7 +46,9 @@
       "Bash(claude-memory recall:*)",
       "Bash(claude-memory stats:*)",
       "Bash(claude-memory search:*)",
-      "Bash(bundle exec:*)"
+      "Bash(bundle exec:*)",
+      "Skill(improve)",
+      "Skill(improve:*)"
     ]
   },
   "enableAllProjectMcpServers": true
