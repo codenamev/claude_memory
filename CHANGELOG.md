@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-03-17
+
+### Added
+
+**Three-Level Sweep Escalation**
+- `Maintenance` class with light/standard/deep sweep levels for progressive database maintenance
+- Exposed sweep escalation via `memory.sweep_now` MCP tool with configurable level
+- Tool escalation workflow added to MCP QueryGuide documentation
+
+**Embedding Deduplication**
+- Content-addressed deduplication for embeddings using SHA256 hashing
+- Deduplication before vector scoring in fallback path to prevent duplicate results
+
+**MCP Enhancements**
+- Structured error classification for MCP tools via `ErrorClassifier` module
+- Dynamic knowledge summary in MCP server instructions via `InstructionsBuilder`
+
+### Fixed
+
+- **Plugin hook loading error**: Removed explicit `hooks` reference from `plugin.json` manifest — Claude Code auto-loads `hooks/hooks.json` from the plugin root, so declaring it caused "Duplicate hooks file detected" errors on plugin install
+
+### Internal
+- Influence study: lossless-claw v0.3.0 DAG-based lossless context management
+- Marked 7 improvements as implemented (#10, #11, #14, #15, #16, #19, #20)
+
 ## [0.7.0] - 2026-03-12
 
 ### Added

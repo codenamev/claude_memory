@@ -34,8 +34,8 @@ RSpec.describe "Plugin distribution files" do
       expect(plugin["mcpServers"]["memory"]["command"]).to include("serve-mcp.sh")
     end
 
-    it "references hooks" do
-      expect(plugin["hooks"]).to eq("./hooks/hooks.json")
+    it "does not explicitly reference hooks (auto-loaded by Claude Code)" do
+      expect(plugin).not_to have_key("hooks")
     end
 
     it "references skills directory" do
@@ -121,8 +121,8 @@ RSpec.describe "Plugin distribution files" do
   describe "referenced paths exist" do
     let(:plugin) { JSON.parse(File.read(File.join(project_root, ".claude-plugin", "plugin.json"))) }
 
-    it "hooks file exists" do
-      hooks_path = File.join(project_root, plugin["hooks"])
+    it "hooks file exists at standard location" do
+      hooks_path = File.join(project_root, "hooks", "hooks.json")
       expect(File.exist?(hooks_path)).to be true
     end
 

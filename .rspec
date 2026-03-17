@@ -2,3 +2,4 @@
 --color
 --require spec_helper
 --format ParallelTests::RSpec::RuntimeLogger --out tmp/parallel_runtime_rspec.log
+--exclude-pattern "spec/{benchmarks,evals}/**/*_spec.rb"

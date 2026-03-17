@@ -24,12 +24,14 @@ bin/setup              # Install dependencies
 
 ### Testing
 ```bash
-bundle exec rspec                              # Run all tests
+bundle exec rspec                              # Run unit/integration tests (~76s)
 bundle exec rspec spec/claude_memory/cli_spec.rb  # Run single test file
 bundle exec rspec spec/claude_memory/cli_spec.rb:42  # Run specific test by line number
 bundle exec rake spec                          # Alternative test command
 bundle exec rake                               # Run tests + Standard linter (default task)
 ```
+
+**Note:** Benchmarks and evals are excluded from the default `rspec` run via `.rspec`. See the [Evals](#evals) and [Benchmarks](#benchmarks-devmembench) sections for running those separately.
 
 ### Linting
 ```bash
