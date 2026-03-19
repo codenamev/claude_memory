@@ -32,8 +32,7 @@ module ClaudeMemory
 
         lines = parsed[:lines]
         best_line_idx = parsed[:best_line_idx]
-        start_idx = [best_line_idx - CONTEXT_BEFORE, 0].max
-        end_idx = [best_line_idx + CONTEXT_AFTER, lines.size - 1].min
+        start_idx, end_idx = snippet_range(lines, best_line_idx)
 
         {
           snippet: build_snippet(lines, best_line_idx),
@@ -81,10 +80,15 @@ module ClaudeMemory
       end
 
       # @api private
-      def self.build_snippet(lines, center_idx)
+      def self.snippet_range(lines, center_idx)
         start_idx = [center_idx - CONTEXT_BEFORE, 0].max
         end_idx = [center_idx + CONTEXT_AFTER, lines.size - 1].min
+        [start_idx, end_idx]
+      end
 
+      # @api private
+      def self.build_snippet(lines, center_idx)
+        start_idx, end_idx = snippet_range(lines, center_idx)
         snippet = lines[start_idx..end_idx].join("\n")
         truncate(snippet)
       end

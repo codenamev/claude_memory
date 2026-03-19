@@ -54,10 +54,9 @@ RSpec.describe ClaudeMemory::Domain::Provenance do
       }.to raise_error(ArgumentError, "fact_id required")
     end
 
-    it "raises error for missing content_item_id" do
-      expect {
-        described_class.new(id: 1, fact_id: 1)
-      }.to raise_error(ArgumentError, "content_item_id required")
+    it "allows nil content_item_id for promoted facts" do
+      prov = described_class.new(id: 1, fact_id: 1)
+      expect(prov.content_item_id).to be_nil
     end
   end
 

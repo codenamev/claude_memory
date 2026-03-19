@@ -44,7 +44,8 @@ module ClaudeMemory
         config = QUERIES.fetch(category)
         results = @recall.query(config[:query], limit: limit, scope: config[:scope])
         results.map { |r| format_fact(r[:fact]) }
-      rescue => _e
+      rescue => e
+        ClaudeMemory.logger.debug("ContextInjector#fetch(#{category}) failed: #{e.message}")
         []
       end
 

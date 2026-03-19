@@ -41,7 +41,6 @@ module ClaudeMemory
 
       def validate!
         raise ArgumentError, "fact_id required" if fact_id.nil?
-        raise ArgumentError, "content_item_id required" if content_item_id.nil?
       end
     end
   end

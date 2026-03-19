@@ -26,8 +26,9 @@ module ClaudeMemory
 
         parts << usage_hint(store_or_manager)
         parts.compact.join("\n\n")
-      rescue => _e
+      rescue => e
         # Never fail initialization — return minimal instructions
+        ClaudeMemory.logger.debug("InstructionsBuilder failed: #{e.message}")
         "ClaudeMemory v#{ClaudeMemory::VERSION} — long-term memory for Claude Code."
       end
 

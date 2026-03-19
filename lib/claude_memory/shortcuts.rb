@@ -5,22 +5,22 @@ module ClaudeMemory
     QUERIES = {
       decisions: {
         query: "decision constraint rule requirement",
-        scope: :all,
+        scope: "all",
         limit: 10
       },
       architecture: {
         query: "uses framework implements architecture pattern",
-        scope: :all,
+        scope: "all",
         limit: 10
       },
       conventions: {
         query: "convention style format pattern prefer",
-        scope: :global,
+        scope: "global",
         limit: 20
       },
       project_config: {
         query: "uses requires depends_on configuration",
-        scope: :project,
+        scope: "project",
         limit: 10
       }
     }.freeze

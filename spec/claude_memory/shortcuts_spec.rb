@@ -119,7 +119,7 @@ RSpec.describe ClaudeMemory::Shortcuts do
     it "uses the configured scope" do
       # conventions should use global scope by default
       config = described_class::QUERIES[:conventions]
-      expect(config[:scope]).to eq(:global)
+      expect(config[:scope]).to eq("global")
     end
 
     it "uses the configured limit" do

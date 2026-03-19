@@ -52,7 +52,8 @@ module ClaudeMemory
               stats = store.vector_index.coverage_stats
               totals[:with_embedding] += stats[:with_embedding]
               totals[:vec_indexed] += stats[:vec_indexed]
-            rescue => _e
+            rescue => e
+              ClaudeMemory.logger.debug("VecCheck failed for #{db_path}: #{e.message}")
               next
             ensure
               store&.close
