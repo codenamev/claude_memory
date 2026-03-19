@@ -9,13 +9,14 @@ module ClaudeMemory
       SCOPE_PROJECT = "project"
 
       def call(args)
-        opts = parse_options(args, {scope: SCOPE_ALL, batch_size: 100, force: false, vec: false}) do |o|
+        opts = parse_options(args, {scope: SCOPE_ALL, batch_size: 100, force: false, vec: false, provider: nil}) do |o|
           OptionParser.new do |parser|
             parser.banner = "Usage: claude-memory index [options]"
             parser.on("--scope SCOPE", "Scope: global, project, or all (default: all)") { |v| o[:scope] = v }
             parser.on("--batch-size SIZE", Integer, "Batch size (default: 100)") { |v| o[:batch_size] = v }
             parser.on("--force", "Re-index facts that already have embeddings") { o[:force] = true }
             parser.on("--vec", "Backfill vec0 index from existing embeddings (no regeneration)") { o[:vec] = true }
+            parser.on("--provider NAME", "Embedding provider: tfidf, fastembed, api") { |v| o[:provider] = v }
           end
         end
         return 1 if opts.nil?
@@ -30,7 +31,7 @@ module ClaudeMemory
           return vec_backfill(opts)
         end
 
-        generator = Embeddings::Generator.new
+        generator = Embeddings.resolve(opts[:provider])
 
         scopes_for(opts[:scope]).each do |label, db_path|
           index_database(label, db_path, generator, opts)
@@ -42,9 +43,10 @@ module ClaudeMemory
       private
 
       def scopes_for(scope)
+        config = Configuration.new
         pairs = []
-        pairs << ["global", Configuration.global_db_path] if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
-        pairs << ["project", Configuration.project_db_path] if scope == SCOPE_ALL || scope == SCOPE_PROJECT
+        pairs << ["global", config.global_db_path] if scope == SCOPE_ALL || scope == SCOPE_GLOBAL
+        pairs << ["project", config.project_db_path] if scope == SCOPE_ALL || scope == SCOPE_PROJECT
         pairs
       end
 
@@ -55,44 +57,15 @@ module ClaudeMemory
         end
 
         store = Store::SQLiteStore.new(db_path)
+        handle_dimension_mismatch(store, generator, label)
         tracker = Infrastructure::OperationTracker.new(store)
 
-        # Check for existing progress (resumption support)
-        checkpoint = tracker.get_checkpoint(operation_type: "index_embeddings", scope: label)
-        if checkpoint && !opts[:force]
-          stdout.puts "#{label.capitalize} database: Resuming from previous run (processed #{checkpoint[:processed_items]} facts)..."
-          resume_from_fact_id = checkpoint[:checkpoint_data][:last_fact_id]
-        else
-          resume_from_fact_id = nil
-        end
-
-        # Find facts to index
-        facts_dataset = if opts[:force]
-          store.facts
-        else
-          store.facts.where(embedding_json: nil)
-        end
-
-        # If resuming, skip facts we've already processed
-        if resume_from_fact_id
-          facts_dataset = facts_dataset.where(Sequel.lit("id > ?", resume_from_fact_id))
-        end
-
-        facts = facts_dataset.order(:id).all
-
-        if facts.empty? && !checkpoint
-          stdout.puts "#{label.capitalize} database: All facts already indexed"
-          store.close
-          return
-        elsif facts.empty? && checkpoint
-          # Resume found nothing left to do - mark as completed
-          tracker.complete_operation(checkpoint[:operation_id])
-          stdout.puts "#{label.capitalize} database: Resumed operation completed (nothing left to index)"
+        facts, checkpoint = find_facts_to_index(store, tracker, label, opts)
+        unless facts
           store.close
           return
         end
 
-        # Start or continue operation tracking
         operation_id = checkpoint ? checkpoint[:operation_id] : tracker.start_operation(
           operation_type: "index_embeddings",
           scope: label,
@@ -101,71 +74,100 @@ module ClaudeMemory
         )
 
         stdout.puts "#{label.capitalize} database: Indexing #{facts.size} facts..."
+        run_indexing(store, facts, generator, tracker, operation_id, checkpoint, opts)
+      end
 
-        vec_index = store.vector_index
-        if vec_index.available?
-          stdout.puts "  sqlite-vec available, dual-writing to vec0 index"
+      def handle_dimension_mismatch(store, generator, label)
+        check = Embeddings::DimensionCheck.call(store, generator)
+        return unless check.status == :mismatch
+
+        stdout.puts "#{label.capitalize}: Embedding dimensions changed (#{check.stored} → #{check.current}), clearing stale embeddings..."
+        clear_stale_embeddings(store)
+      end
+
+      def find_facts_to_index(store, tracker, label, opts)
+        checkpoint = tracker.get_checkpoint(operation_type: "index_embeddings", scope: label)
+
+        if checkpoint && !opts[:force]
+          stdout.puts "#{label.capitalize} database: Resuming from previous run (processed #{checkpoint[:processed_items]} facts)..."
+          resume_from_fact_id = checkpoint[:checkpoint_data][:last_fact_id]
         end
 
-        # Build embedding cache from already-embedded facts for content-addressed dedup
+        facts_dataset = opts[:force] ? store.facts : store.facts.where(embedding_json: nil)
+        facts_dataset = facts_dataset.where(Sequel.lit("id > ?", resume_from_fact_id)) if resume_from_fact_id
+        facts = facts_dataset.order(:id).all
+
+        if facts.empty? && !checkpoint
+          stdout.puts "#{label.capitalize} database: All facts already indexed"
+          return nil
+        elsif facts.empty? && checkpoint
+          tracker.complete_operation(checkpoint[:operation_id])
+          stdout.puts "#{label.capitalize} database: Resumed operation completed (nothing left to index)"
+          return nil
+        end
+
+        [facts, checkpoint]
+      end
+
+      def run_indexing(store, facts, generator, tracker, operation_id, checkpoint, opts)
+        vec_index = store.vector_index
+        stdout.puts "  sqlite-vec available, dual-writing to vec0 index" if vec_index.available?
+
         embedding_cache = build_embedding_cache(store)
         cache_hits = 0
-
         processed = checkpoint ? checkpoint[:processed_items] : 0
+
         begin
           facts.each_slice(opts[:batch_size]) do |batch|
-            # Wrap batch processing in transaction for atomicity
-            store.db.transaction do
-              batch.each do |fact|
-                # Generate text representation
-                text = build_fact_text(fact, store)
+            cache_hits += process_batch(store, batch, generator, vec_index, embedding_cache)
+            processed += batch.size
 
-                # Content-addressed dedup: reuse embedding if identical text exists
-                embedding = embedding_cache[text]
-                if embedding
-                  cache_hits += 1
-                else
-                  embedding = generator.generate(text)
-                  embedding_cache[text] = embedding
-                end
-
-                # Store embedding (JSON column)
-                store.update_fact_embedding(fact[:id], embedding)
-
-                # Dual-write to vec0 if available (insert_embedding manages vec_indexed_at)
-                vec_index.insert_embedding(fact[:id], embedding) if vec_index.available?
-
-                processed += 1
-              end
-
-              # Update checkpoint after batch commits
-              last_fact_id = batch.last[:id]
-              tracker.update_progress(
-                operation_id,
-                processed_items: processed,
-                checkpoint_data: {last_fact_id: last_fact_id}
-              )
-            end
-
+            tracker.update_progress(
+              operation_id,
+              processed_items: processed,
+              checkpoint_data: {last_fact_id: batch.last[:id]}
+            )
             stdout.puts "  Processed #{processed} facts..."
           end
 
-          if processed > 0
-            pct = (cache_hits > 0) ? "#{(cache_hits * 100.0 / processed).round(1)}%" : "0%"
-            stdout.puts "  Cache hits: #{cache_hits}/#{processed} (#{pct} dedup)"
-          end
-
-          # Mark operation as completed
+          report_dedup_stats(processed, cache_hits)
+          store.set_meta("embedding_dimensions", generator.dimensions.to_s)
+          store.set_meta("embedding_provider", generator.name)
           tracker.complete_operation(operation_id)
           stdout.puts "  Done!"
         rescue => e
-          # Mark operation as failed
           tracker.fail_operation(operation_id, e.message)
           stderr.puts "  Failed: #{e.message}"
           raise
         ensure
           store.close
         end
+      end
+
+      def process_batch(store, batch, generator, vec_index, embedding_cache)
+        cache_hits = 0
+        store.db.transaction do
+          batch.each do |fact|
+            text = build_fact_text(fact, store)
+            embedding = embedding_cache[text]
+            if embedding
+              cache_hits += 1
+            else
+              embedding = generator.generate(text)
+              embedding_cache[text] = embedding
+            end
+            store.update_fact_embedding(fact[:id], embedding)
+            vec_index.insert_embedding(fact[:id], embedding) if vec_index.available?
+          end
+        end
+        cache_hits
+      end
+
+      def report_dedup_stats(processed, cache_hits)
+        return unless processed > 0
+
+        pct = (cache_hits > 0) ? "#{(cache_hits * 100.0 / processed).round(1)}%" : "0%"
+        stdout.puts "  Cache hits: #{cache_hits}/#{processed} (#{pct} dedup)"
       end
 
       def vec_backfill(opts)
@@ -242,6 +244,11 @@ module ClaudeMemory
         end
 
         parts.join(" ")
+      end
+
+      def clear_stale_embeddings(store)
+        store.facts.where(Sequel.~(embedding_json: nil)).update(embedding_json: nil, vec_indexed_at: nil)
+        store.vector_index.clear!
       end
 
       def valid_scope?(scope)

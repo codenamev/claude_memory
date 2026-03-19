@@ -17,6 +17,10 @@ module ClaudeMemory
       EMBEDDING_DIM = 384
       DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 
+      def name = "fastembed"
+
+      def dimensions = EMBEDDING_DIM
+
       def initialize(model_name: DEFAULT_MODEL)
         require "fastembed"
         @model = Fastembed::TextEmbedding.new(model_name: model_name)

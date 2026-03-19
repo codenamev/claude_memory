@@ -19,7 +19,10 @@ RSpec.describe ClaudeMemory::Commands::IndexCommand, "resumption" do
 
   before do
     # Configure test database path
-    allow(ClaudeMemory::Configuration).to receive(:project_db_path).and_return(db_path)
+    config = instance_double(ClaudeMemory::Configuration,
+      global_db_path: File.join(temp_dir, "global.sqlite3"),
+      project_db_path: db_path)
+    allow(ClaudeMemory::Configuration).to receive(:new).and_return(config)
 
     # Create test facts without embeddings
     entity_id = store.find_or_create_entity(type: "repo", name: "test_repo")

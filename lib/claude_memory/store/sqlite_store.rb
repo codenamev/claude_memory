@@ -459,6 +459,14 @@ module ClaudeMemory
         llm_cache.where { created_at < cutoff }.delete
       end
 
+      def set_meta(key, value)
+        @db[:meta].insert_conflict(target: :key, update: {value: value}).insert(key: key, value: value)
+      end
+
+      def get_meta(key)
+        @db[:meta].where(key: key).get(:value)
+      end
+
       private
 
       def ensure_schema!
@@ -515,14 +523,6 @@ module ClaudeMemory
       def current_schema_version
         return nil unless @db.table_exists?(:schema_info)
         @db[:schema_info].get(:version)
-      end
-
-      def set_meta(key, value)
-        @db[:meta].insert_conflict(target: :key, update: {value: value}).insert(key: key, value: value)
-      end
-
-      def get_meta(key)
-        @db[:meta].where(key: key).get(:value)
       end
 
       def generate_docid(subject_entity_id, predicate, object_literal, created_at)

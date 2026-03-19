@@ -12,8 +12,10 @@ RSpec.describe ClaudeMemory::Commands::IndexCommand do
 
   before do
     # Set up test databases
-    allow(ClaudeMemory::Configuration).to receive(:global_db_path).and_return(global_db_path)
-    allow(ClaudeMemory::Configuration).to receive(:project_db_path).and_return(project_db_path)
+    config = instance_double(ClaudeMemory::Configuration,
+      global_db_path: global_db_path,
+      project_db_path: project_db_path)
+    allow(ClaudeMemory::Configuration).to receive(:new).and_return(config)
 
     # Create global database with facts
     global_store = ClaudeMemory::Store::SQLiteStore.new(global_db_path)

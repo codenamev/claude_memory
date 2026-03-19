@@ -166,7 +166,7 @@ module ClaudeMemory
       end
 
       def check_embedding_dimensions(issues)
-        # Check that all embeddings have correct dimensions (384)
+        expected = @store.get_meta("embedding_dimensions")&.to_i || 384
         facts_with_embeddings = @store.facts
           .where(Sequel.~(embedding_json: nil))
           .select(:id, :embedding_json)
@@ -174,8 +174,8 @@ module ClaudeMemory
 
         facts_with_embeddings.each do |fact|
           embedding = JSON.parse(fact[:embedding_json])
-          if embedding.size != 384
-            issues << {severity: "error", message: "Fact #{fact[:id]} has embedding with incorrect dimensions (#{embedding.size}, expected 384)"}
+          if embedding.size != expected
+            issues << {severity: "error", message: "Fact #{fact[:id]} has embedding with incorrect dimensions (#{embedding.size}, expected #{expected})"}
             break  # Only report first occurrence
           end
         end

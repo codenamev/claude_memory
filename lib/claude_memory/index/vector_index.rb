@@ -6,13 +6,16 @@ module ClaudeMemory
     # Follows the same lazy-init pattern as LexicalFTS:
     # the extension and virtual table are created on first use.
     class VectorIndex
-      EMBEDDING_DIMENSIONS = 384
+      DEFAULT_DIMENSIONS = 384
+
+      attr_reader :dimensions
 
       def initialize(store)
         @store = store
         @db = store.db
         @available = nil
         @vec_table_ensured = false
+        @dimensions = store.get_meta("embedding_dimensions")&.to_i || DEFAULT_DIMENSIONS
       end
 
       # Is the sqlite-vec extension loadable?
@@ -121,6 +124,16 @@ module ClaudeMemory
         indexed_ids.size
       end
 
+      # Delete all entries from the vec0 virtual table.
+      # Used when clearing stale embeddings after a dimension change.
+      def clear!
+        return false unless available?
+
+        ensure_vec_table!
+        @db.run("DELETE FROM facts_vec")
+        true
+      end
+
       # Number of entries in the vec0 virtual table
       def count
         return 0 unless available?
@@ -162,7 +175,7 @@ module ClaudeMemory
 
         @db.run(<<~SQL)
           CREATE VIRTUAL TABLE IF NOT EXISTS facts_vec
-          USING vec0(fact_id INTEGER PRIMARY KEY, embedding float[#{EMBEDDING_DIMENSIONS}] distance_metric=cosine)
+          USING vec0(fact_id INTEGER PRIMARY KEY, embedding float[#{@dimensions}] distance_metric=cosine)
         SQL
         @vec_table_ensured = true
       end

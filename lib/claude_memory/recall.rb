@@ -27,7 +27,7 @@ module ClaudeMemory
     def initialize(store_or_manager, fts: nil, project_path: nil, env: ENV, embedding_generator: nil)
       config = Configuration.new(env)
       @project_path = project_path || config.project_dir
-      @embedding_generator = embedding_generator || Embeddings::Generator.new
+      @embedding_generator = embedding_generator || Embeddings.resolve(env: env)
 
       if store_or_manager.is_a?(Store::StoreManager)
         @manager = store_or_manager

@@ -12,6 +12,10 @@ module ClaudeMemory
     class Generator
       EMBEDDING_DIM = 384
 
+      def name = "tfidf"
+
+      def dimensions = EMBEDDING_DIM
+
       # Common technical terms and programming concepts for vocabulary
       VOCABULARY = %w[
         database framework library module class function method
