@@ -2,7 +2,7 @@
 
 **Review Date:** 2026-03-19
 **Previous Review:** 2026-03-09
-**Last Quality Update:** 2026-03-19 (9 items completed)
+**Last Quality Update:** 2026-03-19 (11 items completed)
 
 ---
 
@@ -12,9 +12,9 @@ The codebase has grown from 11,392 to 12,239 LOC since the Mar 9 review. A confi
 
 Five items were resolved in the Mar 19 quality update session: the Shortcuts scope bug (correctness), ApiAdapter exception typing, silent exception logging (3 locations), dead Configuration accessors removed, and `index_database` decomposed into focused methods. No known correctness bugs remain.
 
-**Resolved this session:** 9 items (#3 Shortcuts scope, NEW-1 ApiError, NEW-2 dead accessors, NEW-3 silent rescues, #5 index_database decomposition, #6 promote_fact transaction, #7 provenance nil content_item_id, #12 Resolver mutable state, #19 SnippetExtractor DRY)
+**Resolved this session:** 11 items (#1 Tools god object, #2 Recall legacy/dual strategy, #3 Shortcuts scope, NEW-1 ApiError, NEW-2 dead accessors, NEW-3 silent rescues, #5 index_database decomposition, #6 promote_fact transaction, #7 provenance nil content_item_id, #12 Resolver mutable state, #19 SnippetExtractor DRY)
 **Resolved since last review:** 3 additional items (ExportCommand N+1, `discover_other_projects` bare rescue, embedding test coverage)
-**Total remaining:** 16 items
+**Total remaining:** 14 items
 
 ### Current Strengths
 
@@ -42,24 +42,12 @@ Five items were resolved in the Mar 19 quality update session: the Shortcuts sco
 - ExportCommand N+1 eliminated with batch loading
 - **Shortcuts scope bug fixed** — scopes changed from symbols to strings to match DualQueryTemplate comparisons
 - **`index_database` decomposed** — split 130-line method into 5 focused methods: `index_database` (orchestrator), `handle_dimension_mismatch`, `find_facts_to_index`, `run_indexing`, `process_batch`, `report_dedup_stats`
+- **Tools god object eliminated** — split 745-line `Tools` class into thin 104-line dispatcher + 6 handler modules: `QueryHandlers` (90), `ShortcutHandlers` (37), `ContextHandlers` (38), `ManagementHandlers` (124), `StatsHandlers` (188), `SetupHandlers` (211). No file exceeds 211 lines. Public API unchanged.
+- **Recall legacy/dual duplication eliminated** — split 727-line `Recall` into thin 94-line facade + strategy engines: `DualEngine` (101), `LegacyEngine` (134), shared `QueryCore` module (357). The `if @legacy_mode` branching in every public method is replaced by engine delegation. Public API unchanged.
 
 ### Critical Issues 🔴
 
-| # | Issue | File:Line | Effort |
-|---|-------|-----------|--------|
-| 1 | **Tools god object (745 lines, ~50 methods)** | `mcp/tools.rb:1-745` | 2-3 days |
-
-The `Tools` class handles all 21 MCP tool implementations in a single file. Each handler mixes parameter extraction, domain logic, and response formatting. Individual tool handlers like `store_extraction` (lines 221-262, 41 lines) and `discover_other_projects` (lines 565-614, 50 lines) violate the 15-line method limit.
-
-**Fix:** Extract each tool handler into its own class (e.g., `RecallHandler`, `StoreExtractionHandler`) with a common interface, registered via a handler registry.
-
-| # | Issue | File:Line | Effort |
-|---|-------|-----------|--------|
-| 2 | **Recall class too large (727 lines, ~65 methods)** | `recall.rb:1-727` | 2 days |
-
-Every public method branches on `@legacy_mode` with parallel `_legacy` / `_dual` implementations (lines 42-56, 58-66, etc.). ~300+ lines of duplicated branching logic across 15+ method families.
-
-**Fix:** Extract `LegacyQueryEngine` and `DualQueryEngine` classes implementing a common `QueryEngine` interface. Inject the appropriate engine at initialization based on `store_or_manager` type.
+None remaining.
 
 ### High Priority Issues
 
@@ -226,8 +214,6 @@ SQL queries, filesystem checks, database connections in a loop, and error handli
 ### High Priority (Next Week)
 | # | Item | Effort | Impact |
 |---|------|--------|--------|
-| 1 | Extract Tools into handler classes | 2-3 days | Maintainability |
-| 2 | Extract Recall legacy/dual into strategy | 2 days | Maintainability |
 | 9 | Add tests for untested critical files | 2-3 days | Coverage |
 | 4 | Extract SQLiteStore schema/retry modules | 1 day | Maintainability |
 
@@ -255,7 +241,6 @@ SQL queries, filesystem checks, database connections in a loop, and error handli
 | 21 | Command manager helper (`with_manager`) | Feb 4 #19 |
 | 22 | release_connections polymorphism | Feb 4 #20 |
 | 23 | Provenance batch insert (`multi_insert`) | Feb 4 #22 |
-| 24 | Individual MCP tool classes | Feb 4 #23 (subsumed by #1) |
 | 25 | Result objects for all queries | Feb 4 #24 |
 
 ---
@@ -264,7 +249,7 @@ SQL queries, filesystem checks, database connections in a loop, and error handli
 
 The codebase maintains its strong architectural foundation. Nine quality items were resolved this session across two passes: the Shortcuts scope correctness bug, ApiAdapter exception typing, silent exception logging, dead code removal, method decomposition, promote_fact transaction verification, provenance nil validation fix, Resolver state verification, and SnippetExtractor DRY extraction.
 
-No known correctness bugs remain. The most impactful remaining improvements are structural: (1) splitting `Tools` and `Recall` into focused classes, and (2) adding tests for ~12 untested files. The three >500-line files continue growing and represent the primary maintainability risk.
+No known correctness bugs remain. Both god objects have been eliminated: `Tools` (745→104) and `Recall` (727→94). Zero critical issues remain. The most impactful remaining improvements are: (1) adding tests for ~12 untested files, and (2) extracting SQLiteStore schema/retry modules. Only one >500-line file remains (`sqlite_store.rb` at 547).
 
 ---
 
@@ -278,7 +263,7 @@ No known correctness bugs remain. The most impactful remaining improvements are 
 | Pure logic classes | 17+ | 20+ | 20+ | **22+** |
 | Test files | 74+ | 98 | 128 | **122** |
 | Test-to-code ratio | ~1.5:1 | 1.77:1 | 1.90:1 | **1.84:1** |
-| Files >500 lines | 0 | 2 | 3 | **3** 🔴 |
+| Files >500 lines | 0 | 2 | 3 | **1** ✅ |
 | Bare rescues (silent) | 0 | 0 | 1 | **0** ✅ |
 | N+1 patterns (hot paths) | 0 | 0 | 0 | **0** ✅ |
 | N+1 patterns (cold paths) | — | — | 1 | **0** ✅ |
@@ -289,8 +274,8 @@ No known correctness bugs remain. The most impactful remaining improvements are 
 
 | File | Mar 9 | Mar 19 | Trend |
 |------|-------|--------|-------|
-| `mcp/tools.rb` | 728 | 745 | ⬆️ +17 |
-| `recall.rb` | 681 | 727 | ⬆️ +46 |
+| `mcp/tools.rb` | 728 | **104** | ⬇️ -624 (extracted to 6 handler modules) |
+| `recall.rb` | 681 | **94** | ⬇️ -587 (extracted to engine + query_core) |
 | `store/sqlite_store.rb` | 547 | 547 | — |
 | `mcp/response_formatter.rb` | 394 | 396 | ⬆️ +2 |
 | `mcp/tool_definitions.rb` | 303 | 334 | ⬆️ +31 |
@@ -306,4 +291,4 @@ No known correctness bugs remain. The most impactful remaining improvements are 
 
 ---
 
-**Next review:** After Tools extraction or Recall strategy pattern refactoring
+**Next review:** After Recall strategy pattern refactoring or SQLiteStore extraction
