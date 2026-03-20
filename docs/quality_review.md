@@ -2,7 +2,7 @@
 
 **Review Date:** 2026-03-19
 **Previous Review:** 2026-03-09
-**Last Quality Update:** 2026-03-19 (11 items completed)
+**Last Quality Update:** 2026-03-19 (12 items completed)
 
 ---
 
@@ -12,9 +12,9 @@ The codebase has grown from 11,392 to 12,239 LOC since the Mar 9 review. A confi
 
 Five items were resolved in the Mar 19 quality update session: the Shortcuts scope bug (correctness), ApiAdapter exception typing, silent exception logging (3 locations), dead Configuration accessors removed, and `index_database` decomposed into focused methods. No known correctness bugs remain.
 
-**Resolved this session:** 11 items (#1 Tools god object, #2 Recall legacy/dual strategy, #3 Shortcuts scope, NEW-1 ApiError, NEW-2 dead accessors, NEW-3 silent rescues, #5 index_database decomposition, #6 promote_fact transaction, #7 provenance nil content_item_id, #12 Resolver mutable state, #19 SnippetExtractor DRY)
+**Resolved this session:** 12 items (#1 Tools god object, #2 Recall legacy/dual strategy, #3 Shortcuts scope, #4 SQLiteStore extraction, NEW-1 ApiError, NEW-2 dead accessors, NEW-3 silent rescues, #5 index_database decomposition, #6 promote_fact transaction, #7 provenance nil content_item_id, #12 Resolver mutable state, #19 SnippetExtractor DRY)
 **Resolved since last review:** 3 additional items (ExportCommand N+1, `discover_other_projects` bare rescue, embedding test coverage)
-**Total remaining:** 14 items
+**Total remaining:** 13 items
 
 ### Current Strengths
 
@@ -51,13 +51,7 @@ None remaining.
 
 ### High Priority Issues
 
-| # | Issue | File:Line | Effort |
-|---|-------|-----------|--------|
-| 4 | **SQLiteStore exceeds 500 lines (547)** | `store/sqlite_store.rb:1-547` | 1 day |
-
-The file combines connection management, retry logic, schema management, migrations, and all CRUD operations. Schema migrations alone account for ~100 lines.
-
-**Fix:** Extract `SchemaManager` module for migration methods, and consider a `RetryHandler` module for retry logic (lines 24-60).
+None remaining. All >500-line files have been decomposed.
 
 ---
 
@@ -215,7 +209,6 @@ SQL queries, filesystem checks, database connections in a loop, and error handli
 | # | Item | Effort | Impact |
 |---|------|--------|--------|
 | 9 | Add tests for untested critical files | 2-3 days | Coverage |
-| 4 | Extract SQLiteStore schema/retry modules | 1 day | Maintainability |
 
 ### Medium Priority (Next Sprint)
 | # | Item | Effort | Impact |
@@ -249,7 +242,7 @@ SQL queries, filesystem checks, database connections in a loop, and error handli
 
 The codebase maintains its strong architectural foundation. Nine quality items were resolved this session across two passes: the Shortcuts scope correctness bug, ApiAdapter exception typing, silent exception logging, dead code removal, method decomposition, promote_fact transaction verification, provenance nil validation fix, Resolver state verification, and SnippetExtractor DRY extraction.
 
-No known correctness bugs remain. Both god objects have been eliminated: `Tools` (745→104) and `Recall` (727→94). Zero critical issues remain. The most impactful remaining improvements are: (1) adding tests for ~12 untested files, and (2) extracting SQLiteStore schema/retry modules. Only one >500-line file remains (`sqlite_store.rb` at 547).
+No known correctness bugs remain. All three >500-line god objects have been eliminated: `Tools` (745→104), `Recall` (727→94), `SQLiteStore` (547→386). Zero critical or high-priority structural issues remain. The most impactful remaining improvement is adding tests for ~12 untested files.
 
 ---
 
@@ -263,7 +256,7 @@ No known correctness bugs remain. Both god objects have been eliminated: `Tools`
 | Pure logic classes | 17+ | 20+ | 20+ | **22+** |
 | Test files | 74+ | 98 | 128 | **122** |
 | Test-to-code ratio | ~1.5:1 | 1.77:1 | 1.90:1 | **1.84:1** |
-| Files >500 lines | 0 | 2 | 3 | **1** ✅ |
+| Files >500 lines | 0 | 2 | 3 | **0** ✅ |
 | Bare rescues (silent) | 0 | 0 | 1 | **0** ✅ |
 | N+1 patterns (hot paths) | 0 | 0 | 0 | **0** ✅ |
 | N+1 patterns (cold paths) | — | — | 1 | **0** ✅ |
@@ -276,7 +269,7 @@ No known correctness bugs remain. Both god objects have been eliminated: `Tools`
 |------|-------|--------|-------|
 | `mcp/tools.rb` | 728 | **104** | ⬇️ -624 (extracted to 6 handler modules) |
 | `recall.rb` | 681 | **94** | ⬇️ -587 (extracted to engine + query_core) |
-| `store/sqlite_store.rb` | 547 | 547 | — |
+| `store/sqlite_store.rb` | 547 | **386** | ⬇️ -161 (extracted retry_handler + schema_manager) |
 | `mcp/response_formatter.rb` | 394 | 396 | ⬆️ +2 |
 | `mcp/tool_definitions.rb` | 303 | 334 | ⬆️ +31 |
 | `commands/index_command.rb` | 224 | 272 | ⬆️ +48 |
