@@ -6,11 +6,14 @@ require "digest"
 require "json"
 require "extralite"
 require "sequel/adapters/extralite"
+require_relative "retry_handler"
+require_relative "schema_manager"
 
 module ClaudeMemory
   module Store
     class SQLiteStore
-      SCHEMA_VERSION = 12
+      include RetryHandler
+      include SchemaManager
 
       attr_reader :db
 
@@ -21,69 +24,6 @@ module ClaudeMemory
         ensure_schema!
       end
 
-      # Retry configuration for database operations
-      # SQLite's busy_timeout doesn't reliably detect lock release, so we use
-      # shorter timeouts with application-level retry for better responsiveness
-      MAX_RETRIES = 5
-      RETRY_BASE_DELAY = 0.1 # seconds, with exponential backoff
-
-      # Execute a block with retry logic for busy/locked errors
-      # This handles concurrent access from multiple hook processes
-      def with_retry(operation_name = "database operation")
-        retries = 0
-        begin
-          yield
-        rescue Sequel::DatabaseError, Extralite::Error, Extralite::BusyError => e
-          if retryable_error?(e) && retries < MAX_RETRIES
-            retries += 1
-            delay = RETRY_BASE_DELAY * (2**retries) # Exponential backoff
-            sleep(delay)
-            retry
-          end
-          raise
-        end
-      end
-
-      # Execute a transaction with retry logic for concurrent access
-      # Use this instead of @db.transaction when concurrent writes are expected
-      def transaction_with_retry(&block)
-        with_retry("transaction") do
-          @db.transaction(&block)
-        end
-      end
-
-      private
-
-      def retryable_error?(error)
-        message = error.message.downcase
-        message.include?("busy") || message.include?("locked")
-      end
-
-      def connect_database(db_path)
-        retries = 0
-        begin
-          Sequel.connect(
-            "extralite:#{db_path}",
-            # Use shorter busy_timeout since we handle retry at app level
-            # This allows faster detection of lock release between retries
-            connect_sqls: [
-              "PRAGMA busy_timeout = 1000",
-              "PRAGMA journal_mode = WAL",
-              "PRAGMA synchronous = NORMAL"
-            ]
-          )
-        rescue Sequel::DatabaseConnectionError, Extralite::Error => e
-          retries += 1
-          if retries <= MAX_RETRIES && retryable_error?(e)
-            sleep(RETRY_BASE_DELAY * (2**retries))
-            retry
-          end
-          raise
-        end
-      end
-
-      public
-
       def close
         @db.disconnect
       end
@@ -93,8 +33,6 @@ module ClaudeMemory
       end
 
       # Checkpoint the WAL file to prevent unlimited growth
-      # This truncates the WAL after checkpointing
-      # Should be called periodically during maintenance/sweep operations
       def checkpoint_wal
         @db.run("PRAGMA wal_checkpoint(TRUNCATE)")
       end
@@ -103,57 +41,35 @@ module ClaudeMemory
         @db[:meta].where(key: "schema_version").get(:value)&.to_i
       end
 
-      def content_items
-        @db[:content_items]
-      end
+      # --- Table accessors ---
 
-      def delta_cursors
-        @db[:delta_cursors]
-      end
+      def content_items = @db[:content_items]
 
-      def entities
-        @db[:entities]
-      end
+      def delta_cursors = @db[:delta_cursors]
 
-      def entity_aliases
-        @db[:entity_aliases]
-      end
+      def entities = @db[:entities]
 
-      def facts
-        @db[:facts]
-      end
+      def entity_aliases = @db[:entity_aliases]
 
-      def provenance
-        @db[:provenance]
-      end
+      def facts = @db[:facts]
 
-      def fact_links
-        @db[:fact_links]
-      end
+      def provenance = @db[:provenance]
 
-      def conflicts
-        @db[:conflicts]
-      end
+      def fact_links = @db[:fact_links]
 
-      def tool_calls
-        @db[:tool_calls]
-      end
+      def conflicts = @db[:conflicts]
 
-      def operation_progress
-        @db[:operation_progress]
-      end
+      def tool_calls = @db[:tool_calls]
 
-      def schema_health
-        @db[:schema_health]
-      end
+      def operation_progress = @db[:operation_progress]
 
-      def ingestion_metrics
-        @db[:ingestion_metrics]
-      end
+      def schema_health = @db[:schema_health]
 
-      def llm_cache
-        @db[:llm_cache]
-      end
+      def ingestion_metrics = @db[:ingestion_metrics]
+
+      def llm_cache = @db[:llm_cache]
+
+      # --- Content items ---
 
       def upsert_content_item(source:, text_hash:, byte_len:, session_id: nil, transcript_path: nil,
         project_path: nil, occurred_at: nil, raw_text: nil, metadata: nil,
@@ -189,6 +105,8 @@ module ClaudeMemory
           .first
       end
 
+      # --- Tool calls ---
+
       def insert_tool_calls(content_item_id, tool_calls_data)
         tool_calls_data.each do |tc|
           tool_calls.insert(
@@ -210,6 +128,8 @@ module ClaudeMemory
           .all
       end
 
+      # --- Delta cursors ---
+
       def get_delta_cursor(session_id, transcript_path)
         delta_cursors.where(session_id: session_id, transcript_path: transcript_path).get(:last_byte_offset)
       end
@@ -229,6 +149,8 @@ module ClaudeMemory
           )
       end
 
+      # --- Entities ---
+
       def find_or_create_entity(type:, name:)
         slug = slugify(type, name)
         existing = entities.where(slug: slug).get(:id)
@@ -237,6 +159,8 @@ module ClaudeMemory
         now = Time.now.utc.iso8601
         entities.insert(type: type, canonical_name: name, slug: slug, created_at: now)
       end
+
+      # --- Facts ---
 
       def insert_fact(subject_entity_id:, predicate:, object_entity_id: nil, object_literal: nil,
         datatype: nil, polarity: "positive", valid_from: nil, status: "active",
@@ -307,6 +231,8 @@ module ClaudeMemory
           .all
       end
 
+      # --- Provenance ---
+
       def insert_provenance(fact_id:, content_item_id: nil, quote: nil, attribution_entity_id: nil, strength: "stated",
         line_start: nil, line_end: nil)
         provenance.insert(
@@ -323,6 +249,8 @@ module ClaudeMemory
       def provenance_for_fact(fact_id)
         provenance.where(fact_id: fact_id).all
       end
+
+      # --- Conflicts & fact links ---
 
       def insert_conflict(fact_a_id:, fact_b_id:, status: "open", notes: nil)
         now = Time.now.utc.iso8601
@@ -343,13 +271,8 @@ module ClaudeMemory
         fact_links.insert(from_fact_id: from_fact_id, to_fact_id: to_fact_id, link_type: link_type)
       end
 
-      # Record token usage metrics for a distillation operation
-      #
-      # @param content_item_id [Integer] The content item that was distilled
-      # @param input_tokens [Integer] Tokens sent to the API
-      # @param output_tokens [Integer] Tokens returned from the API
-      # @param facts_extracted [Integer] Number of facts extracted
-      # @return [Integer] The created metric record ID
+      # --- Ingestion metrics ---
+
       def record_ingestion_metrics(content_item_id:, input_tokens:, output_tokens:, facts_extracted:)
         ingestion_metrics.insert(
           content_item_id: content_item_id,
@@ -360,14 +283,6 @@ module ClaudeMemory
         )
       end
 
-      # Get aggregate metrics across all distillation operations
-      #
-      # @return [Hash] Aggregated metrics with keys:
-      #   - total_input_tokens: Total tokens sent to API
-      #   - total_output_tokens: Total tokens returned from API
-      #   - total_facts_extracted: Total facts extracted
-      #   - total_operations: Number of distillation operations
-      #   - avg_facts_per_1k_input_tokens: Average efficiency metric
       def aggregate_ingestion_metrics
         # standard:disable Performance/Detect (Sequel DSL requires .select{}.first)
         result = ingestion_metrics
@@ -400,23 +315,12 @@ module ClaudeMemory
         }
       end
 
-      # Look up a cached LLM response by cache key
-      #
-      # @param cache_key [String] SHA256 hex digest of operation+model+input
-      # @return [Hash, nil] Cached result row or nil
+      # --- LLM cache ---
+
       def llm_cache_lookup(cache_key)
         llm_cache.where(cache_key: cache_key).first
       end
 
-      # Store an LLM response in the cache
-      #
-      # @param operation [String] Operation type (e.g., "distill", "extract")
-      # @param model [String] Model identifier
-      # @param input_hash [String] SHA256 of input content
-      # @param result_json [String] JSON response to cache
-      # @param input_tokens [Integer, nil] Tokens in request
-      # @param output_tokens [Integer, nil] Tokens in response
-      # @return [Integer] The created cache entry ID
       def llm_cache_store(operation:, model:, input_hash:, result_json:, input_tokens: nil, output_tokens: nil)
         cache_key = Digest::SHA256.hexdigest("#{operation}:#{model}:#{input_hash}")
 
@@ -439,25 +343,17 @@ module ClaudeMemory
           )
       end
 
-      # Generate a cache key for LLM response lookup
-      #
-      # @param operation [String] Operation type
-      # @param model [String] Model identifier
-      # @param input [String] Raw input content
-      # @return [String] SHA256 hex digest cache key
       def llm_cache_key(operation, model, input)
         input_hash = Digest::SHA256.hexdigest(input)
         Digest::SHA256.hexdigest("#{operation}:#{model}:#{input_hash}")
       end
 
-      # Prune cache entries older than the given age
-      #
-      # @param max_age_seconds [Integer] Maximum age in seconds (default: 7 days)
-      # @return [Integer] Number of entries pruned
       def llm_cache_prune(max_age_seconds: 604_800)
         cutoff = (Time.now - max_age_seconds).utc.iso8601
         llm_cache.where { created_at < cutoff }.delete
       end
+
+      # --- Meta ---
 
       def set_meta(key, value)
         @db[:meta].insert_conflict(target: :key, update: {value: value}).insert(key: key, value: value)
@@ -469,67 +365,10 @@ module ClaudeMemory
 
       private
 
-      def ensure_schema!
-        migrations_path = File.expand_path("../../../db/migrations", __dir__)
-
-        # Handle backward compatibility: databases created with old migration system
-        sync_legacy_schema_version!
-
-        # Skip migration if the database is already ahead of this gem's version.
-        # This happens when a newer gem version migrated the DB and an older
-        # installed gem (e.g. via hooks) tries to open it.
-        current = current_schema_version
-        return if current && current > SCHEMA_VERSION
-
-        # Run Sequel migrations to bring database to target version
-        Sequel::Migrator.run(@db, migrations_path, target: SCHEMA_VERSION)
-
-        # Set created_at timestamp on first initialization
-        set_meta("created_at", Time.now.utc.iso8601) unless get_meta("created_at")
-
-        # Sync legacy schema_version meta key with Sequel's schema_info
-        # This maintains backwards compatibility with code that reads schema_version
-        sequel_version = @db[:schema_info].get(:version) if @db.table_exists?(:schema_info)
-        set_meta("schema_version", sequel_version.to_s) if sequel_version
-      end
-
-      # Sync legacy schema_version from meta table to Sequel's schema_info
-      # Handles two cases:
-      # 1. No schema_info table exists (old system, pre-Sequel migrations)
-      # 2. schema_info exists but is out of sync with meta.schema_version
-      def sync_legacy_schema_version!
-        return unless @db.table_exists?(:meta)
-
-        meta_version = get_meta("schema_version")&.to_i
-        return unless meta_version && meta_version >= 2
-
-        # Verify database actually has v2+ schema (defensive check)
-        columns = @db.schema(:content_items).map(&:first) if @db.table_exists?(:content_items)
-        return unless columns&.include?(:project_path)
-
-        # Create or update schema_info to match meta.schema_version
-        @db.create_table?(:schema_info) do
-          Integer :version, null: false, default: 0
-        end
-
-        sequel_version = @db[:schema_info].get(:version)
-        if sequel_version.nil? || sequel_version < meta_version
-          # Update schema_info to match meta (old system's version)
-          @db[:schema_info].delete
-          @db[:schema_info].insert(version: meta_version)
-        end
-      end
-
-      def current_schema_version
-        return nil unless @db.table_exists?(:schema_info)
-        @db[:schema_info].get(:version)
-      end
-
       def generate_docid(subject_entity_id, predicate, object_literal, created_at)
         input = "#{subject_entity_id}:#{predicate}:#{object_literal}:#{created_at}"
         docid = Digest::SHA256.hexdigest(input)[0, 8]
 
-        # Handle unlikely collisions by rehashing with a counter
         counter = 0
         while facts.where(docid: docid).any?
           counter += 1
