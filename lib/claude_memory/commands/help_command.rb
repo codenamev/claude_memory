@@ -32,6 +32,7 @@ module ClaudeMemory
             version    Show version number
 
           Utilities:
+            completion     Generate shell completions (bash/zsh)
             install-skill  Install agent skills to ~/.claude/commands/
 
           Run 'claude-memory <command> --help' for more information on a command.
