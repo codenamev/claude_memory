@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-03-20 - Implemented 4 features: Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18). Previously: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup for Embeddings (#19), Dedup Before Vector Scoring (#20). Studied lossless-claw (v0.3.0). Other 6 repos unchanged since 2026-03-10.*
+*Updated: 2026-03-23 - Implemented 5 features: Intent Parameter for Recall (#3), Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18). Previously: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup for Embeddings (#19), Dedup Before Vector Scoring (#20). Studied lossless-claw (v0.3.0). Other 6 repos unchanged since 2026-03-10.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5, studied 2026-03-09)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, studied 2026-03-09)*
@@ -24,15 +24,9 @@ Schema migration v12 with `facts_vec` virtual table (vec0, cosine distance). Two
 
 Plugin packaging with `plugin.json` referencing MCP server, hooks, skills, commands, and output styles. Wrapper scripts (`scripts/serve-mcp.sh`, `scripts/hook-runner.sh`) handle gem detection gracefully. Initializers detect plugin mode via `CLAUDE_PLUGIN_ROOT` and skip hooks/MCP/output-style config. Version sync Rake task keeps plugin metadata in sync with gem version.
 
-### 3. Intent Parameter for Recall ⭐
+### ~~3. Intent Parameter for Recall~~ ✅ Implemented 2026-03-23
 
-Source: QMD v1.1.5 study (2026-03-09)
-
-- **Value**: Disambiguate ambiguous queries (e.g., "database" with intent "migration" vs "performance")
-- **Implementation**: Add `intent` param to `Recall#query`, `DualQueryTemplate`, and MCP recall tools. Intent steers expansion/reranking but doesn't replace the query itself. Weight differently per stage (0.5x for chunk selection, 0.3x for snippets)
-- **Evidence**: QMD `store.ts:3103-3110` — disables BM25 shortcut when intent provided; `llm.ts:993-994` — expansion prompt includes intent; `store.ts:2383-2384` — intent prepended to rerank query
-- **Effort**: 2-3 days
-- **Recommendation**: ADOPT
+Optional `intent` parameter added to `Recall#query`, `#query_index`, and `#query_semantic`. Threaded through DualEngine/LegacyEngine via `QueryCore#intent_augmented_query`. Intent appended to search query (0.5x weight for chunk selection, 0.3x for semantic). Disables BM25 shortcut when intent provided so vector search always runs. Exposed via `memory.recall`, `memory.recall_index`, and `memory.recall_semantic` MCP tools.
 
 ### ~~4. MCP Tool Annotations~~ ✅ Implemented 2026-03-09
 
@@ -273,4 +267,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-20 - Implemented 11 features total. Latest: Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18). Previously: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup (#19), Dedup Before Vector Scoring (#20), Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0). Implemented earlier: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
+*Last updated: 2026-03-23 - Implemented 12 features total. Latest: Intent Parameter for Recall (#3). Previously: Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18), Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup (#19), Dedup Before Vector Scoring (#20), Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0). Implemented earlier: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
