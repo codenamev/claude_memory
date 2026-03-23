@@ -22,16 +22,23 @@ module ClaudeMemory
       # @param vector_weight [Float] Weight multiplier for vector rankings (default 1.0)
       # @param text_weight [Float] Weight multiplier for text rankings (default 1.0)
       # @return [Array<Hash>] Fused results sorted by RRF score, with :similarity set to RRF score
-      def self.fuse(vector_results, text_results, limit, vector_weight: 1.0, text_weight: 1.0)
+      def self.fuse(vector_results, text_results, limit, vector_weight: 1.0, text_weight: 1.0, explain: false)
         scores = {}
+        traces = {} if explain
         fact_data = {}
 
         # Score vector results by rank position
         vector_results.each_with_index do |result, idx|
           fact_id = result[:fact][:id]
           rank = idx + 1 # 1-based rank
-          scores[fact_id] = (scores[fact_id] || 0.0) + (vector_weight / (K + rank))
-          scores[fact_id] += TOP_BONUS.fetch(rank, 0.0)
+          contribution = (vector_weight / (K + rank)) + TOP_BONUS.fetch(rank, 0.0)
+          scores[fact_id] = (scores[fact_id] || 0.0) + contribution
+          if explain
+            traces[fact_id] ||= {vec_rank: nil, vec_score: nil, fts_rank: nil, fts_score: nil, vec_rrf: nil, fts_rrf: nil}
+            traces[fact_id][:vec_rank] = rank
+            traces[fact_id][:vec_score] = result[:similarity]
+            traces[fact_id][:vec_rrf] = contribution.round(6)
+          end
           # Prefer vector result data (has real similarity score)
           fact_data[fact_id] = result
         end
@@ -40,8 +47,14 @@ module ClaudeMemory
         text_results.each_with_index do |result, idx|
           fact_id = result[:fact][:id]
           rank = idx + 1
-          scores[fact_id] = (scores[fact_id] || 0.0) + (text_weight / (K + rank))
-          scores[fact_id] += TOP_BONUS.fetch(rank, 0.0)
+          contribution = (text_weight / (K + rank)) + TOP_BONUS.fetch(rank, 0.0)
+          scores[fact_id] = (scores[fact_id] || 0.0) + contribution
+          if explain
+            traces[fact_id] ||= {vec_rank: nil, vec_score: nil, fts_rank: nil, fts_score: nil, vec_rrf: nil, fts_rrf: nil}
+            traces[fact_id][:fts_rank] = rank
+            traces[fact_id][:fts_score] = result[:similarity]
+            traces[fact_id][:fts_rrf] = contribution.round(6)
+          end
           # Only use text data if not already present from vector
           fact_data[fact_id] ||= result
         end
@@ -50,7 +63,11 @@ module ClaudeMemory
         scores
           .sort_by { |_id, score| -score }
           .take(limit)
-          .map { |fact_id, score| fact_data[fact_id].merge(similarity: score) }
+          .map do |fact_id, score|
+            merged = fact_data[fact_id].merge(similarity: score)
+            merged[:score_trace] = traces[fact_id].merge(rrf_final: score.round(6)) if explain
+            merged
+          end
       end
     end
   end

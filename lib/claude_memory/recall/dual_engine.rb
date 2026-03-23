@@ -76,9 +76,9 @@ module ClaudeMemory
         dedupe_and_sort(results, limit)
       end
 
-      def query_semantic(text, limit:, scope:, mode:)
+      def query_semantic(text, limit:, scope:, mode:, explain: false)
         results = dual_execute(scope: scope, limit: limit) do |store, source|
-          query_semantic_single(store, text, limit: limit * 3, mode: mode, source: source)
+          query_semantic_single(store, text, limit: limit * 3, mode: mode, source: source, explain: explain)
         end
         dedupe_by_fact_id(results, limit)
       end

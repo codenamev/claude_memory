@@ -122,8 +122,8 @@ module ClaudeMemory
         facts_by_tool_single(@store, tool_name, limit: limit, source: :legacy)
       end
 
-      def query_semantic(text, limit:, scope:, mode:)
-        query_semantic_single(@store, text, limit: limit, mode: mode, source: :legacy)
+      def query_semantic(text, limit:, scope:, mode:, explain: false)
+        query_semantic_single(@store, text, limit: limit, mode: mode, source: :legacy, explain: explain)
       end
 
       def query_concepts(concepts, limit:, scope:)

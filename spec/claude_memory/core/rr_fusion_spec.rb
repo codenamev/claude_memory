@@ -99,6 +99,46 @@ RSpec.describe ClaudeMemory::Core::RRFusion do
       expect(fused).to eq([])
     end
 
+    describe "explain mode" do
+      it "includes score traces when explain: true" do
+        vector = [{fact: {id: 1}, similarity: 0.9}]
+        text = [{fact: {id: 2}, similarity: 0.5}]
+
+        fused = described_class.fuse(vector, text, 10, explain: true)
+
+        trace_1 = fused.find { |r| r[:fact][:id] == 1 }[:score_trace]
+        expect(trace_1[:vec_rank]).to eq(1)
+        expect(trace_1[:vec_score]).to eq(0.9)
+        expect(trace_1[:fts_rank]).to be_nil
+        expect(trace_1[:rrf_final]).to be_a(Float)
+
+        trace_2 = fused.find { |r| r[:fact][:id] == 2 }[:score_trace]
+        expect(trace_2[:fts_rank]).to eq(1)
+        expect(trace_2[:fts_score]).to eq(0.5)
+        expect(trace_2[:vec_rank]).to be_nil
+      end
+
+      it "shows both sources for dual-ranked facts" do
+        vector = [{fact: {id: 1}, similarity: 0.9}]
+        text = [{fact: {id: 1}, similarity: 0.7}]
+
+        fused = described_class.fuse(vector, text, 10, explain: true)
+
+        trace = fused.first[:score_trace]
+        expect(trace[:vec_rank]).to eq(1)
+        expect(trace[:fts_rank]).to eq(1)
+        expect(trace[:vec_rrf]).to be_a(Float)
+        expect(trace[:fts_rrf]).to be_a(Float)
+        expect(trace[:rrf_final]).to be_within(0.001).of(trace[:vec_rrf] + trace[:fts_rrf])
+      end
+
+      it "omits score traces when explain: false" do
+        vector = [{fact: {id: 1}, similarity: 0.9}]
+        fused = described_class.fuse(vector, [], 10, explain: false)
+        expect(fused.first).not_to have_key(:score_trace)
+      end
+    end
+
     it "sorts by RRF score descending" do
       vector = [
         {fact: {id: 1}, similarity: 0.9},

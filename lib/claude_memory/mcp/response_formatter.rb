@@ -278,6 +278,7 @@ module ClaudeMemory
           source: result[:source],
           similarity: result[:similarity]
         }
+        fact[:score_trace] = result[:score_trace] if result[:score_trace]
         fact[:receipts] = result[:receipts].map { |r| format_receipt(r, query: query) } unless compact
         fact
       end

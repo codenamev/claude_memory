@@ -268,7 +268,8 @@ module ClaudeMemory
                 mode: {type: "string", enum: ["vector", "text", "both"], default: "both", description: "Search mode: vector (embeddings), text (FTS), or both (hybrid)"},
                 limit: {type: "integer", default: 10, description: "Maximum results to return"},
                 scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"},
-                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false}
+                compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false},
+                explain: {type: "boolean", description: "Include per-result score traces showing FTS rank, vector similarity, and RRF contribution", default: false}
               },
               required: ["query"]
             },

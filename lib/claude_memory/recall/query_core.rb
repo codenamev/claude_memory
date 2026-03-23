@@ -106,7 +106,7 @@ module ClaudeMemory
         results.take(limit)
       end
 
-      def query_semantic_single(store, text, limit:, mode:, source:)
+      def query_semantic_single(store, text, limit:, mode:, source:, explain: false)
         vector_results = []
         text_results = []
 
@@ -119,7 +119,7 @@ module ClaudeMemory
           vector_results = search_by_vector(store, text, limit, source) unless skip_vector
         end
 
-        merge_search_results(vector_results, text_results, limit)
+        merge_search_results(vector_results, text_results, limit, explain: explain)
       end
 
       def query_concepts_single(store, concepts, limit:, source:)
@@ -315,8 +315,8 @@ module ClaudeMemory
         ).take(limit)
       end
 
-      def merge_search_results(vector_results, text_results, limit)
-        Core::FactRanker.merge_search_results(vector_results, text_results, limit)
+      def merge_search_results(vector_results, text_results, limit, explain: false)
+        Core::FactRanker.merge_search_results(vector_results, text_results, limit, explain: explain)
       end
 
       def strong_fts_signal?(store, query_text)

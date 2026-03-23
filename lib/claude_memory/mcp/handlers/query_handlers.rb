@@ -56,8 +56,9 @@ module ClaudeMemory
           scope = extract_scope(args)
           limit = extract_limit(args)
           compact = args["compact"] == true
+          explain = args["explain"] == true
 
-          results = @recall.query_semantic(query, limit: limit, scope: scope, mode: mode)
+          results = @recall.query_semantic(query, limit: limit, scope: scope, mode: mode, explain: explain)
           ResponseFormatter.format_semantic_results(query, mode.to_s, scope, results, compact: compact)
         end
 

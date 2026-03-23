@@ -81,8 +81,8 @@ module ClaudeMemory
       @engine.facts_by_tool(tool_name, limit: limit, scope: scope)
     end
 
-    def query_semantic(text, limit: 10, scope: SCOPE_ALL, mode: :both)
-      @engine.query_semantic(text, limit: limit, scope: scope, mode: mode)
+    def query_semantic(text, limit: 10, scope: SCOPE_ALL, mode: :both, explain: false)
+      @engine.query_semantic(text, limit: limit, scope: scope, mode: mode, explain: explain)
     end
 
     def query_concepts(concepts, limit: 10, scope: SCOPE_ALL)

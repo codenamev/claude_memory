@@ -88,8 +88,8 @@ module ClaudeMemory
       # @param text_results [Array<Hash>] Results from text search with :fact and :similarity
       # @param limit [Integer] Maximum results to return
       # @return [Array<Hash>] Merged results sorted by RRF score descending
-      def self.merge_search_results(vector_results, text_results, limit)
-        RRFusion.fuse(vector_results, text_results, limit)
+      def self.merge_search_results(vector_results, text_results, limit, explain: false)
+        RRFusion.fuse(vector_results, text_results, limit, explain: explain)
       end
     end
   end
