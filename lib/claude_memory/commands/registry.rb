@@ -30,7 +30,8 @@ module ClaudeMemory
         "recover" => "RecoverCommand",
         "compact" => "CompactCommand",
         "export" => "ExportCommand",
-        "git-lfs" => "GitLfsCommand"
+        "git-lfs" => "GitLfsCommand",
+        "install-skill" => "InstallSkillCommand"
       }.freeze
 
       # Find a command class by name

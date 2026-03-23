@@ -31,6 +31,9 @@ module ClaudeMemory
             uninstall  Remove ClaudeMemory configuration
             version    Show version number
 
+          Utilities:
+            install-skill  Install agent skills to ~/.claude/commands/
+
           Run 'claude-memory <command> --help' for more information on a command.
         HELP
         0
