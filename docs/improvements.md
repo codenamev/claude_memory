@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-03-16 - Implemented 4 features: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup for Embeddings (#19), Dedup Before Vector Scoring (#20). Studied lossless-claw (v0.3.0). Other 6 repos unchanged since 2026-03-10.*
+*Updated: 2026-03-20 - Implemented 4 features: Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18). Previously: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup for Embeddings (#19), Dedup Before Vector Scoring (#20). Studied lossless-claw (v0.3.0). Other 6 repos unchanged since 2026-03-10.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5, studied 2026-03-09)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, studied 2026-03-09)*
@@ -38,15 +38,9 @@ Source: QMD v1.1.5 study (2026-03-09)
 
 Added `readOnlyHint`, `idempotentHint`, `destructiveHint` annotations to all 21 MCP tools via shared constants (READ_ONLY, WRITE, WRITE_IDEMPOTENT). 17 query tools marked read-only, store_extraction/sweep_now as write, promote as write-idempotent.
 
-### 5. Retrieval Score Traces ⭐
+### ~~5. Retrieval Score Traces~~ ✅ Implemented 2026-03-20
 
-Source: QMD v1.1.5 study (2026-03-09)
-
-- **Value**: Transparency into why facts were retrieved — FTS score, vector similarity, RRF contribution, final blend
-- **Implementation**: Add optional `explain: true` param to recall tools, return score breakdown per result. Enhances `memory.explain` and `memory.recall_details`
-- **Evidence**: QMD `store.ts:2477-2540` — `--explain` flag with per-document RRF contribution traces
-- **Effort**: 2 days
-- **Recommendation**: ADOPT
+Added `explain: true` parameter to `memory.recall_semantic` MCP tool. When enabled, each result includes `score_trace` with `vec_rank`, `vec_score`, `vec_rrf`, `fts_rank`, `fts_score`, `fts_rrf`, and `rrf_final`. Threaded through Recall → DualEngine/LegacyEngine → QueryCore → RRFusion. Components show nil for sources that didn't contribute.
 
 ### ~~6. MCP Stdout Protection Audit~~ ✅ Implemented 2026-03-09
 
@@ -56,15 +50,9 @@ ServeMcpCommand captures real stdout for MCP transport, redirects `$stdout` to `
 
 Configuration#project_dir uses `git rev-parse --git-common-dir` to resolve main repo root across worktrees. `CLAUDE_MEMORY_ISOLATE_WORKTREES` env var opts into per-worktree isolation. Uses Open3.capture2 with graceful fallback to Dir.pwd.
 
-### 8. Search Agent Delegation Pattern ⭐
+### ~~8. Search Agent Delegation Pattern~~ ✅ Implemented 2026-03-20
 
-Source: episodic-memory study (2026-03-09)
-
-- **Value**: Save 50-100x main-agent context by delegating memory search to a subagent that chains recall → explain → fact_graph
-- **Implementation**: Create `agents/memory-recall.md` subagent definition in plugin that chains our MCP tools and synthesizes results
-- **Evidence**: episodic-memory `agents/search-conversations.md:1-162` — subagent-delegated search pattern
-- **Effort**: 1-2 days
-- **Recommendation**: ADOPT
+Created `memory-recall.md` agent definition that chains recall → explain → fact_graph with 4-step workflow (fast lookup → semantic search → enrich → synthesize). Available as `/memory-recall` slash command after installation. Bundled in plugin commands directory and installable via `claude-memory install-skill memory-recall`.
 
 ### ~~9. Self-Excluding Agent Conversations~~ ✅ Implemented 2026-03-09
 
@@ -78,15 +66,9 @@ Extracted `Sweep::Maintenance` class from Sweeper with 8 individual operations, 
 
 Enhanced InstructionsBuilder with knowledge summary (decision/convention/entity counts by predicate pattern), vec availability detection, and dynamic usage tips that adapt based on available capabilities. Semantic search guidance included when sqlite-vec is loaded.
 
-### 12. Embedded Skill Distribution ⭐
+### ~~12. Embedded Skill Distribution~~ ✅ Implemented 2026-03-20
 
-Source: QMD v2.0.1 study (2026-03-10)
-
-- **Value**: `qmd skill install` copies packaged skill files to `~/.claude/commands/` — zero-config setup. Skills are embedded as base64 in source code and extracted at install time
-- **Implementation**: Add `claude-memory install-skill` command that writes our memory recall agent to `~/.claude/commands/memory-recall.md`. Embed skill content in a Ruby constant. Pairs with Search Agent Delegation Pattern (#8)
-- **Evidence**: QMD `src/embedded-skills.ts:1-22` — base64-encoded SKILL.md + references; CLI `skill install` command
-- **Effort**: 1-2 days
-- **Recommendation**: ADOPT
+Added `claude-memory install-skill` command. Skills shipped as markdown files in `lib/claude_memory/commands/skills/`. Supports `--list`, `--force`, and auto-creates `~/.claude/commands/` directory. Registry-based design supports future skill additions. Paired with Search Agent Delegation (#8).
 
 ### 13. Depth-Aware Prompt Templates for Distiller ⭐
 
@@ -124,15 +106,9 @@ Source: claude-supermemory v2.0.1 study (2026-03-09)
 
 ## Medium Priority
 
-### 18. Shell Completion for CLI
+### ~~18. Shell Completion for CLI~~ ✅ Implemented 2026-03-20
 
-Source: grepai study (2026-03-09)
-
-- **Value**: Tab completion for commands and flags in zsh/bash
-- **Implementation**: Generate completion scripts from OptionParser. Dynamic completions for project names
-- **Evidence**: grepai `cli/completion.go` — static + dynamic completions
-- **Effort**: 1-2 days
-- **Recommendation**: CONSIDER
+Added `claude-memory completion` command generating zsh and bash completion scripts. Auto-detects shell from `$SHELL`. Includes all 25 CLI commands, hook subcommands (ingest/sweep/publish/context), and context-aware flag completions for scope, index, and install-skill. Usage: `eval "$(claude-memory completion)"`.
 
 ### ~~19. Content-Addressed Deduplication for Embeddings~~ ✅ Implemented 2026-03-16
 
@@ -297,4 +273,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-16 - Implemented 7 features total: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup (#19), Dedup Before Vector Scoring (#20), Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0), added Depth-Aware Prompt Templates (#13). Previously: Re-studied QMD (v2.0.1). Implemented: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
+*Last updated: 2026-03-20 - Implemented 11 features total. Latest: Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18). Previously: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup (#19), Dedup Before Vector Scoring (#20), Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0). Implemented earlier: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
