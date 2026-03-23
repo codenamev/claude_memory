@@ -12,7 +12,8 @@ module ClaudeMemory
           limit = extract_limit(args)
           compact = args["compact"] == true
           query = args["query"]
-          results = @recall.query(query, limit: limit, scope: scope, include_raw_text: !compact)
+          intent = extract_intent(args)
+          results = @recall.query(query, limit: limit, scope: scope, include_raw_text: !compact, intent: intent)
           ResponseFormatter.format_recall_results(results, compact: compact, query: query)
         rescue Sequel::DatabaseError, Sequel::DatabaseConnectionError, Errno::ENOENT => e
           classified_error(e, tool_name: "memory.recall")
@@ -21,7 +22,8 @@ module ClaudeMemory
         def recall_index(args)
           scope = extract_scope(args)
           limit = extract_limit(args, default: 20)
-          results = @recall.query_index(args["query"], limit: limit, scope: scope)
+          intent = extract_intent(args)
+          results = @recall.query_index(args["query"], limit: limit, scope: scope, intent: intent)
           ResponseFormatter.format_index_results(args["query"], scope, results)
         end
 
@@ -57,8 +59,9 @@ module ClaudeMemory
           limit = extract_limit(args)
           compact = args["compact"] == true
           explain = args["explain"] == true
+          intent = extract_intent(args)
 
-          results = @recall.query_semantic(query, limit: limit, scope: scope, mode: mode, explain: explain)
+          results = @recall.query_semantic(query, limit: limit, scope: scope, mode: mode, explain: explain, intent: intent)
           ResponseFormatter.format_semantic_results(query, mode.to_s, scope, results, compact: compact)
         end
 

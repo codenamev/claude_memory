@@ -75,6 +75,14 @@ module ClaudeMemory
       def extract_limit(args, default: 10)
         args["limit"] || default
       end
+
+      # Extract optional intent parameter for query disambiguation
+      # @param args [Hash] Tool arguments
+      # @return [String, nil] Intent string or nil if not provided/blank
+      def extract_intent(args)
+        intent = args["intent"]
+        (intent.nil? || intent.to_s.strip.empty?) ? nil : intent.to_s.strip
+      end
     end
   end
 end

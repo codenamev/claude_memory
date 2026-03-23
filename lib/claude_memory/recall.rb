@@ -45,12 +45,12 @@ module ClaudeMemory
       end
     end
 
-    def query(query_text, limit: 10, scope: SCOPE_ALL, include_raw_text: false)
-      @engine.query(query_text, limit: limit, scope: scope, include_raw_text: include_raw_text)
+    def query(query_text, limit: 10, scope: SCOPE_ALL, include_raw_text: false, intent: nil)
+      @engine.query(query_text, limit: limit, scope: scope, include_raw_text: include_raw_text, intent: intent)
     end
 
-    def query_index(query_text, limit: 20, scope: SCOPE_ALL)
-      @engine.query_index(query_text, limit: limit, scope: scope)
+    def query_index(query_text, limit: 20, scope: SCOPE_ALL, intent: nil)
+      @engine.query_index(query_text, limit: limit, scope: scope, intent: intent)
     end
 
     def fact_graph(fact_id, depth: 2, scope: nil)
@@ -81,8 +81,8 @@ module ClaudeMemory
       @engine.facts_by_tool(tool_name, limit: limit, scope: scope)
     end
 
-    def query_semantic(text, limit: 10, scope: SCOPE_ALL, mode: :both, explain: false)
-      @engine.query_semantic(text, limit: limit, scope: scope, mode: mode, explain: explain)
+    def query_semantic(text, limit: 10, scope: SCOPE_ALL, mode: :both, explain: false, intent: nil)
+      @engine.query_semantic(text, limit: limit, scope: scope, mode: mode, explain: explain, intent: intent)
     end
 
     def query_concepts(concepts, limit: 10, scope: SCOPE_ALL)

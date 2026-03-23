@@ -25,6 +25,7 @@ module ClaudeMemory
               type: "object",
               properties: {
                 query: {type: "string", description: "Search query for existing knowledge (e.g., 'authentication flow', 'error handling', 'database setup')"},
+                intent: {type: "string", description: "Optional intent to disambiguate the query (e.g., 'migration' or 'performance' when query is 'database'). Steers search without replacing the query."},
                 limit: {type: "integer", description: "Max results", default: 10},
                 scope: {type: "string", enum: ["all", "global", "project"], description: "Filter by scope: 'all' (default), 'global', or 'project'", default: "all"},
                 compact: {type: "boolean", description: "Omit provenance receipts for ~60% smaller responses (~800 → ~300 tokens/result)", default: false}
@@ -40,6 +41,7 @@ module ClaudeMemory
               type: "object",
               properties: {
                 query: {type: "string", description: "Search query for existing knowledge (e.g., 'client errors', 'database choice')"},
+                intent: {type: "string", description: "Optional intent to disambiguate the query (e.g., 'schema' or 'optimization' when query is 'database'). Steers search without replacing the query."},
                 limit: {type: "integer", description: "Maximum results to return", default: 20},
                 scope: {type: "string", enum: ["all", "global", "project"], description: "Scope: 'all' (both), 'global' (user-wide), 'project' (current only)", default: "all"}
               },
@@ -265,6 +267,7 @@ module ClaudeMemory
               type: "object",
               properties: {
                 query: {type: "string", description: "Search query"},
+                intent: {type: "string", description: "Optional intent to disambiguate the query (e.g., 'security' when query is 'authentication'). Disables BM25 shortcut to ensure vector search runs."},
                 mode: {type: "string", enum: ["vector", "text", "both"], default: "both", description: "Search mode: vector (embeddings), text (FTS), or both (hybrid)"},
                 limit: {type: "integer", default: 10, description: "Maximum results to return"},
                 scope: {type: "string", enum: ["all", "global", "project"], default: "all", description: "Filter by scope"},

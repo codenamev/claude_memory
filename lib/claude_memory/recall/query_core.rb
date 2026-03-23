@@ -5,7 +5,26 @@ module ClaudeMemory
     # Shared store-level query logic used by both LegacyEngine and DualEngine.
     # All methods take a `store` parameter — no direct access to @legacy_store or @manager.
     module QueryCore
+      # Intent weight constants for query augmentation
+      # 0.5x weight for chunk/fact selection (FTS, index queries)
+      INTENT_WEIGHT_CHUNK = 0.5
+      # 0.3x weight for semantic/snippet matching (vector, hybrid)
+      INTENT_WEIGHT_SNIPPET = 0.3
+
       private
+
+      # Augment a query with intent context for disambiguation.
+      # Intent is appended to the query to steer search without replacing the original.
+      #
+      # @param query_text [String] Original search query
+      # @param intent [String, nil] Optional intent to disambiguate (e.g., "migration", "performance")
+      # @param weight [Float] Unused currently; documents the conceptual weight for this stage
+      # @return [String] Augmented query text, or original if no intent
+      def intent_augmented_query(query_text, intent, weight: INTENT_WEIGHT_CHUNK)
+        return query_text if intent.nil? || intent.to_s.strip.empty?
+
+        "#{query_text} #{intent.to_s.strip}"
+      end
 
       def query_single_store(store, query_text, limit:, source:, include_raw_text: false)
         fts = Index::LexicalFTS.new(store)
@@ -106,7 +125,7 @@ module ClaudeMemory
         results.take(limit)
       end
 
-      def query_semantic_single(store, text, limit:, mode:, source:, explain: false)
+      def query_semantic_single(store, text, limit:, mode:, source:, explain: false, skip_fts_shortcut: false)
         vector_results = []
         text_results = []
 
@@ -115,7 +134,9 @@ module ClaudeMemory
         end
 
         if mode == :vector || mode == :both
-          skip_vector = mode == :both && strong_fts_signal?(store, text)
+          # When intent is provided, disable the BM25 shortcut so vector search
+          # always runs — the intent may shift relevance beyond what FTS captures.
+          skip_vector = !skip_fts_shortcut && mode == :both && strong_fts_signal?(store, text)
           vector_results = search_by_vector(store, text, limit, source) unless skip_vector
         end
 

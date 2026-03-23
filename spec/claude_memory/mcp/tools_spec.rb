@@ -43,6 +43,16 @@ RSpec.describe ClaudeMemory::MCP::Tools do
         "memory.decisions", "memory.conventions", "memory.architecture"
       )
     end
+
+    it "includes intent parameter in recall tools" do
+      defs = tools.definitions
+      recall_tools = defs.select { |d| ["memory.recall", "memory.recall_index", "memory.recall_semantic"].include?(d[:name]) }
+      recall_tools.each do |tool|
+        properties = tool[:inputSchema][:properties]
+        expect(properties).to have_key(:intent), "#{tool[:name]} should have intent parameter"
+        expect(properties[:intent][:type]).to eq("string")
+      end
+    end
   end
 
   describe "#call" do
