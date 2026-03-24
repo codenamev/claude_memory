@@ -64,6 +64,46 @@ RSpec.describe ClaudeMemory::MCP::Tools do
         expect(result[:databases][:legacy][:facts_total]).to eq(1)
         expect(result[:databases][:legacy][:schema_version]).to eq(ClaudeMemory::Store::SQLiteStore::SCHEMA_VERSION)
       end
+
+      it "includes pending distillation count" do
+        text = "A" * 300
+        store.upsert_content_item(
+          source: "transcript",
+          session_id: "sess-1",
+          transcript_path: "/tmp/test.jsonl",
+          project_path: "/tmp/project",
+          text_hash: Digest::SHA256.hexdigest(text),
+          byte_len: text.bytesize,
+          raw_text: text,
+          occurred_at: Time.now.utc.iso8601
+        )
+
+        result = tools.call("memory.status", {})
+        expect(result[:pending_distillation]).to eq(1)
+      end
+
+      it "excludes distilled items from pending count" do
+        text = "B" * 300
+        cid = store.upsert_content_item(
+          source: "transcript",
+          session_id: "sess-2",
+          transcript_path: "/tmp/test.jsonl",
+          project_path: "/tmp/project",
+          text_hash: Digest::SHA256.hexdigest(text),
+          byte_len: text.bytesize,
+          raw_text: text,
+          occurred_at: Time.now.utc.iso8601
+        )
+        store.record_ingestion_metrics(
+          content_item_id: cid,
+          input_tokens: 100,
+          output_tokens: 50,
+          facts_extracted: 2
+        )
+
+        result = tools.call("memory.status", {})
+        expect(result[:pending_distillation]).to eq(0)
+      end
     end
 
     describe "memory.conflicts" do

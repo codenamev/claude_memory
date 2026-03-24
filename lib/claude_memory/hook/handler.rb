@@ -31,7 +31,9 @@ module ClaudeMemory
         )
 
         if result[:status] == :ingested && result[:content_id]
-          distill_content(result, project_path)
+          DistillationRunner.new(@store).distill_item(
+            result[:content_id], project_path: project_path
+          )
         end
 
         result
@@ -62,7 +64,8 @@ module ClaudeMemory
         manager = @manager || build_manager(payload)
         manager.ensure_both!
 
-        injector = ContextInjector.new(manager)
+        source = payload["source"]
+        injector = ContextInjector.new(manager, source: source)
         context_text = injector.generate_context
 
         {status: :ok, context: context_text}
@@ -71,32 +74,6 @@ module ClaudeMemory
       end
 
       private
-
-      def distill_content(result, project_path)
-        raw_text = @store.get_content_item(result[:content_id])&.dig(:raw_text)
-        return unless raw_text && raw_text.length >= 200
-
-        distiller = Distill::NullDistiller.new
-        extraction = distiller.distill(raw_text, content_item_id: result[:content_id])
-        return if extraction.empty?
-
-        resolver = Resolve::Resolver.new(@store)
-        resolve_result = resolver.apply(
-          extraction,
-          content_item_id: result[:content_id],
-          project_path: project_path,
-          scope: "project"
-        )
-
-        @store.record_ingestion_metrics(
-          content_item_id: result[:content_id],
-          input_tokens: 0,
-          output_tokens: 0,
-          facts_extracted: resolve_result[:facts_created]
-        )
-      rescue => e
-        ClaudeMemory.logger.debug("distill_content failed: #{e.message}")
-      end
 
       def build_manager(payload)
         project_path = payload["project_path"] || @config.project_dir

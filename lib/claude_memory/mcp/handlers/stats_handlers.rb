@@ -26,6 +26,7 @@ module ClaudeMemory
             result[:databases][:legacy] = db_stats(@legacy_store)
           end
 
+          result[:pending_distillation] = pending_distillation_count
           result
         end
 
@@ -59,6 +60,29 @@ module ClaudeMemory
         end
 
         private
+
+        def pending_distillation_count
+          count = 0
+
+          stores = if @manager
+            [@manager.global_exists? ? @manager.global_store : nil,
+              @manager.project_exists? ? @manager.project_store : nil].compact
+          elsif @legacy_store
+            [@legacy_store]
+          else
+            []
+          end
+
+          stores.each do |store|
+            count += store.content_items
+              .left_join(:ingestion_metrics, content_item_id: :id)
+              .where(Sequel[:ingestion_metrics][:id] => nil)
+              .where { byte_len >= 200 }
+              .count
+          end
+
+          count
+        end
 
         def db_stats(store)
           stats = {

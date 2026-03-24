@@ -124,6 +124,10 @@ module ClaudeMemory
             "- #{name}: #{info[:facts_active]} active facts, #{info[:open_conflicts]} conflicts (schema v#{info[:schema_version]})"
           end
         end
+
+        pending = result[:pending_distillation] || 0
+        lines << "Pending distillation: #{pending}" if pending > 0
+
         lines.join("\n")
       end
 
