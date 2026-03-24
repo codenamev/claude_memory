@@ -3,23 +3,88 @@ name: improve
 description: Incrementally implement feature improvements from docs/improvements.md with tests and atomic commits. Focuses on new functionality rather than refactoring.
 agent: general-purpose
 allowed-tools: Read, Grep, Edit, Write, Bash
+arguments:
+  - name: mode
+    description: "Execution mode: 'sub-agent' (default, sequential) or 'agent-team' (parallel via agent teams)"
+    required: false
+    default: "sub-agent"
 ---
 
 # Feature Improvements - Incremental Implementation
 
 Systematically implement feature improvements from `docs/improvements.md`, making tested, atomic commits for each feature addition.
 
+## Execution Modes
+
+This skill supports two modes, passed as the first argument:
+
+- **`sub-agent`** (default): A single agent works through improvements sequentially. Best for small batches (1-3 features) or features with dependencies.
+- **`agent-team`**: Spawns a coordinated team of agents that implement independent features in parallel. Best for larger batches (3+) of independent features.
+
+---
+
+## Mode: agent-team
+
+When invoked with `agent-team`, follow this process:
+
+### Step 1: Read and Assess Improvements
+
+Read `docs/improvements.md` and identify all implementable features using the same feasibility criteria as sub-agent mode (skip Categories D-F, "Features to Avoid", "If Requested" items).
+
+### Step 2: Group Independent Features
+
+Partition implementable features into independent groups:
+- Features touching **different files** can be parallelized
+- Features sharing files or with dependencies must be sequential
+- Aim for 3-5 teammates maximum
+
+### Step 3: Create the Agent Team
+
+Create an agent team. For each teammate:
+
+1. **Assign one or two related features** per teammate
+2. **Provide full context** — teammates don't share your conversation history
+3. **Include these instructions for each teammate**:
+   - Read relevant existing code before making changes
+   - Follow the project's code style (Standard Ruby, frozen_string_literal)
+   - Write tests for all new functionality
+   - Run `bundle exec rake standard:fix` before committing
+   - Run relevant spec file after each edit, full suite before committing
+   - Run `bundle exec rspec` to verify all tests pass
+   - Make atomic commits with `[Feature]` prefix format
+   - Update `docs/improvements.md` to mark features as implemented
+   - Reference `.claude/skills/improve/feature-patterns.md` for implementation recipes
+
+### Step 4: Monitor and Coordinate
+
+- Wait for all teammates to complete their tasks
+- If a teammate reports a blocker or conflict, help resolve it
+- Do NOT implement tasks yourself — let teammates do the work
+
+### Step 5: Validate and Report
+
+After all teammates finish:
+
+1. Run the full test suite: `bundle exec rspec`
+2. Run the linter: `bundle exec rake standard:fix`
+3. If any failures, fix them or coordinate with the relevant teammate
+4. Provide a consolidated progress report (same Final Report format as sub-agent mode)
+
+---
+
+## Mode: sub-agent (default)
+
 ## Process Overview
 
 1. **Check memory health** by calling `memory.check_setup` to verify the system is operational
 2. **Read the improvements document** from `docs/improvements.md`
-2. **Identify unimplemented features** from "Remaining Tasks" section
-3. **Prioritize by stated priority** (Medium → Low)
-4. **Assess feasibility** (skip if too complex or requires external services)
-5. **Implement features incrementally** (one logical feature at a time)
-6. **Run tests after each change** to ensure nothing breaks
-7. **Make atomic commits** that capture the feature and its purpose
-8. **Update improvements.md** to mark features as implemented
+3. **Identify unimplemented features** from "Remaining Tasks" section
+4. **Prioritize by stated priority** (Medium → Low)
+5. **Assess feasibility** (skip if too complex or requires external services)
+6. **Implement features incrementally** (one logical feature at a time)
+7. **Run tests after each change** to ensure nothing breaks
+8. **Make atomic commits** that capture the feature and its purpose
+9. **Update improvements.md** to mark features as implemented
 
 ## Detailed Steps
 
@@ -100,11 +165,15 @@ For each feature:
    ```bash
    bundle exec rake standard:fix
    ```
-5. **Run tests**:
+5. **Run targeted tests** after each edit:
+   ```bash
+   bundle exec rspec spec/claude_memory/<relevant_spec>.rb
+   ```
+6. **Run full suite** before committing:
    ```bash
    bundle exec rspec
    ```
-6. **Fix any test failures** before proceeding
+7. **Fix any test failures** before proceeding
 
 ### Step 5: Make Atomic Commit
 
@@ -300,9 +369,15 @@ Is it marked "Features to Avoid"?
                 ↓
                 Category D (Background)?
                 ├─ YES → Assess carefully, may skip
-                └─ NO → Implement (Categories A-C safe)
+                └─ NO → Continue
                     ↓
-                    Implement the feature
+                    Does it have dependencies on other features?
+                    ├─ YES → Are dependencies complete?
+                    │   ├─ NO → SKIP, note dependency
+                    │   └─ YES → Continue
+                    └─ NO → Implement (Categories A-C safe)
+                        ↓
+                        Implement the feature
                     ↓
                     Run tests
                     ↓
@@ -324,11 +399,15 @@ Is it marked "Features to Avoid"?
 ## Time Budgets
 
 **Per Feature:**
-- Category A (Schema): Max 20 minutes
-- Category B (Reporting): Max 30 minutes
-- Category C (CLI): Max 30 minutes
-- Category D (Background): Max 60 minutes (or skip)
-- Category E (External): Max 45 minutes (or skip)
+- Category A (Schema): Max 15 minutes — skip if stuck after 15
+- Category B (Reporting): Max 20 minutes — skip if stuck after 20
+- Category C (CLI): Max 30 minutes — skip if stuck after 30
+- Category D (Background): Max 45 minutes (or skip at first sign of daemon complexity)
+- Category E (External): Max 30 minutes (or skip at first sign of dependency issues)
+
+**Per Debug Cycle:**
+- Test failure fix: Max 15 minutes — if you can't fix it in 15 minutes, revert and skip
+- Understanding code: Max 10 minutes — if unclear after 10 minutes, skip and report
 
 **Session Total:** Max 2 hours
 
@@ -337,25 +416,34 @@ If time budget exceeded: SKIP remaining features and report.
 ## Testing Strategy
 
 ### Test Frequency
-- After schema changes: Run all specs
-- After new command: Run command specs + integration
-- After reporting changes: Run relevant specs
-- Before commit: Full test suite
+- After each file edit: Run the relevant spec file
+- After schema changes: Run `spec/claude_memory/store/`
+- After new command: Run `spec/claude_memory/commands/`
+- Before each commit: Full test suite
+- If >5 files changed: Full test suite immediately
 
 ### Test Commands
 ```bash
-# Specific command tests
-bundle exec rspec spec/claude_memory/commands/
+# Single relevant spec (fastest feedback)
+bundle exec rspec spec/claude_memory/commands/metrics_command_spec.rb
 
-# Schema tests
+# Module-level specs
+bundle exec rspec spec/claude_memory/commands/
 bundle exec rspec spec/claude_memory/store/
 
-# Full suite
+# Full suite (before commit)
 bundle exec rspec
 
-# With linting
+# With linting (final check)
 bundle exec rake
 ```
+
+### Test Failure Response
+1. Read error message carefully
+2. Check if your change caused it (vs pre-existing)
+3. If your change: fix within 15 minutes or revert and skip
+4. If pre-existing: note and continue
+5. If unsure: revert change and skip item
 
 ### New Feature Tests
 
