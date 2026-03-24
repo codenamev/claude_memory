@@ -28,6 +28,8 @@ module ClaudeMemory
         when "memory.recall_semantic" then summarize_semantic(result)
         when "memory.search_concepts" then summarize_concepts(result)
         when "memory.fact_graph" then summarize_fact_graph(result)
+        when "memory.undistilled" then summarize_undistilled(result)
+        when "memory.mark_distilled" then summarize_mark_distilled(result)
         when "memory.check_setup" then summarize_check_setup(result)
         else JSON.generate(result)
         end
@@ -231,6 +233,26 @@ module ClaudeMemory
           end
         end
         lines.join("\n")
+      end
+
+      def self.summarize_undistilled(result)
+        items = result[:items] || []
+        return "No undistilled content items." if items.empty?
+
+        lines = ["#{result[:count]} undistilled content item(s):"]
+        items.each do |i|
+          ago = i[:occurred_ago] || "unknown"
+          lines << "- Item ##{i[:content_item_id]} (#{ago}): #{(i[:raw_text] || "")[0, 80]}..."
+        end
+        lines.join("\n")
+      end
+
+      def self.summarize_mark_distilled(result)
+        if result[:success]
+          "Marked content item ##{result[:content_item_id]} as distilled (#{result[:facts_extracted]} facts extracted)"
+        else
+          result[:error]
+        end
       end
 
       def self.summarize_check_setup(result)

@@ -60,6 +60,8 @@ module ClaudeMemory
         when "memory.recall_semantic" then recall_semantic(arguments)
         when "memory.search_concepts" then search_concepts(arguments)
         when "memory.fact_graph" then fact_graph(arguments)
+        when "memory.undistilled" then undistilled(arguments)
+        when "memory.mark_distilled" then mark_distilled(arguments)
         when "memory.check_setup" then check_setup
         when "memory.list_projects" then list_projects
         else {error: "Unknown tool: #{name}"}

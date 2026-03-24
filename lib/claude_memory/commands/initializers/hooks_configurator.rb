@@ -97,6 +97,8 @@ module ClaudeMemory
         private
 
         def build_hooks_config(ingest_cmd, sweep_cmd)
+          context_cmd = "claude-memory hook context"
+
           {
             "hooks" => {
               "Stop" => [{
@@ -106,7 +108,8 @@ module ClaudeMemory
               }],
               "SessionStart" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10},
+                  {"type" => "command", "command" => context_cmd, "timeout" => 5}
                 ]
               }],
               "PreCompact" => [{
@@ -119,6 +122,16 @@ module ClaudeMemory
                 "hooks" => [
                   {"type" => "command", "command" => ingest_cmd, "timeout" => 30},
                   {"type" => "command", "command" => sweep_cmd, "timeout" => 30}
+                ]
+              }],
+              "TaskCompleted" => [{
+                "hooks" => [
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+                ]
+              }],
+              "TeammateIdle" => [{
+                "hooks" => [
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
                 ]
               }]
             }

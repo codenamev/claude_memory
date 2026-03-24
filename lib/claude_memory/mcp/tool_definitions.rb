@@ -314,6 +314,31 @@ module ClaudeMemory
             annotations: READ_ONLY
           },
           {
+            name: "memory.undistilled",
+            description: "List content items not yet deeply distilled. Returns raw transcript text for knowledge extraction.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                limit: {type: "integer", default: 3, description: "Max items to return"},
+                min_length: {type: "integer", default: 200, description: "Min text length (skip tiny deltas)"}
+              }
+            },
+            annotations: READ_ONLY
+          },
+          {
+            name: "memory.mark_distilled",
+            description: "Mark a content item as distilled after extracting facts from it.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                content_item_id: {type: "integer", description: "ID of the distilled content item"},
+                facts_extracted: {type: "integer", default: 0, description: "Number of facts extracted"}
+              },
+              required: ["content_item_id"]
+            },
+            annotations: WRITE_IDEMPOTENT
+          },
+          {
             name: "memory.check_setup",
             description: "Check ClaudeMemory initialization status. Returns version info, issues found, and recommendations.",
             inputSchema: {

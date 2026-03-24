@@ -94,7 +94,43 @@ module ClaudeMemory
           ResponseFormatter.format_conflicts(list)
         end
 
+        def mark_distilled(args)
+          content_item_id = args["content_item_id"]
+          facts_extracted = args["facts_extracted"] || 0
+
+          store = find_store_for_content_item(content_item_id)
+          return {error: "Content item #{content_item_id} not found"} unless store
+
+          store.record_ingestion_metrics(
+            content_item_id: content_item_id,
+            input_tokens: 0,
+            output_tokens: 0,
+            facts_extracted: facts_extracted
+          )
+
+          {
+            success: true,
+            content_item_id: content_item_id,
+            facts_extracted: facts_extracted
+          }
+        end
+
         private
+
+        def find_store_for_content_item(content_item_id)
+          if @manager
+            # Check project store first, then global
+            if @manager.project_store&.content_items&.where(id: content_item_id)&.any?
+              @manager.project_store
+            elsif @manager.global_store&.content_items&.where(id: content_item_id)&.any?
+              @manager.global_store
+            end
+          elsif @legacy_store
+            if @legacy_store.content_items.where(id: content_item_id).any?
+              @legacy_store
+            end
+          end
+        end
 
         def create_synthetic_content_item(store, text, project_path, occurred_at)
           text_hash = Digest::SHA256.hexdigest(text)

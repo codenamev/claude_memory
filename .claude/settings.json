@@ -58,6 +58,28 @@
           }
         ]
       }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

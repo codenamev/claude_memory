@@ -99,6 +99,10 @@ module ClaudeMemory
         end
       end
 
+      def get_content_item(id)
+        content_items.where(id: id).first
+      end
+
       def content_item_by_transcript_and_mtime(transcript_path, mtime_iso8601)
         content_items
           .where(transcript_path: transcript_path, source_mtime: mtime_iso8601)
@@ -272,6 +276,17 @@ module ClaudeMemory
       end
 
       # --- Ingestion metrics ---
+
+      def undistilled_content_items(limit: 3, min_length: 200)
+        content_items
+          .left_join(:ingestion_metrics, content_item_id: :id)
+          .where(Sequel[:ingestion_metrics][:id] => nil)
+          .where { byte_len >= min_length }
+          .order(Sequel.desc(:occurred_at))
+          .limit(limit)
+          .select_all(:content_items)
+          .all
+      end
 
       def record_ingestion_metrics(content_item_id:, input_tokens:, output_tokens:, facts_extracted:)
         ingestion_metrics.insert(
