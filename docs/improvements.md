@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-03-23 - Implemented 5 features: Intent Parameter for Recall (#3), Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18). Previously: Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup for Embeddings (#19), Dedup Before Vector Scoring (#20). Studied lossless-claw (v0.3.0). Other 6 repos unchanged since 2026-03-10.*
+*Updated: 2026-03-24 - Implemented automatic distillation pipeline: NullDistiller wired into ingest hooks (Stop/SessionStart/PreCompact/SessionEnd/TaskCompleted/TeammateIdle), context hook injection for LLM extraction, `memory.undistilled` and `memory.mark_distilled` MCP tools, `/distill-transcripts` skill. Previously: Intent Parameter for Recall (#3), Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18), and 12 earlier features. Studied lossless-claw (v0.3.0). Other 6 repos unchanged since 2026-03-10.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5, studied 2026-03-09)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, studied 2026-03-09)*
@@ -64,15 +64,11 @@ Enhanced InstructionsBuilder with knowledge summary (decision/convention/entity 
 
 Added `claude-memory install-skill` command. Skills shipped as markdown files in `lib/claude_memory/commands/skills/`. Supports `--list`, `--force`, and auto-creates `~/.claude/commands/` directory. Registry-based design supports future skill additions. Paired with Search Agent Delegation (#8).
 
-### 13. Depth-Aware Prompt Templates for Distiller ⭐
+### ~~13. Depth-Aware Prompt Templates for Distiller~~ ⭐ Partially Implemented 2026-03-24
 
 Source: lossless-claw v0.3.0 study (2026-03-16)
 
-- **Value**: Graduated extraction prompts based on context depth — fresh conversations get detailed extraction, well-established facts get consolidation prompts. Parallels lossless-claw's leaf/d1/d2/d3+ prompt hierarchy
-- **Implementation**: Create prompt templates for distiller stages: initial extraction (detailed), re-extraction (consolidation), contradiction resolution (focused). Use depth/freshness to select template
-- **Evidence**: `tui/prompts/leaf.tmpl`, `tui/prompts/condensed-d1.tmpl`, `condensed-d2.tmpl`, `condensed-d3.tmpl` — four distinct prompt templates with increasing abstraction
-- **Effort**: 1-2 days (when building real distiller)
-- **Recommendation**: ADOPT
+Three-layer automatic distillation pipeline: (1) NullDistiller wired into ingest hooks for instant regex extraction on Stop/SessionStart/PreCompact/SessionEnd/TaskCompleted/TeammateIdle, (2) Context hook injection at SessionStart includes undistilled content with extraction instructions — Claude Code acts as the LLM distiller at zero extra cost, (3) `/distill-transcripts` skill for manual deep extraction. New MCP tools: `memory.undistilled`, `memory.mark_distilled`. Depth-aware prompt selection (initial vs consolidation vs contradiction) deferred to skill enhancement — no Ruby code needed, just skill file edits.
 
 ### ~~14. Three-Level Escalation for Sweep/Maintenance~~ ✅ Implemented 2026-03-16
 
@@ -86,15 +82,11 @@ Restructured QueryGuide with 4-tier escalation hierarchy (Fast Lookup → Broad 
 
 Added `MCP::ErrorClassifier` with three-tier classification: benign (empty results, first use — no alarm), retryable (DB locked, I/O errors — retry flag), fatal (disk full, corruption — recommendations). MCP tools use classified errors with severity, retry hints, and actionable recommendations.
 
-### 17. Entity Context Extraction Prompts
+### ~~17. Entity Context Extraction Prompts~~ ✅ Implemented 2026-03-24
 
 Source: claude-supermemory v2.0.1 study (2026-03-09)
 
-- **Value**: Structured prompt templates for distiller defining what to extract (decisions, preferences, conventions) vs what to skip
-- **Implementation**: Apply when replacing NullDistiller. Rich prompt with concrete examples in table format, separate personal vs repo context
-- **Evidence**: supermemory `src/lib/supermemory-client.js:21-58` — extraction prompts with examples
-- **Effort**: 1-2 days (when building real distiller)
-- **Recommendation**: ADOPT — template for distiller replacement
+Extraction instructions embedded in `/distill-transcripts` skill and context hook injection prompt. Defines what to extract (technology decisions, conventions, preferences, architecture, entities by type) vs what to skip (debugging steps, code output, transient errors). Scope detection for global vs project facts. Claude Code itself performs extraction — no separate API call needed.
 
 ---
 
@@ -190,7 +182,7 @@ Added `claude-memory export` command. Dumps facts with entities and provenance t
 ## Features to Avoid
 
 - **Chroma Vector Database** — We use fastembed-rb with local ONNX model. sqlite-vec is the better upgrade path (claude-mem uses Chroma, but QMD/episodic-memory prove sqlite-vec is simpler and sufficient)
-- **Claude Agent SDK for Distillation** — Direct API calls via `anthropic-rb` gem
+- **Claude Agent SDK for Distillation** — Direct API calls via `anthropic-rb` gem. Instead, Claude Code itself serves as the distiller via context hook injection and `/distill-transcripts` skill — zero extra cost
 - **Worker Service Background Process** — Keep stdio-based MCP server. claude-mem's worker architecture adds significant complexity and failure modes.
 - **Web Viewer UI** — CLI output is sufficient. Add if users request it
 - **Neural Embeddings (EmbeddingGemma)** — Superseded by FastEmbed (BAAI/bge-small-en-v1.5)
@@ -267,4 +259,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-23 - Implemented 12 features total. Latest: Intent Parameter for Recall (#3). Previously: Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18), Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup (#19), Dedup Before Vector Scoring (#20), Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0). Implemented earlier: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
+*Last updated: 2026-03-24 - Implemented 14 features total. Latest: Automatic Distillation Pipeline (#13 partial, #17), Intent Parameter for Recall (#3). Previously: Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18), Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup (#19), Dedup Before Vector Scoring (#20), Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0). Implemented earlier: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
