@@ -171,13 +171,14 @@ module ClaudeMemory
 
       def hook_context(payload, db_path)
         project_path = payload["project_path"] || payload["cwd"]
+        source = payload["source"]
         manager = ClaudeMemory::Store::StoreManager.new(
           project_db_path: db_path,
           project_path: project_path
         )
         manager.ensure_both!
 
-        injector = ClaudeMemory::Hook::ContextInjector.new(manager)
+        injector = ClaudeMemory::Hook::ContextInjector.new(manager, source: source)
         context_text = injector.generate_context
 
         if context_text

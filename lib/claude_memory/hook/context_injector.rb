@@ -12,14 +12,17 @@ module ClaudeMemory
       MAX_UNDISTILLED = 3
       MAX_TEXT_PER_ITEM = 1500
 
+      FRESH_SESSION_SOURCES = %w[startup resume clear].freeze
+
       QUERIES = {
         decisions: {query: "decision constraint rule requirement", scope: "all"},
         conventions: {query: "convention style format pattern prefer", scope: "all"},
         architecture: {query: "uses framework implements architecture pattern", scope: "all"}
       }.freeze
 
-      def initialize(manager)
+      def initialize(manager, source: nil)
         @manager = manager
+        @source = source
         @recall = Recall.new(manager)
       end
 
@@ -35,8 +38,10 @@ module ClaudeMemory
         architecture = fetch(:architecture, MAX_ARCHITECTURE)
         sections << format_section("Architecture", architecture) if architecture.any?
 
-        undistilled = fetch_undistilled(MAX_UNDISTILLED)
-        sections << format_distillation_prompt(undistilled) if undistilled.any?
+        if fresh_session?
+          undistilled = fetch_undistilled(MAX_UNDISTILLED)
+          sections << format_distillation_prompt(undistilled) if undistilled.any?
+        end
 
         return nil if sections.empty?
 
@@ -44,6 +49,10 @@ module ClaudeMemory
       end
 
       private
+
+      def fresh_session?
+        @source.nil? || FRESH_SESSION_SOURCES.include?(@source)
+      end
 
       def fetch(category, limit)
         config = QUERIES.fetch(category)

@@ -66,6 +66,56 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector do
       end
     end
 
+    context "source filtering for distillation prompt" do
+      before do
+        # Create undistilled content long enough to trigger distillation prompt
+        store = manager.project_store
+        store.upsert_content_item(
+          source: "test",
+          session_id: "sess-undistilled",
+          text_hash: Digest::SHA256.hexdigest("a" * 300),
+          byte_len: 300,
+          raw_text: "a" * 300
+        )
+      end
+
+      it "includes distillation prompt when source is nil (backward compat)" do
+        inj = described_class.new(manager, source: nil)
+        context = inj.generate_context
+        expect(context).to include("Pending Knowledge Extraction")
+      end
+
+      it "includes distillation prompt when source is 'startup'" do
+        inj = described_class.new(manager, source: "startup")
+        context = inj.generate_context
+        expect(context).to include("Pending Knowledge Extraction")
+      end
+
+      it "includes distillation prompt when source is 'resume'" do
+        inj = described_class.new(manager, source: "resume")
+        context = inj.generate_context
+        expect(context).to include("Pending Knowledge Extraction")
+      end
+
+      it "includes distillation prompt when source is 'clear'" do
+        inj = described_class.new(manager, source: "clear")
+        context = inj.generate_context
+        expect(context).to include("Pending Knowledge Extraction")
+      end
+
+      it "skips distillation prompt when source is 'compact'" do
+        inj = described_class.new(manager, source: "compact")
+        context = inj.generate_context
+        expect(context).to be_nil
+      end
+
+      it "skips distillation prompt for unknown non-fresh sources" do
+        inj = described_class.new(manager, source: "other")
+        context = inj.generate_context
+        expect(context).to be_nil
+      end
+    end
+
     context "with decision facts" do
       before do
         create_fact_with_content(
