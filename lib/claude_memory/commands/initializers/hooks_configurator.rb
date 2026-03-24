@@ -103,12 +103,11 @@ module ClaudeMemory
             "hooks" => {
               "Stop" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 5}
                 ]
               }],
               "SessionStart" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10},
                   {"type" => "command", "command" => context_cmd, "timeout" => 5}
                 ]
               }],
@@ -131,7 +130,7 @@ module ClaudeMemory
               }],
               "TeammateIdle" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 15}
                 ]
               }]
             }

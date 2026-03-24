@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "claude-memory hook ingest",
-            "timeout": 10
+            "timeout": 5
           }
         ]
       }
@@ -14,11 +14,6 @@
     "SessionStart": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "claude-memory hook ingest",
-            "timeout": 10
-          },
           {
             "type": "command",
             "command": "claude-memory hook context",
@@ -76,7 +71,7 @@
           {
             "type": "command",
             "command": "claude-memory hook ingest",
-            "timeout": 10
+            "timeout": 15
           }
         ]
       }
