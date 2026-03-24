@@ -11,6 +11,10 @@ module ClaudeMemory
         "memory-recall" => {
           file: "memory-recall.md",
           description: "Memory recall agent — chains recall → explain → fact_graph"
+        },
+        "distill-transcripts" => {
+          file: "distill-transcripts.md",
+          description: "Distill transcripts — extract facts/entities/decisions from undistilled content"
         }
       }.freeze
 
