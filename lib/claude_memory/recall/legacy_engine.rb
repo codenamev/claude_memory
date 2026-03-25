@@ -15,7 +15,7 @@ module ClaudeMemory
       end
 
       def query(query_text, limit:, scope:, include_raw_text: false, intent: nil)
-        effective_query = intent_augmented_query(query_text, intent, weight: INTENT_WEIGHT_CHUNK)
+        effective_query = intent_augmented_query(query_text, intent)
         content_ids = @fts.search(effective_query, limit: limit * 3)
         return [] if content_ids.empty?
 
@@ -63,7 +63,7 @@ module ClaudeMemory
       end
 
       def query_index(query_text, limit:, scope:, intent: nil)
-        effective_query = intent_augmented_query(query_text, intent, weight: INTENT_WEIGHT_CHUNK)
+        effective_query = intent_augmented_query(query_text, intent)
         options = Index::QueryOptions.new(
           query_text: effective_query,
           limit: limit,
@@ -125,7 +125,7 @@ module ClaudeMemory
       end
 
       def query_semantic(text, limit:, scope:, mode:, explain: false, intent: nil)
-        effective_text = intent_augmented_query(text, intent, weight: INTENT_WEIGHT_SNIPPET)
+        effective_text = intent_augmented_query(text, intent)
         query_semantic_single(@store, effective_text, limit: limit, mode: mode, source: :legacy, explain: explain,
           skip_fts_shortcut: !intent.nil?)
       end

@@ -5,12 +5,6 @@ module ClaudeMemory
     # Shared store-level query logic used by both LegacyEngine and DualEngine.
     # All methods take a `store` parameter — no direct access to @legacy_store or @manager.
     module QueryCore
-      # Intent weight constants for query augmentation
-      # 0.5x weight for chunk/fact selection (FTS, index queries)
-      INTENT_WEIGHT_CHUNK = 0.5
-      # 0.3x weight for semantic/snippet matching (vector, hybrid)
-      INTENT_WEIGHT_SNIPPET = 0.3
-
       private
 
       # Augment a query with intent context for disambiguation.
@@ -18,9 +12,8 @@ module ClaudeMemory
       #
       # @param query_text [String] Original search query
       # @param intent [String, nil] Optional intent to disambiguate (e.g., "migration", "performance")
-      # @param weight [Float] Unused currently; documents the conceptual weight for this stage
       # @return [String] Augmented query text, or original if no intent
-      def intent_augmented_query(query_text, intent, weight: INTENT_WEIGHT_CHUNK)
+      def intent_augmented_query(query_text, intent)
         return query_text if intent.nil? || intent.to_s.strip.empty?
 
         "#{query_text} #{intent.to_s.strip}"

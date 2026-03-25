@@ -83,6 +83,41 @@ module ClaudeMemory
         intent = args["intent"]
         (intent.nil? || intent.to_s.strip.empty?) ? nil : intent.to_s.strip
       end
+
+      # Collect undistilled content items from both stores (or legacy store)
+      # @param limit [Integer] Maximum items to return
+      # @param min_length [Integer] Minimum byte_len to include
+      # @return [Array<Hash>] Undistilled items sorted by recency
+      def collect_undistilled_items(limit:, min_length: 200)
+        if @manager
+          stores = []
+          stores << @manager.project_store if @manager.project_exists?
+          stores << @manager.global_store if @manager.global_exists?
+          items = stores.flat_map { |s| s.undistilled_content_items(limit: limit, min_length: min_length) }
+          items.sort_by { |i| i[:occurred_at] || "" }.reverse.first(limit)
+        elsif @legacy_store
+          @legacy_store.undistilled_content_items(limit: limit, min_length: min_length)
+        else
+          []
+        end
+      end
+
+      # Find the store containing a given content item
+      # @param content_item_id [Integer] Content item ID to locate
+      # @return [Store::SQLiteStore, nil] The store containing the item, or nil
+      def find_store_for_content_item(content_item_id)
+        if @manager
+          if @manager.project_store&.content_items&.where(id: content_item_id)&.any?
+            @manager.project_store
+          elsif @manager.global_store&.content_items&.where(id: content_item_id)&.any?
+            @manager.global_store
+          end
+        elsif @legacy_store
+          if @legacy_store.content_items.where(id: content_item_id).any?
+            @legacy_store
+          end
+        end
+      end
     end
   end
 end

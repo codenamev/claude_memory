@@ -14,7 +14,7 @@ module ClaudeMemory
       end
 
       def query(query_text, limit:, scope:, include_raw_text: false, intent: nil)
-        effective_query = intent_augmented_query(query_text, intent, weight: 0.5)
+        effective_query = intent_augmented_query(query_text, intent)
         results = dual_execute(scope: scope, limit: limit) do |store, source|
           query_single_store(store, effective_query, limit: limit, source: source, include_raw_text: include_raw_text)
         end
@@ -22,7 +22,7 @@ module ClaudeMemory
       end
 
       def query_index(query_text, limit:, scope:, intent: nil)
-        effective_query = intent_augmented_query(query_text, intent, weight: 0.5)
+        effective_query = intent_augmented_query(query_text, intent)
         results = dual_execute(scope: scope, limit: limit) do |store, source|
           query_index_single_store(store, effective_query, limit: limit, source: source)
         end
@@ -79,7 +79,7 @@ module ClaudeMemory
       end
 
       def query_semantic(text, limit:, scope:, mode:, explain: false, intent: nil)
-        effective_text = intent_augmented_query(text, intent, weight: 0.3)
+        effective_text = intent_augmented_query(text, intent)
         results = dual_execute(scope: scope, limit: limit) do |store, source|
           query_semantic_single(store, effective_text, limit: limit * 3, mode: mode, source: source, explain: explain,
             skip_fts_shortcut: !intent.nil?)

@@ -62,8 +62,6 @@ module ClaudeMemory
         private
 
         def pending_distillation_count
-          count = 0
-
           stores = if @manager
             [@manager.global_exists? ? @manager.global_store : nil,
               @manager.project_exists? ? @manager.project_store : nil].compact
@@ -73,15 +71,7 @@ module ClaudeMemory
             []
           end
 
-          stores.each do |store|
-            count += store.content_items
-              .left_join(:ingestion_metrics, content_item_id: :id)
-              .where(Sequel[:ingestion_metrics][:id] => nil)
-              .where { byte_len >= 200 }
-              .count
-          end
-
-          count
+          stores.sum { |store| store.count_undistilled(min_length: 200) }
         end
 
         def db_stats(store)

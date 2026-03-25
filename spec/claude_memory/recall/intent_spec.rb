@@ -150,8 +150,8 @@ RSpec.describe ClaudeMemory::Recall::QueryCore do
       expect(result).to eq("database migration")
     end
 
-    it "accepts weight parameter without error" do
-      result = instance.intent_augmented_query("database", "migration", weight: 0.3)
+    it "augments query with intent" do
+      result = instance.intent_augmented_query("database", "migration")
       expect(result).to eq("database migration")
     end
   end

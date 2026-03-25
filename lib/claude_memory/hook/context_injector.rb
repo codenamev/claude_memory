@@ -79,12 +79,8 @@ module ClaudeMemory
 
       def fetch_undistilled(limit)
         stores = []
-        if @manager.respond_to?(:project_store) && @manager.project_store
-          stores << @manager.project_store
-        end
-        if @manager.respond_to?(:global_store) && @manager.global_store
-          stores << @manager.global_store
-        end
+        stores << @manager.project_store if @manager.project_store
+        stores << @manager.global_store if @manager.global_store
 
         items = stores.flat_map { |s|
           s.undistilled_content_items(limit: limit, min_length: 200)
@@ -95,7 +91,7 @@ module ClaudeMemory
           .reverse
           .first(limit)
       rescue => e
-        ClaudeMemory.logger.debug("ContextInjector#fetch_undistilled failed: #{e.message}")
+        ClaudeMemory.logger.warn("ContextInjector#fetch_undistilled failed: #{e.message}")
         []
       end
 
@@ -113,8 +109,7 @@ module ClaudeMemory
 
         items.each do |item|
           ago = Core::RelativeTime.format(item[:occurred_at]) || "unknown"
-          raw = item[:raw_text] || ""
-          truncated = (raw.length > MAX_TEXT_PER_ITEM) ? raw[0, MAX_TEXT_PER_ITEM] + "..." : raw
+          truncated = Core::TextBuilder.truncate(item[:raw_text], MAX_TEXT_PER_ITEM)
           lines << ""
           lines << "### Content Item #{item[:id]} (#{ago})"
           lines << truncated

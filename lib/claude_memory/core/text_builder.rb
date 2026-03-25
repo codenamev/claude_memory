@@ -18,6 +18,17 @@ module ClaudeMemory
         parts.join(" ").strip
       end
 
+      # Truncate text to a maximum length with a suffix
+      # @param text [String, nil] Text to truncate
+      # @param max_length [Integer] Maximum length before truncation
+      # @param suffix [String] Suffix to append when truncated
+      # @return [String] Truncated text or original if within limit
+      def self.truncate(text, max_length, suffix: "...")
+        return "" if text.nil?
+        return text if text.length <= max_length
+        text[0, max_length] + suffix
+      end
+
       # Transform hash keys from strings to symbols
       # @param hash [Hash] Hash with string or symbol keys
       # @return [Hash] Hash with symbolized keys

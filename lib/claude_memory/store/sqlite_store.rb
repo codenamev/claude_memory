@@ -288,6 +288,14 @@ module ClaudeMemory
           .all
       end
 
+      def count_undistilled(min_length: 200)
+        content_items
+          .left_join(:ingestion_metrics, content_item_id: :id)
+          .where(Sequel[:ingestion_metrics][:id] => nil)
+          .where { byte_len >= min_length }
+          .count
+      end
+
       def record_ingestion_metrics(content_item_id:, input_tokens:, output_tokens:, facts_extracted:)
         ingestion_metrics.insert(
           content_item_id: content_item_id,

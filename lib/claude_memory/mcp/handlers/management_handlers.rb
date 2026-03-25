@@ -117,21 +117,6 @@ module ClaudeMemory
 
         private
 
-        def find_store_for_content_item(content_item_id)
-          if @manager
-            # Check project store first, then global
-            if @manager.project_store&.content_items&.where(id: content_item_id)&.any?
-              @manager.project_store
-            elsif @manager.global_store&.content_items&.where(id: content_item_id)&.any?
-              @manager.global_store
-            end
-          elsif @legacy_store
-            if @legacy_store.content_items.where(id: content_item_id).any?
-              @legacy_store
-            end
-          end
-        end
-
         def create_synthetic_content_item(store, text, project_path, occurred_at)
           text_hash = Digest::SHA256.hexdigest(text)
           store.upsert_content_item(

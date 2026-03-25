@@ -94,38 +94,20 @@ module ClaudeMemory
           min_length = args["min_length"] || 200
           max_text = 2000
 
-          items = collect_undistilled(limit, min_length)
+          items = collect_undistilled_items(limit: limit, min_length: min_length)
 
           {
             count: items.size,
             items: items.map { |item|
-              raw = item[:raw_text] || ""
               {
                 content_item_id: item[:id],
                 occurred_at: item[:occurred_at],
                 occurred_ago: Core::RelativeTime.format(item[:occurred_at]),
                 project_path: item[:project_path],
-                raw_text: (raw.length > max_text) ? raw[0, max_text] + "..." : raw
+                raw_text: Core::TextBuilder.truncate(item[:raw_text], max_text)
               }
             }
           }
-        end
-
-        private
-
-        def collect_undistilled(limit, min_length)
-          if @manager
-            project_items = @manager.project_store&.undistilled_content_items(limit: limit, min_length: min_length) || []
-            global_items = @manager.global_store&.undistilled_content_items(limit: limit, min_length: min_length) || []
-            (project_items + global_items)
-              .sort_by { |i| i[:occurred_at] || "" }
-              .reverse
-              .first(limit)
-          elsif @legacy_store
-            @legacy_store.undistilled_content_items(limit: limit, min_length: min_length)
-          else
-            []
-          end
         end
       end
     end
