@@ -1,0 +1,123 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Benchmark the distillation pipeline (NullDistiller + Resolver + metrics)
+# to measure latency impact on blocking hooks like Stop.
+#
+# Usage:
+#   bin/bench-distill              # 10 iterations, ~2KB text
+#   bin/bench-distill --runs 50    # custom iteration count
+#   bin/bench-distill --text-size large  # ~10KB text
+
+require "bundler/setup"
+require "claude_memory"
+require "tempfile"
+require "digest"
+require "optparse"
+
+options = {runs: 10, text_size: "medium"}
+OptionParser.new do |parser|
+  parser.banner = "Usage: bin/bench-distill [options]"
+  parser.on("--runs N", Integer, "Number of iterations (default: 10)") { |n| options[:runs] = n }
+  parser.on("--text-size SIZE", %w[small medium large], "Text size: small (~500B), medium (~2KB), large (~10KB)") { |s| options[:text_size] = s }
+end.parse!
+
+# Generate realistic transcript text
+base_text = <<~TEXT
+  User: We should use PostgreSQL for the database and Redis for caching.
+  Assistant: Good choices. I will set up PostgreSQL with Sequel ORM and add Redis for session storage.
+  User: We decided to use JWT for authentication instead of sessions.
+  Assistant: Understood. I will implement JWT auth with the ruby-jwt gem.
+  User: Our convention is to always use frozen_string_literal: true at the top of Ruby files.
+  Assistant: I will make sure all new files include frozen_string_literal: true pragma.
+  User: Let's deploy on AWS using ECS with Docker containers.
+  Assistant: I will set up the Dockerfile and ECS task definitions for the deployment.
+TEXT
+
+multiplier = case options[:text_size]
+when "small" then 1
+when "medium" then 5
+when "large" then 25
+end
+text = base_text * multiplier
+
+puts "Distillation Pipeline Benchmark"
+puts "================================"
+puts "Text size: #{options[:text_size]} (~#{text.bytesize} bytes)"
+puts "Runs: #{options[:runs]}"
+puts ""
+
+# Set up temporary database
+db_file = Tempfile.new(["bench-distill", ".sqlite3"])
+store = ClaudeMemory::Store::SQLiteStore.new(db_file.path)
+
+# Benchmark: NullDistiller alone (regex only)
+distiller = ClaudeMemory::Distill::NullDistiller.new
+distill_times = []
+options[:runs].times do
+  t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  distiller.distill(text)
+  elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000
+  distill_times << elapsed
+end
+
+# Benchmark: full pipeline (NullDistiller + Resolver + metrics)
+pipeline_times = []
+options[:runs].times do |i|
+  variant = "#{text}\n# iteration #{i}"
+  cid = store.upsert_content_item(
+    source: "bench", text_hash: Digest::SHA256.hexdigest(variant),
+    byte_len: variant.bytesize, session_id: "bench-#{i}",
+    transcript_path: "/tmp/bench.jsonl", project_path: "/tmp/bench",
+    occurred_at: Time.now.utc.iso8601, raw_text: variant
+  )
+
+  t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+  extraction = distiller.distill(variant, content_item_id: cid)
+  unless extraction.empty?
+    resolver = ClaudeMemory::Resolve::Resolver.new(store)
+    store.db.transaction do
+      result = resolver.apply(extraction, content_item_id: cid, project_path: "/tmp/bench", scope: "project")
+      store.record_ingestion_metrics(
+        content_item_id: cid, input_tokens: 0, output_tokens: 0,
+        facts_extracted: result[:facts_created]
+      )
+    end
+  end
+
+  elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000
+  pipeline_times << elapsed
+end
+
+store.close
+db_file.unlink
+
+def stats(times)
+  sorted = times.sort
+  {
+    min: sorted.first.round(3),
+    max: sorted.last.round(3),
+    avg: (times.sum / times.size).round(3),
+    median: sorted[times.size / 2].round(3),
+    p95: sorted[(times.size * 0.95).floor].round(3)
+  }
+end
+
+distill_s = stats(distill_times)
+pipeline_s = stats(pipeline_times)
+
+puts "NullDistiller only (regex extraction):"
+puts "  Min: #{distill_s[:min]}ms  Avg: #{distill_s[:avg]}ms  Median: #{distill_s[:median]}ms  P95: #{distill_s[:p95]}ms  Max: #{distill_s[:max]}ms"
+puts ""
+puts "Full pipeline (NullDistiller + Resolver + metrics):"
+puts "  Min: #{pipeline_s[:min]}ms  Avg: #{pipeline_s[:avg]}ms  Median: #{pipeline_s[:median]}ms  P95: #{pipeline_s[:p95]}ms  Max: #{pipeline_s[:max]}ms"
+puts ""
+puts "Verdict:"
+if pipeline_s[:p95] < 10
+  puts "  ✅ P95 < 10ms — distillation is safe to run inline on blocking hooks (Stop)"
+elsif pipeline_s[:p95] < 50
+  puts "  ⚠️  P95 10-50ms — borderline; consider deferring distillation from Stop hook"
+else
+  puts "  ❌ P95 > 50ms — distillation should be deferred to non-blocking hooks"
+end
