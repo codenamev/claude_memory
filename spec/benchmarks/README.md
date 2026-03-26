@@ -55,6 +55,19 @@ Queries organized by difficulty level, each with expected and excluded fact IDs:
 
 Easy queries use natural language questions (not keyword fragments) and include `excluded_facts` for cross-project contamination detection. Many easy and medium queries include decision companion facts in their expected sets — e.g., both the `auth_method` fact and the corresponding `decision` about JWT adoption are expected when asking about authentication.
 
+### extraction_cases.yml (~30 cases)
+
+NullDistiller-specific extraction accuracy cases across 2 categories:
+
+| Category | Count | What It Tests |
+|----------|-------|---------------|
+| **Entity** | ~13 | Entity recognition across all 4 NullDistiller types (database, framework, language, platform) |
+| **Fact** | ~18 | Fact extraction for 3 predicates (uses_database, uses_framework, deployment_platform) + scope detection |
+
+Entity cases cover each regex pattern (postgresql, rails, ruby, docker, etc.), multi-entity extraction, negative extraction (mentioned but not used -- documents known regex limitation), and no-entity text. Fact cases cover all 3 predicates, global scope detection ("I always...", "everywhere"), project scope (default), multi-fact extraction, empty extraction, and long text with entities buried in the middle.
+
+**Important:** This dataset is NullDistiller-specific. The NullDistiller uses regex patterns that always extract entities regardless of context (e.g., "We looked at MongoDB but decided against it" still extracts MongoDB). Future LLM-based distillers will need an expanded dataset with more nuanced cases that test contextual understanding, negation handling, and semantic disambiguation.
+
 ### resolution_cases.yml (100 cases)
 
 FEVER-inspired truth maintenance scenarios with 4 outcome types (25 each):
@@ -92,6 +105,16 @@ Each scenario specifies `acceptance_keywords` (must appear), `rejection_keywords
 | **MRR** | 1 / rank_of_first_relevant | How high does the first relevant result rank? |
 | **nDCG@k** | DCG@k / ideal_DCG@k | How well-ordered are the results? (accounts for position) |
 | **Precision@k** | relevant_in_top_k / k | What fraction of top-k results are actually relevant? |
+
+### Extraction Metrics (implemented in `benchmark_helper.rb`)
+
+| Metric | Formula | What It Measures |
+|--------|---------|------------------|
+| **Precision** | matched_extracted / total_extracted | What fraction of extracted items are correct? |
+| **Recall** | matched_expected / total_expected | What fraction of expected items were found? |
+| **F1** | 2 * P * R / (P + R) | Harmonic mean of precision and recall |
+
+Measured separately for entities and facts within each category (entity cases, fact cases) and in aggregate. Uses a generic hash-subset matcher with exact match by default and optional `_pattern` suffix for regex edge cases.
 
 ### Truth Maintenance Metrics
 
@@ -226,6 +249,9 @@ bundle exec rspec spec/benchmarks/ --tag benchmark --format documentation
 # Just retrieval
 bundle exec rspec spec/benchmarks/retrieval/ --tag benchmark --format documentation
 
+# Just distillation
+bundle exec rspec spec/benchmarks/distillation/ --tag benchmark --format documentation
+
 # Just resolution
 bundle exec rspec spec/benchmarks/resolution/ --tag benchmark --format documentation
 
@@ -282,6 +308,7 @@ spec/benchmarks/
 ├── dataset/
 │   ├── facts.yml                       # ~105 developer-domain facts
 │   ├── retrieval_queries.yml           # ~155 queries with expected fact IDs
+│   ├── extraction_cases.yml           # ~30 distillation extraction cases
 │   ├── resolution_cases.yml            # 100 truth maintenance cases
 │   └── e2e_scenarios.yml               # 31 end-to-end scenarios
 ├── retrieval/
@@ -289,6 +316,8 @@ spec/benchmarks/
 │   ├── semantic_spec.rb                # Embedding retrieval accuracy
 │   ├── hybrid_spec.rb                  # Combined FTS5+vector accuracy
 │   └── scope_ranking_spec.rb           # Project vs global ranking
+├── distillation/
+│   └── extraction_spec.rb             # Extraction precision/recall/F1
 ├── resolution/
 │   └── truth_maintenance_spec.rb       # Supersession/conflict correctness
 ├── comparative/

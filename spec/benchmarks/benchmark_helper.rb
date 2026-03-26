@@ -88,6 +88,50 @@ module BenchmarkHelpers
     def self.load_e2e_scenarios(path = File.join(DATASET_DIR, "e2e_scenarios.yml"))
       YAML.load_file(path)
     end
+
+    def self.load_extraction_cases(path = File.join(DATASET_DIR, "extraction_cases.yml"))
+      YAML.load_file(path)
+    end
+  end
+
+  # Extraction quality metrics for distillation benchmarks
+  module ExtractionMetrics
+    # Precision: fraction of extracted items that match an expected item
+    def extraction_precision(extracted, expected, &match_fn)
+      return 1.0 if extracted.empty? && expected.empty?
+      return 0.0 if extracted.empty?
+
+      hits = extracted.count { |e| expected.any? { |exp| match_fn.call(e, exp) } }
+      hits.to_f / extracted.size
+    end
+
+    # Recall: fraction of expected items found in extracted items
+    def extraction_recall(extracted, expected, &match_fn)
+      return 1.0 if expected.empty?
+
+      hits = expected.count { |exp| extracted.any? { |e| match_fn.call(e, exp) } }
+      hits.to_f / expected.size
+    end
+
+    # F1: harmonic mean of precision and recall
+    def f1_score(precision, recall)
+      return 0.0 if precision + recall == 0
+      2.0 * precision * recall / (precision + recall)
+    end
+
+    # Generic hash-subset matcher: checks that all expected keys match.
+    # Keys ending in _pattern use regex matching; all others use exact match.
+    def matches?(extracted, expected)
+      expected.all? do |key, value|
+        str_key = key.to_s
+        if str_key.end_with?("_pattern")
+          real_key = str_key.sub(/_pattern$/, "")
+          extracted[real_key.to_sym].to_s.downcase.match?(Regexp.new(value.to_s.downcase))
+        else
+          extracted[key.to_sym].to_s.downcase == value.to_s.downcase
+        end
+      end
+    end
   end
 
   # Extends MemoryFixtureBuilder to load facts from dataset YAML

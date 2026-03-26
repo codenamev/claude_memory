@@ -1,0 +1,347 @@
+# Distillation Extraction Quality Dataset
+# ~30 annotated cases for measuring NullDistiller extraction accuracy.
+#
+# Categories: entity (~12), fact (~18)
+#
+# NullDistiller-specific: regex-based extraction always outputs lowercase names.
+# Future LLM distillers will need an expanded dataset with more nuanced cases.
+#
+# Expected format:
+#   entities: [{type: <type>, name: <lowercase_name>}]
+#   facts: [{predicate: <pred>, object: <lowercase_name>, scope_hint: <scope>}]
+# Missing arrays default to [].
+
+# ============================================================
+# ENTITY RECOGNITION (~12 cases)
+# ============================================================
+
+# --- Database entities ---
+
+- id: ext_ent_db_postgresql
+  category: entity
+  text: "We use PostgreSQL as our primary database for all relational data."
+  expected:
+    entities:
+      - {type: database, name: postgresql}
+    facts:
+      - {predicate: uses_database, object: postgresql}
+
+- id: ext_ent_db_postgres_variant
+  category: entity
+  text: "The app connects to Postgres for user data storage."
+  expected:
+    entities:
+      - {type: database, name: postgres}
+    facts:
+      - {predicate: uses_database, object: postgres}
+
+- id: ext_ent_db_redis
+  category: entity
+  text: "We rely on Redis for caching and background job queues."
+  expected:
+    entities:
+      - {type: database, name: redis}
+    facts:
+      - {predicate: uses_database, object: redis}
+
+- id: ext_ent_db_mongodb
+  category: entity
+  text: "MongoDB stores all of our document-oriented data."
+  expected:
+    entities:
+      - {type: database, name: mongodb}
+    facts:
+      - {predicate: uses_database, object: mongodb}
+
+# --- Framework entities ---
+
+- id: ext_ent_fw_rails
+  category: entity
+  text: "The API is built with Rails 7 and uses Active Record."
+  expected:
+    entities:
+      - {type: framework, name: rails}
+    facts:
+      - {predicate: uses_framework, object: rails}
+
+- id: ext_ent_fw_nextjs
+  category: entity
+  text: "Our frontend runs on Next.js with server-side rendering."
+  expected:
+    entities:
+      - {type: framework, name: next.js}
+    facts:
+      - {predicate: uses_framework, object: next.js}
+
+- id: ext_ent_fw_react
+  category: entity
+  text: "We use React for all UI components in the dashboard."
+  expected:
+    entities:
+      - {type: framework, name: react}
+    facts:
+      - {predicate: uses_framework, object: react}
+
+# --- Language entities (no facts generated for language type) ---
+
+- id: ext_ent_lang_ruby
+  category: entity
+  text: "The entire backend is written in Ruby with strict typing via Sorbet."
+  expected:
+    entities:
+      - {type: language, name: ruby}
+    facts: []
+
+- id: ext_ent_lang_typescript
+  category: entity
+  text: "We write all frontend code in TypeScript for type safety."
+  expected:
+    entities:
+      - {type: language, name: typescript}
+    facts: []
+
+# --- Platform entities ---
+
+- id: ext_ent_plat_docker
+  category: entity
+  text: "Everything runs in Docker containers for consistency."
+  expected:
+    entities:
+      - {type: platform, name: docker}
+    facts:
+      - {predicate: deployment_platform, object: docker}
+
+# --- Multi-entity case ---
+
+- id: ext_ent_multi
+  category: entity
+  text: "The app runs on Rails with PostgreSQL and Redis for caching."
+  expected:
+    entities:
+      - {type: framework, name: rails}
+      - {type: database, name: postgresql}
+      - {type: database, name: redis}
+    facts:
+      - {predicate: uses_framework, object: rails}
+      - {predicate: uses_database, object: postgresql}
+      - {predicate: uses_database, object: redis}
+
+# --- Negative case (entity mentioned but not actually used) ---
+
+- id: ext_ent_negative
+  category: entity
+  text: "We looked at MongoDB but decided against it."
+  expected:
+    entities:
+      - {type: database, name: mongodb}
+    facts:
+      - {predicate: uses_database, object: mongodb}
+
+# --- No-entity case ---
+
+- id: ext_ent_none
+  category: entity
+  text: "The deployment process takes about 10 minutes on a good day."
+  expected:
+    entities: []
+    facts: []
+
+# ============================================================
+# FACT EXTRACTION (~18 cases)
+# ============================================================
+
+# --- uses_database facts ---
+
+- id: ext_fact_db_mysql
+  category: fact
+  text: "Our legacy system still depends on MySQL 5.7 for order processing."
+  expected:
+    entities:
+      - {type: database, name: mysql}
+    facts:
+      - {predicate: uses_database, object: mysql, scope_hint: project}
+
+- id: ext_fact_db_sqlite
+  category: fact
+  text: "We use SQLite for local development and testing."
+  expected:
+    entities:
+      - {type: database, name: sqlite}
+    facts:
+      - {predicate: uses_database, object: sqlite, scope_hint: project}
+
+- id: ext_fact_db_two
+  category: fact
+  text: "The service uses PostgreSQL for persistence and Redis as a message broker."
+  expected:
+    entities:
+      - {type: database, name: postgresql}
+      - {type: database, name: redis}
+    facts:
+      - {predicate: uses_database, object: postgresql, scope_hint: project}
+      - {predicate: uses_database, object: redis, scope_hint: project}
+
+# --- uses_framework facts ---
+
+- id: ext_fact_fw_sinatra
+  category: fact
+  text: "The microservice is a lightweight Sinatra app."
+  expected:
+    entities:
+      - {type: framework, name: sinatra}
+    facts:
+      - {predicate: uses_framework, object: sinatra, scope_hint: project}
+
+- id: ext_fact_fw_django
+  category: fact
+  text: "Our admin panel is powered by Django with the built-in ORM."
+  expected:
+    entities:
+      - {type: framework, name: django}
+    facts:
+      - {predicate: uses_framework, object: django, scope_hint: project}
+
+- id: ext_fact_fw_express
+  category: fact
+  text: "The API gateway uses Express.js for routing HTTP requests."
+  expected:
+    entities:
+      - {type: framework, name: express}
+    facts:
+      - {predicate: uses_framework, object: express, scope_hint: project}
+
+- id: ext_fact_fw_vue
+  category: fact
+  text: "The dashboard frontend is built with Vue and Vuex for state management."
+  expected:
+    entities:
+      - {type: framework, name: vue}
+    facts:
+      - {predicate: uses_framework, object: vue, scope_hint: project}
+
+# --- deployment_platform facts ---
+
+- id: ext_fact_plat_aws
+  category: fact
+  text: "This service deploys on AWS with ECS for container orchestration."
+  expected:
+    entities:
+      - {type: platform, name: aws}
+    facts:
+      - {predicate: deployment_platform, object: aws, scope_hint: project}
+
+- id: ext_fact_plat_heroku
+  category: fact
+  text: "The staging environment runs on Heroku for quick iteration."
+  expected:
+    entities:
+      - {type: platform, name: heroku}
+    facts:
+      - {predicate: deployment_platform, object: heroku, scope_hint: project}
+
+- id: ext_fact_plat_kubernetes
+  category: fact
+  text: "Production workloads are managed by Kubernetes on GCP."
+  expected:
+    entities:
+      - {type: platform, name: kubernetes}
+      - {type: platform, name: gcp}
+    facts:
+      - {predicate: deployment_platform, object: kubernetes, scope_hint: project}
+      - {predicate: deployment_platform, object: gcp, scope_hint: project}
+
+- id: ext_fact_plat_vercel
+  category: fact
+  text: "We deploy the Next.js frontend to Vercel for edge rendering."
+  expected:
+    entities:
+      - {type: framework, name: "next.js"}
+      - {type: platform, name: vercel}
+    facts:
+      - {predicate: uses_framework, object: "next.js", scope_hint: project}
+      - {predicate: deployment_platform, object: vercel, scope_hint: project}
+
+# --- Global scope detection ---
+
+- id: ext_fact_global_always
+  category: fact
+  text: "I always prefer using Docker for containerization in all my projects."
+  expected:
+    entities:
+      - {type: platform, name: docker}
+    facts:
+      - {predicate: deployment_platform, object: docker, scope_hint: global}
+
+- id: ext_fact_global_everywhere
+  category: fact
+  text: "I use PostgreSQL everywhere as my go-to database."
+  expected:
+    entities:
+      - {type: database, name: postgresql}
+    facts:
+      - {predicate: uses_database, object: postgresql, scope_hint: global}
+
+- id: ext_fact_global_preference
+  category: fact
+  text: "My personal preference is to use Redis for all caching needs."
+  expected:
+    entities:
+      - {type: database, name: redis}
+    facts:
+      - {predicate: uses_database, object: redis, scope_hint: global}
+
+# --- Project scope (default) ---
+
+- id: ext_fact_project_default
+  category: fact
+  text: "This project uses Azure for hosting the API."
+  expected:
+    entities:
+      - {type: platform, name: azure}
+    facts:
+      - {predicate: deployment_platform, object: azure, scope_hint: project}
+
+# --- Multi-fact extraction ---
+
+- id: ext_fact_multi
+  category: fact
+  text: "The stack is Rails on Heroku with PostgreSQL and Redis."
+  expected:
+    entities:
+      - {type: framework, name: rails}
+      - {type: platform, name: heroku}
+      - {type: database, name: postgresql}
+      - {type: database, name: redis}
+    facts:
+      - {predicate: uses_framework, object: rails, scope_hint: project}
+      - {predicate: deployment_platform, object: heroku, scope_hint: project}
+      - {predicate: uses_database, object: postgresql, scope_hint: project}
+      - {predicate: uses_database, object: redis, scope_hint: project}
+
+# --- Empty extraction (no facts) ---
+
+- id: ext_fact_empty
+  category: fact
+  text: "The team discussed various options for improving performance last week."
+  expected:
+    entities: []
+    facts: []
+
+# --- Long text with entities buried in the middle ---
+
+- id: ext_fact_long_text
+  category: fact
+  text: >
+    We spent the morning reviewing the architecture document and discussing
+    various trade-offs between different approaches. After a long debate about
+    scalability and maintenance costs, the team concluded that the best path
+    forward would be to migrate our data layer to MongoDB for the document
+    store and keep Redis for the caching layer. The migration plan will be
+    drafted by next Friday and reviewed in the following sprint planning session.
+  expected:
+    entities:
+      - {type: database, name: mongodb}
+      - {type: database, name: redis}
+    facts:
+      - {predicate: uses_database, object: mongodb, scope_hint: project}
+      - {predicate: uses_database, object: redis, scope_hint: project}
