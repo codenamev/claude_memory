@@ -309,6 +309,7 @@ spec/benchmarks/
 │   ├── facts.yml                       # ~105 developer-domain facts
 │   ├── retrieval_queries.yml           # ~155 queries with expected fact IDs
 │   ├── extraction_cases.yml           # ~30 distillation extraction cases
+│   ├── extraction_cases_llm.yml       # ~10 LLM-only extraction cases
 │   ├── resolution_cases.yml            # 100 truth maintenance cases
 │   └── e2e_scenarios.yml               # 31 end-to-end scenarios
 ├── retrieval/
@@ -317,7 +318,9 @@ spec/benchmarks/
 │   ├── hybrid_spec.rb                  # Combined FTS5+vector accuracy
 │   └── scope_ranking_spec.rb           # Project vs global ranking
 ├── distillation/
-│   └── extraction_spec.rb             # Extraction precision/recall/F1
+│   ├── extraction_spec.rb             # NullDistiller extraction precision/recall/F1
+│   ├── claude_extraction_spec.rb      # Claude Code extraction quality + comparison
+│   └── e2e_distillation_spec.rb       # E2E distillation recall benchmark
 ├── resolution/
 │   └── truth_maintenance_spec.rb       # Supersession/conflict correctness
 ├── comparative/
@@ -341,6 +344,52 @@ spec/benchmarks/
 └── e2e/
     └── devmemeval_spec.rb              # End-to-end with real Claude
 ```
+
+## Claude Distillation Benchmarks
+
+Three benchmark tiers measure Claude Code's extraction quality vs the baseline NullDistiller:
+
+### Tier 1: Extraction Quality (~$0.80)
+
+Runs Claude on ~40 cases (31 original + 10 LLM-only) and measures what it stores in the database. Reports precision/recall/F1 for entities, facts, and decisions.
+
+### Tier 2: E2E Distillation Recall (~$0.40)
+
+Full pipeline test: transcript -> Claude distillation -> stored facts -> recall -> answer quality. Selects 5 information_extraction scenarios, feeds transcript text to Claude for extraction, then queries Claude with a question and scores against acceptance keywords. Compares distilled memory vs baseline (no memory).
+
+### Tier 3: NullDistiller vs Claude Delta ($0)
+
+Side-by-side comparison showing where LLM extraction adds value over regex. Runs as part of the Tier 1 spec. The key gap is in conventions and decisions, which NullDistiller cannot extract but Claude should.
+
+### Running Claude Distillation Benchmarks
+
+```bash
+# NullDistiller baseline only (free, fast)
+bundle exec rspec spec/benchmarks/distillation/ --tag benchmark --format documentation
+
+# Claude extraction quality (~$0.80)
+EVAL_MODE=real bundle exec rspec spec/benchmarks/distillation/claude_extraction_spec.rb --tag eval_real --format documentation
+
+# E2E distillation pipeline (~$0.40)
+EVAL_MODE=real bundle exec rspec spec/benchmarks/distillation/e2e_distillation_spec.rb --tag eval_real --format documentation
+
+# All distillation benchmarks (~$1.20 total)
+EVAL_MODE=real bundle exec rspec spec/benchmarks/distillation/ --format documentation
+```
+
+### Dataset: extraction_cases_llm.yml (~10 cases)
+
+LLM-specific extraction cases that NullDistiller cannot handle:
+
+| Category | Count | What It Tests |
+|----------|-------|---------------|
+| **Convention** | 3 | TDD, naming conventions, code review practices |
+| **Architecture** | 2 | Hexagonal architecture, event-driven patterns |
+| **Testing** | 2 | RSpec conventions, coverage requirements |
+| **Preference** | 1 | Tooling preferences (global scope) |
+| **Multi-fact** | 2 | Complex conversations with multiple extractable facts |
+
+Uses `object_contains` / `title_contains` matchers for non-deterministic LLM output.
 
 ## Extending the Dataset
 

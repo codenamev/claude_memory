@@ -92,6 +92,10 @@ module BenchmarkHelpers
     def self.load_extraction_cases(path = File.join(DATASET_DIR, "extraction_cases.yml"))
       YAML.load_file(path)
     end
+
+    def self.load_llm_extraction_cases(path = File.join(DATASET_DIR, "extraction_cases_llm.yml"))
+      YAML.load_file(path)
+    end
   end
 
   # Extraction quality metrics for distillation benchmarks
@@ -120,11 +124,16 @@ module BenchmarkHelpers
     end
 
     # Generic hash-subset matcher: checks that all expected keys match.
-    # Keys ending in _pattern use regex matching; all others use exact match.
+    # Keys ending in _pattern use regex matching.
+    # Keys ending in _contains use substring matching (for non-deterministic LLM output).
+    # All others use exact match.
     def matches?(extracted, expected)
       expected.all? do |key, value|
         str_key = key.to_s
-        if str_key.end_with?("_pattern")
+        if str_key.end_with?("_contains")
+          real_key = str_key.sub(/_contains$/, "")
+          extracted[real_key.to_sym].to_s.downcase.include?(value.to_s.downcase)
+        elsif str_key.end_with?("_pattern")
           real_key = str_key.sub(/_pattern$/, "")
           extracted[real_key.to_sym].to_s.downcase.match?(Regexp.new(value.to_s.downcase))
         else
@@ -304,6 +313,62 @@ module BenchmarkHelpers
       end
 
       lines.join("\n")
+    end
+  end
+
+  # Helpers for Claude distillation benchmarks (Tier 1-3)
+  module DistillationSetup
+    # Set up a tmpdir with .mcp.json pointing to claude-memory serve-mcp
+    def setup_tmpdir_with_mcp
+      tmpdir = Dir.mktmpdir("distill-bench")
+      claude_dir = File.join(tmpdir, ".claude")
+      FileUtils.mkdir_p(claude_dir)
+
+      mcp_config = {
+        "mcpServers" => {
+          "memory" => {
+            "type" => "stdio",
+            "command" => "claude-memory",
+            "args" => ["serve-mcp", "--db", File.join(claude_dir, "memory.sqlite3")]
+          }
+        }
+      }
+      File.write(File.join(tmpdir, ".mcp.json"), JSON.generate(mcp_config))
+      tmpdir
+    end
+
+    # Build the extraction prompt for Claude
+    def extraction_prompt(text)
+      <<~PROMPT
+        Extract all knowledge from the following transcript text. Use the memory.store_extraction tool to save any entities, facts, and decisions you find.
+
+        Be thorough: extract conventions, architectural decisions, testing strategies, preferences, and any other notable knowledge.
+
+        Transcript:
+        #{text}
+      PROMPT
+    end
+
+    # Build the distillation prompt for e2e scenarios
+    def distillation_prompt(scenario)
+      text = scenario["facts_to_load"].map { |f| f["text"] }.join("\n\n")
+      <<~PROMPT
+        Read and memorize the following project knowledge. Use the memory.store_extraction tool to save all entities, facts, and decisions.
+
+        #{text}
+      PROMPT
+    end
+
+    # Read stored facts from a tmpdir's database
+    def read_stored_facts(tmpdir)
+      db_path = File.join(tmpdir, ".claude", "memory.sqlite3")
+      return {facts: [], entities: []} unless File.exist?(db_path)
+
+      store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+      facts = store.facts.where(status: "active").all
+      entities = store.entities.all
+      store.close
+      {facts: facts, entities: entities}
     end
   end
 
