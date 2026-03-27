@@ -1,0 +1,135 @@
+# LLM Extraction Quality Dataset
+# ~10 cases that NullDistiller CANNOT handle but Claude Code should.
+#
+# These test conventions, architectural decisions, testing strategies,
+# preferences, and multi-fact extraction from complex conversations.
+#
+# Uses `object_contains` / `title_contains` for substring matching
+# since LLM output is non-deterministic.
+#
+# Categories: convention, architecture, testing, preference, multi_fact
+
+# ============================================================
+# CONVENTIONS (~3 cases)
+# ============================================================
+
+- id: ext_llm_convention_tdd
+  category: convention
+  text: "We agreed to always write tests before implementation. TDD is our standard approach for all new features."
+  expected:
+    entities: []
+    facts:
+      - {predicate: convention, object_contains: "tdd"}
+    decisions:
+      - {title_contains: "tdd"}
+
+- id: ext_llm_convention_naming
+  category: convention
+  text: "Our naming convention for database columns is snake_case. We never use camelCase in the database layer. Table names are always plural."
+  expected:
+    entities: []
+    facts:
+      - {predicate: convention, object_contains: "snake_case"}
+      - {predicate: convention, object_contains: "plural"}
+
+- id: ext_llm_convention_code_review
+  category: convention
+  text: "Every pull request requires at least two approvals before merging. We use squash merges exclusively to keep the commit history clean."
+  expected:
+    entities: []
+    facts:
+      - {predicate: convention, object_contains: "approval"}
+      - {predicate: convention, object_contains: "squash"}
+
+# ============================================================
+# ARCHITECTURAL DECISIONS (~2 cases)
+# ============================================================
+
+- id: ext_llm_arch_hexagonal
+  category: architecture
+  text: "The system follows a hexagonal architecture pattern. All external dependencies are behind port interfaces, and adapters implement the actual I/O."
+  expected:
+    entities: []
+    facts:
+      - {predicate_contains: "decision", object_contains: "hexagonal"}
+
+- id: ext_llm_arch_event_driven
+  category: architecture
+  text: "We decided to adopt an event-driven architecture using a message bus. Services communicate asynchronously through domain events rather than direct API calls."
+  expected:
+    entities: []
+    facts:
+      - {predicate_contains: "decision", object_contains: "event"}
+    decisions:
+      - {title_contains: "event"}
+
+# ============================================================
+# TESTING STRATEGIES (~2 cases)
+# ============================================================
+
+- id: ext_llm_testing_rspec
+  category: testing
+  text: "Our convention is to use RSpec with expect syntax, never should syntax. Integration tests hit real databases. We mock external HTTP calls with WebMock."
+  expected:
+    entities: []
+    facts:
+      - {predicate: convention, object_contains: "rspec"}
+      - {predicate: convention, object_contains: "expect"}
+
+- id: ext_llm_testing_coverage
+  category: testing
+  text: "We maintain a minimum test coverage of 90%. Any PR that drops coverage below the threshold is automatically blocked by CI."
+  expected:
+    entities: []
+    facts:
+      - {predicate: convention, object_contains: "coverage"}
+      - {predicate: convention, object_contains: "90"}
+
+# ============================================================
+# PREFERENCES (~1 case)
+# ============================================================
+
+- id: ext_llm_preference_tooling
+  category: preference
+  text: "I always use VS Code with the Ruby LSP extension for development. My preferred terminal is iTerm2 with tmux for session management across all my projects."
+  expected:
+    entities: []
+    facts:
+      - {object_contains: "vs code"}
+      - {object_contains: "iterm"}
+
+# ============================================================
+# MULTI-FACT EXTRACTION (~2 cases)
+# ============================================================
+
+- id: ext_llm_multi_complex
+  category: multi_fact
+  text: >
+    After the sprint retrospective, we made several decisions. First, we're switching
+    from REST to GraphQL for the public API. Second, all new services must use
+    TypeScript instead of JavaScript. Third, we adopted Prettier with a 100-character
+    line width as our formatter. The team also agreed to hold weekly architecture
+    reviews every Thursday.
+  expected:
+    entities: []
+    facts:
+      - {object_contains: "graphql"}
+      - {object_contains: "typescript"}
+      - {object_contains: "prettier"}
+    decisions:
+      - {title_contains: "graphql"}
+
+- id: ext_llm_multi_conversation
+  category: multi_fact
+  text: >
+    User: What database should we use for the new analytics service?
+    Assistant: Given the time-series nature of the data, I'd recommend TimescaleDB or ClickHouse.
+    User: Let's go with ClickHouse. Also, we should use Kafka for the event pipeline.
+    Assistant: Good choices. I'll note that the analytics service uses ClickHouse and Kafka.
+  expected:
+    entities: []
+    facts:
+      - {object_contains: "clickhouse"}
+      - {object_contains: "kafka"}
+    decisions:
+      - {title_contains: "clickhouse"}
