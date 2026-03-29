@@ -18,6 +18,7 @@ RSpec.describe "Distillation Extraction Accuracy", :benchmark do
         entity_recalls = []
         fact_precisions = []
         fact_recalls = []
+        concept_recalls = []
         failures = []
 
         category_cases.each do |tc|
@@ -44,6 +45,10 @@ RSpec.describe "Distillation Extraction Accuracy", :benchmark do
           fact_precisions << fp
           fact_recalls << fr
 
+          # Concept metrics
+          concepts = tc.fetch("concepts", [])
+          concept_recalls << null_distiller_concept_recall(extraction, concepts)
+
           # Track entity recall failures
           if er < 1.0
             missed = exp_entities.reject { |exp| ext_entities.any? { |e| matches?(e, exp) } }
@@ -66,11 +71,13 @@ RSpec.describe "Distillation Extraction Accuracy", :benchmark do
         avg_fp = fact_precisions.sum / fact_precisions.size
         avg_fr = fact_recalls.sum / fact_recalls.size
         fact_f1 = f1_score(avg_fp, avg_fr)
+        avg_cr = concept_recalls.sum / concept_recalls.size
 
         # Report
         puts "\n  #{category.capitalize} Extraction (#{category_cases.size} cases):"
         puts "    Entity  - Precision: #{avg_ep.round(3)}  Recall: #{avg_er.round(3)}  F1: #{entity_f1.round(3)}"
         puts "    Fact    - Precision: #{avg_fp.round(3)}  Recall: #{avg_fr.round(3)}  F1: #{fact_f1.round(3)}"
+        puts "    Concept Recall: #{avg_cr.round(3)}"
 
         if failures.any?
           puts "    Failures (#{failures.size}):"
@@ -90,6 +97,7 @@ RSpec.describe "Distillation Extraction Accuracy", :benchmark do
       entity_recalls = []
       fact_precisions = []
       fact_recalls = []
+      concept_recalls = []
 
       cases.each do |tc|
         extraction = distiller.distill(tc["text"])
@@ -108,16 +116,21 @@ RSpec.describe "Distillation Extraction Accuracy", :benchmark do
         }
         fact_precisions << extraction_precision(ext_facts, exp_facts) { |e, exp| matches?(e, exp) }
         fact_recalls << extraction_recall(ext_facts, exp_facts) { |e, exp| matches?(e, exp) }
+
+        concepts = tc.fetch("concepts", [])
+        concept_recalls << null_distiller_concept_recall(extraction, concepts)
       end
 
       avg_ep = entity_precisions.sum / entity_precisions.size
       avg_er = entity_recalls.sum / entity_recalls.size
       avg_fp = fact_precisions.sum / fact_precisions.size
       avg_fr = fact_recalls.sum / fact_recalls.size
+      avg_cr = concept_recalls.sum / concept_recalls.size
 
       puts "\n  AGGREGATE (#{cases.size} cases):"
       puts "    Entity  - Precision: #{avg_ep.round(3)}  Recall: #{avg_er.round(3)}  F1: #{f1_score(avg_ep, avg_er).round(3)}"
       puts "    Fact    - Precision: #{avg_fp.round(3)}  Recall: #{avg_fr.round(3)}  F1: #{f1_score(avg_fp, avg_fr).round(3)}"
+      puts "    Concept Recall: #{avg_cr.round(3)}"
 
       expect(cases.size).to be > 0
     end

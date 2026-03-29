@@ -18,6 +18,7 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
       fact_precisions = []
       fact_recalls = []
       decision_recalls = []
+      concept_recalls = []
       failures = []
 
       all_cases.each do |tc|
@@ -50,6 +51,10 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
         dr = extraction_recall(ext_decisions, exp_decisions) { |e, exp| matches?(e, exp) }
         decision_recalls << dr
 
+        # Concept metrics
+        concepts = tc.fetch("concepts", [])
+        concept_recalls << null_distiller_concept_recall(extraction, concepts)
+
         # Track failures
         if fr < 1.0 && exp_facts.any?
           missed = exp_facts.reject { |exp| ext_facts.any? { |e| matches?(e, exp) } }
@@ -76,8 +81,23 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
       avg_fr = fact_recalls.sum / fact_recalls.size
       fact_f1 = f1_score(avg_fp, avg_fr)
       avg_dr = decision_recalls.sum / decision_recalls.size
+      avg_cr = concept_recalls.sum / concept_recalls.size
 
       # Separate metrics for original vs LLM cases
+      orig_concept_recalls = original_cases.map { |tc|
+        extraction = distiller.distill(tc["text"])
+        concepts = tc.fetch("concepts", [])
+        null_distiller_concept_recall(extraction, concepts)
+      }
+      avg_orig_cr = orig_concept_recalls.sum / orig_concept_recalls.size
+
+      llm_concept_recalls = llm_cases.map { |tc|
+        extraction = distiller.distill(tc["text"])
+        concepts = tc.fetch("concepts", [])
+        null_distiller_concept_recall(extraction, concepts)
+      }
+      avg_llm_cr = llm_concept_recalls.sum / llm_concept_recalls.size
+
       llm_fact_recalls = llm_cases.map { |tc|
         exp = tc.fetch("expected", {}).fetch("facts", [])
         ext = distiller.distill(tc["text"]).facts.map { |f|
@@ -94,9 +114,10 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
       puts "    Entity  - Precision: #{avg_ep.round(3)}  Recall: #{avg_er.round(3)}  F1: #{entity_f1.round(3)}"
       puts "    Fact    - Precision: #{avg_fp.round(3)}  Recall: #{avg_fr.round(3)}  F1: #{fact_f1.round(3)}"
       puts "    Decision Recall: #{avg_dr.round(3)}"
+      puts "    Concept Recall:  #{avg_cr.round(3)}"
       puts ""
-      puts "    Original cases (#{original_cases.size}): Fact Recall: #{(fact_recalls.first(original_cases.size).sum / original_cases.size).round(3)}"
-      puts "    LLM cases (#{llm_cases.size}):      Fact Recall: #{avg_llm_fr.round(3)}  (expected to be low)"
+      puts "    Original cases (#{original_cases.size}): Fact Recall: #{(fact_recalls.first(original_cases.size).sum / original_cases.size).round(3)}  Concept Recall: #{avg_orig_cr.round(3)}"
+      puts "    LLM cases (#{llm_cases.size}):      Fact Recall: #{avg_llm_fr.round(3)}  Concept Recall: #{avg_llm_cr.round(3)}  (expected to be low)"
       puts ""
 
       if failures.any?
@@ -118,12 +139,17 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
       claude_fact_precisions = []
       claude_decision_recalls = []
       claude_entity_recalls = []
+      claude_concept_recalls = []
+      claude_facts_stored = []
+      claude_entities_stored = []
       null_fact_recalls = []
       null_decision_recalls = []
+      null_concept_recalls = []
       failures = []
 
       all_cases.each do |tc|
         tmpdir = setup_tmpdir_with_mcp
+        concepts = tc.fetch("concepts", [])
 
         begin
           # Run Claude with extraction prompt
@@ -140,6 +166,9 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
             stored = read_stored_facts(tmpdir)
             stored_facts = stored[:facts]
             stored_entities = stored[:entities]
+
+            claude_facts_stored << stored_facts.size
+            claude_entities_stored << stored_entities.size
 
             # Map stored facts to matchable hashes
             ext_facts = stored_facts.map { |f|
@@ -166,6 +195,9 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
             dr = extraction_recall(ext_decisions, exp_decisions) { |e, exp| matches?(e, exp) }
             claude_decision_recalls << dr
 
+            # Concept metrics
+            claude_concept_recalls << concept_recall(stored_facts, stored_entities, concepts)
+
             if fr < 1.0 && exp_facts.any?
               missed = exp_facts.reject { |exp_f| ext_facts.any? { |e| matches?(e, exp_f) } }
               if missed.any?
@@ -178,6 +210,9 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
             claude_fact_precisions << 0.0
             claude_decision_recalls << 0.0
             claude_entity_recalls << 0.0
+            claude_concept_recalls << 0.0
+            claude_facts_stored << 0
+            claude_entities_stored << 0
           end
 
           # NullDistiller comparison
@@ -195,6 +230,8 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
           ext_decisions_null = extraction.decisions.map { |d| {title: d[:title]} }
           null_dr = extraction_recall(ext_decisions_null, exp_decisions) { |e, exp| matches?(e, exp) }
           null_decision_recalls << null_dr
+
+          null_concept_recalls << null_distiller_concept_recall(extraction, concepts)
         ensure
           FileUtils.rm_rf(tmpdir)
         end
@@ -206,15 +243,38 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
       claude_fact_f1 = f1_score(avg_claude_fp, avg_claude_fr)
       avg_claude_dr = claude_decision_recalls.sum / claude_decision_recalls.size
       avg_claude_er = claude_entity_recalls.sum / claude_entity_recalls.size
+      avg_claude_cr = claude_concept_recalls.sum / claude_concept_recalls.size
+      avg_claude_facts = claude_facts_stored.sum.to_f / claude_facts_stored.size
+      avg_claude_entities = claude_entities_stored.sum.to_f / claude_entities_stored.size
 
       avg_null_fr = null_fact_recalls.sum / null_fact_recalls.size
       avg_null_dr = null_decision_recalls.sum / null_decision_recalls.size
+      avg_null_cr = null_concept_recalls.sum / null_concept_recalls.size
 
-      # Print comparison table
+      # Separate concept recalls by case type
+      orig_count = original_cases.size
+      llm_count = llm_cases.size
+      null_orig_cr = null_concept_recalls.first(orig_count).sum / orig_count
+      null_llm_cr = null_concept_recalls.last(llm_count).sum / llm_count
+      claude_orig_cr = claude_concept_recalls.first(orig_count).sum / orig_count
+      claude_llm_cr = claude_concept_recalls.last(llm_count).sum / llm_count
+
+      # Print concept-based comparison table (fair, distiller-agnostic)
       puts "\n  " + "=" * 56
-      puts "  Extraction Quality Comparison (#{all_cases.size} cases)"
+      puts "  Extraction Quality Comparison (#{all_cases.size} cases, concept-based)"
       puts "  " + "=" * 56
       puts ""
+      puts "  #{"Metric".ljust(25)} #{"NullDistiller".ljust(15)} #{"Claude Code".ljust(15)}"
+      puts "  " + "-" * 56
+      puts "  #{"Concept Recall".ljust(25)} #{avg_null_cr.round(3).to_s.ljust(15)} #{avg_claude_cr.round(3)}"
+      puts "  #{"  Original (#{orig_count})".ljust(25)} #{null_orig_cr.round(3).to_s.ljust(15)} #{claude_orig_cr.round(3)}"
+      puts "  #{"  LLM (#{llm_count})".ljust(25)} #{null_llm_cr.round(3).to_s.ljust(15)} #{claude_llm_cr.round(3)}"
+      puts "  #{"Facts Stored (avg)".ljust(25)} #{"—".ljust(15)} #{avg_claude_facts.round(1)}"
+      puts "  #{"Entities Stored (avg)".ljust(25)} #{"—".ljust(15)} #{avg_claude_entities.round(1)}"
+      puts ""
+
+      # Format-specific metrics (informational)
+      puts "  Format-Specific Metrics (exact match):"
       puts "  #{"Metric".ljust(25)} #{"NullDistiller".ljust(15)} #{"Claude Code".ljust(15)}"
       puts "  " + "-" * 56
       puts "  #{"Fact Recall".ljust(25)} #{avg_null_fr.round(3).to_s.ljust(15)} #{avg_claude_fr.round(3)}"

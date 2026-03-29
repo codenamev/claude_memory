@@ -16,6 +16,9 @@
 - id: ext_llm_convention_tdd
   category: convention
   text: "We agreed to always write tests before implementation. TDD is our standard approach for all new features."
+  concepts:
+    - tdd
+    - test
   expected:
     entities: []
     facts:
@@ -26,6 +29,9 @@
 - id: ext_llm_convention_naming
   category: convention
   text: "Our naming convention for database columns is snake_case. We never use camelCase in the database layer. Table names are always plural."
+  concepts:
+    - snake_case
+    - plural
   expected:
     entities: []
     facts:
@@ -35,6 +41,9 @@
 - id: ext_llm_convention_code_review
   category: convention
   text: "Every pull request requires at least two approvals before merging. We use squash merges exclusively to keep the commit history clean."
+  concepts:
+    - approval
+    - squash
   expected:
     entities: []
     facts:
@@ -48,6 +57,8 @@
 - id: ext_llm_arch_hexagonal
   category: architecture
   text: "The system follows a hexagonal architecture pattern. All external dependencies are behind port interfaces, and adapters implement the actual I/O."
+  concepts:
+    - hexagonal
   expected:
     entities: []
     facts:
@@ -56,6 +67,9 @@
 - id: ext_llm_arch_event_driven
   category: architecture
   text: "We decided to adopt an event-driven architecture using a message bus. Services communicate asynchronously through domain events rather than direct API calls."
+  concepts:
+    - event-driven
+    - message bus
   expected:
     entities: []
     facts:
@@ -70,6 +84,9 @@
 - id: ext_llm_testing_rspec
   category: testing
   text: "Our convention is to use RSpec with expect syntax, never should syntax. Integration tests hit real databases. We mock external HTTP calls with WebMock."
+  concepts:
+    - rspec
+    - expect
   expected:
     entities: []
     facts:
@@ -79,6 +96,9 @@
 - id: ext_llm_testing_coverage
   category: testing
   text: "We maintain a minimum test coverage of 90%. Any PR that drops coverage below the threshold is automatically blocked by CI."
+  concepts:
+    - coverage
+    - "90"
   expected:
     entities: []
     facts:
@@ -92,6 +112,9 @@
 - id: ext_llm_preference_tooling
   category: preference
   text: "I always use VS Code with the Ruby LSP extension for development. My preferred terminal is iTerm2 with tmux for session management across all my projects."
+  concepts:
+    - vs code
+    - iterm
   expected:
     entities: []
     facts:
@@ -110,6 +133,10 @@
     TypeScript instead of JavaScript. Third, we adopted Prettier with a 100-character
     line width as our formatter. The team also agreed to hold weekly architecture
     reviews every Thursday.
+  concepts:
+    - graphql
+    - typescript
+    - prettier
   expected:
     entities: []
     facts:
@@ -126,6 +153,9 @@
     Assistant: Given the time-series nature of the data, I'd recommend TimescaleDB or ClickHouse.
     User: Let's go with ClickHouse. Also, we should use Kafka for the event pipeline.
     Assistant: Good choices. I'll note that the analytics service uses ClickHouse and Kafka.
+  concepts:
+    - clickhouse
+    - kafka
   expected:
     entities: []
     facts:

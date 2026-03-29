@@ -123,6 +123,53 @@ module BenchmarkHelpers
       2.0 * precision * recall / (precision + recall)
     end
 
+    # Concept-based recall: what fraction of expected concepts appear in stored facts/entities?
+    # Works with database-stored data (hashes with :predicate, :object_literal, etc.)
+    def concept_recall(stored_facts, stored_entities, concepts)
+      return 1.0 if concepts.empty?
+
+      searchable_parts = []
+      stored_facts.each do |f|
+        searchable_parts << f[:predicate].to_s.downcase
+        searchable_parts << f[:object_literal].to_s.downcase
+        searchable_parts << f[:object].to_s.downcase
+        searchable_parts << f[:subject_name].to_s.downcase
+      end
+      stored_entities.each do |e|
+        searchable_parts << e[:canonical_name].to_s.downcase
+        searchable_parts << e[:type].to_s.downcase
+      end
+      searchable = searchable_parts.join(" ")
+
+      found = concepts.count { |c| searchable.include?(c.downcase) }
+      found.to_f / concepts.size
+    end
+
+    # Concept-based recall for NullDistiller Extraction objects
+    # Works with in-memory extraction results (hashes with :name, :predicate, :object, etc.)
+    def null_distiller_concept_recall(extraction, concepts)
+      return 1.0 if concepts.empty?
+
+      searchable_parts = []
+      extraction.entities.each do |e|
+        searchable_parts << e[:name].to_s.downcase
+        searchable_parts << e[:type].to_s.downcase
+      end
+      extraction.facts.each do |f|
+        searchable_parts << f[:predicate].to_s.downcase
+        searchable_parts << f[:object].to_s.downcase
+        searchable_parts << f[:subject].to_s.downcase
+      end
+      extraction.decisions.each do |d|
+        searchable_parts << d[:title].to_s.downcase
+        searchable_parts << d[:summary].to_s.downcase
+      end
+      searchable = searchable_parts.join(" ")
+
+      found = concepts.count { |c| searchable.include?(c.downcase) }
+      found.to_f / concepts.size
+    end
+
     # Generic hash-subset matcher: checks that all expected keys match.
     # Keys ending in _pattern use regex matching.
     # Keys ending in _contains use substring matching (for non-deterministic LLM output).

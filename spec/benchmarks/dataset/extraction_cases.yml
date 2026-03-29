@@ -20,6 +20,8 @@
 - id: ext_ent_db_postgresql
   category: entity
   text: "We use PostgreSQL as our primary database for all relational data."
+  concepts:
+    - postgresql
   expected:
     entities:
       - {type: database, name: postgresql}
@@ -29,6 +31,8 @@
 - id: ext_ent_db_postgres_variant
   category: entity
   text: "The app connects to Postgres for user data storage."
+  concepts:
+    - postgres
   expected:
     entities:
       - {type: database, name: postgres}
@@ -38,6 +42,8 @@
 - id: ext_ent_db_redis
   category: entity
   text: "We rely on Redis for caching and background job queues."
+  concepts:
+    - redis
   expected:
     entities:
       - {type: database, name: redis}
@@ -47,6 +53,8 @@
 - id: ext_ent_db_mongodb
   category: entity
   text: "MongoDB stores all of our document-oriented data."
+  concepts:
+    - mongodb
   expected:
     entities:
       - {type: database, name: mongodb}
@@ -58,6 +66,8 @@
 - id: ext_ent_fw_rails
   category: entity
   text: "The API is built with Rails 7 and uses Active Record."
+  concepts:
+    - rails
   expected:
     entities:
       - {type: framework, name: rails}
@@ -67,6 +77,8 @@
 - id: ext_ent_fw_nextjs
   category: entity
   text: "Our frontend runs on Next.js with server-side rendering."
+  concepts:
+    - next.js
   expected:
     entities:
       - {type: framework, name: next.js}
@@ -76,6 +88,8 @@
 - id: ext_ent_fw_react
   category: entity
   text: "We use React for all UI components in the dashboard."
+  concepts:
+    - react
   expected:
     entities:
       - {type: framework, name: react}
@@ -87,6 +101,8 @@
 - id: ext_ent_lang_ruby
   category: entity
   text: "The entire backend is written in Ruby with strict typing via Sorbet."
+  concepts:
+    - ruby
   expected:
     entities:
       - {type: language, name: ruby}
@@ -95,6 +111,8 @@
 - id: ext_ent_lang_typescript
   category: entity
   text: "We write all frontend code in TypeScript for type safety."
+  concepts:
+    - typescript
   expected:
     entities:
       - {type: language, name: typescript}
@@ -105,6 +123,8 @@
 - id: ext_ent_plat_docker
   category: entity
   text: "Everything runs in Docker containers for consistency."
+  concepts:
+    - docker
   expected:
     entities:
       - {type: platform, name: docker}
@@ -116,6 +136,10 @@
 - id: ext_ent_multi
   category: entity
   text: "The app runs on Rails with PostgreSQL and Redis for caching."
+  concepts:
+    - rails
+    - postgresql
+    - redis
   expected:
     entities:
       - {type: framework, name: rails}
@@ -131,6 +155,8 @@
 - id: ext_ent_negative
   category: entity
   text: "We looked at MongoDB but decided against it."
+  concepts:
+    - mongodb
   expected:
     entities:
       - {type: database, name: mongodb}
@@ -142,6 +168,7 @@
 - id: ext_ent_none
   category: entity
   text: "The deployment process takes about 10 minutes on a good day."
+  concepts: []
   expected:
     entities: []
     facts: []
@@ -155,6 +182,8 @@
 - id: ext_fact_db_mysql
   category: fact
   text: "Our legacy system still depends on MySQL 5.7 for order processing."
+  concepts:
+    - mysql
   expected:
     entities:
       - {type: database, name: mysql}
@@ -164,6 +193,8 @@
 - id: ext_fact_db_sqlite
   category: fact
   text: "We use SQLite for local development and testing."
+  concepts:
+    - sqlite
   expected:
     entities:
       - {type: database, name: sqlite}
@@ -173,6 +204,9 @@
 - id: ext_fact_db_two
   category: fact
   text: "The service uses PostgreSQL for persistence and Redis as a message broker."
+  concepts:
+    - postgresql
+    - redis
   expected:
     entities:
       - {type: database, name: postgresql}
@@ -186,6 +220,8 @@
 - id: ext_fact_fw_sinatra
   category: fact
   text: "The microservice is a lightweight Sinatra app."
+  concepts:
+    - sinatra
   expected:
     entities:
       - {type: framework, name: sinatra}
@@ -195,6 +231,8 @@
 - id: ext_fact_fw_django
   category: fact
   text: "Our admin panel is powered by Django with the built-in ORM."
+  concepts:
+    - django
   expected:
     entities:
       - {type: framework, name: django}
@@ -204,6 +242,8 @@
 - id: ext_fact_fw_express
   category: fact
   text: "The API gateway uses Express.js for routing HTTP requests."
+  concepts:
+    - express
   expected:
     entities:
       - {type: framework, name: express}
@@ -213,6 +253,8 @@
 - id: ext_fact_fw_vue
   category: fact
   text: "The dashboard frontend is built with Vue and Vuex for state management."
+  concepts:
+    - vue
   expected:
     entities:
       - {type: framework, name: vue}
@@ -224,6 +266,8 @@
 - id: ext_fact_plat_aws
   category: fact
   text: "This service deploys on AWS with ECS for container orchestration."
+  concepts:
+    - aws
   expected:
     entities:
       - {type: platform, name: aws}
@@ -233,6 +277,8 @@
 - id: ext_fact_plat_heroku
   category: fact
   text: "The staging environment runs on Heroku for quick iteration."
+  concepts:
+    - heroku
   expected:
     entities:
       - {type: platform, name: heroku}
@@ -242,6 +288,9 @@
 - id: ext_fact_plat_kubernetes
   category: fact
   text: "Production workloads are managed by Kubernetes on GCP."
+  concepts:
+    - kubernetes
+    - gcp
   expected:
     entities:
       - {type: platform, name: kubernetes}
@@ -253,6 +302,9 @@
 - id: ext_fact_plat_vercel
   category: fact
   text: "We deploy the Next.js frontend to Vercel for edge rendering."
+  concepts:
+    - next.js
+    - vercel
   expected:
     entities:
       - {type: framework, name: "next.js"}
@@ -266,6 +318,9 @@
 - id: ext_fact_global_always
   category: fact
   text: "I always prefer using Docker for containerization in all my projects."
+  concepts:
+    - docker
+    - global
   expected:
     entities:
       - {type: platform, name: docker}
@@ -275,6 +330,9 @@
 - id: ext_fact_global_everywhere
   category: fact
   text: "I use PostgreSQL everywhere as my go-to database."
+  concepts:
+    - postgresql
+    - global
   expected:
     entities:
       - {type: database, name: postgresql}
@@ -284,6 +342,9 @@
 - id: ext_fact_global_preference
   category: fact
   text: "My personal preference is to use Redis for all caching needs."
+  concepts:
+    - redis
+    - global
   expected:
     entities:
       - {type: database, name: redis}
@@ -295,6 +356,8 @@
 - id: ext_fact_project_default
   category: fact
   text: "This project uses Azure for hosting the API."
+  concepts:
+    - azure
   expected:
     entities:
       - {type: platform, name: azure}
@@ -306,6 +369,11 @@
 - id: ext_fact_multi
   category: fact
   text: "The stack is Rails on Heroku with PostgreSQL and Redis."
+  concepts:
+    - rails
+    - heroku
+    - postgresql
+    - redis
   expected:
     entities:
       - {type: framework, name: rails}
@@ -323,6 +391,7 @@
 - id: ext_fact_empty
   category: fact
   text: "The team discussed various options for improving performance last week."
+  concepts: []
   expected:
     entities: []
     facts: []
@@ -338,6 +407,9 @@
     forward would be to migrate our data layer to MongoDB for the document
     store and keep Redis for the caching layer. The migration plan will be
     drafted by next Friday and reviewed in the following sprint planning session.
+  concepts:
+    - mongodb
+    - redis
   expected:
     entities:
       - {type: database, name: mongodb}
