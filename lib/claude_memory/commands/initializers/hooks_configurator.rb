@@ -12,7 +12,7 @@ module ClaudeMemory
           @stdout = stdout
         end
 
-        def configure_project_hooks
+        def configure_project_hooks(replace: false)
           settings_path = ".claude/settings.json"
           FileUtils.mkdir_p(File.dirname(settings_path))
 
@@ -24,13 +24,13 @@ module ClaudeMemory
 
           existing = load_json_file(settings_path)
           existing["hooks"] ||= {}
-          merge_hooks!(existing["hooks"], hooks_config["hooks"])
+          merge_hooks!(existing["hooks"], hooks_config["hooks"], replace: replace)
 
           File.write(settings_path, JSON.pretty_generate(existing))
           @stdout.puts "✓ Configured hooks in #{settings_path}"
         end
 
-        def configure_global_hooks
+        def configure_global_hooks(replace: false)
           settings_path = File.join(Dir.home, ".claude", "settings.json")
           FileUtils.mkdir_p(File.dirname(settings_path))
 
@@ -42,7 +42,7 @@ module ClaudeMemory
 
           existing = load_json_file(settings_path)
           existing["hooks"] ||= {}
-          merge_hooks!(existing["hooks"], hooks_config["hooks"])
+          merge_hooks!(existing["hooks"], hooks_config["hooks"], replace: replace)
 
           File.write(settings_path, JSON.pretty_generate(existing))
           @stdout.puts "✓ Configured hooks in #{settings_path}"
@@ -103,34 +103,55 @@ module ClaudeMemory
             "hooks" => {
               "Stop" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 5}
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 5,
+                   "statusMessage" => "Saving memory..."}
+                ]
+              }],
+              "StopFailure" => [{
+                "hooks" => [
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 5,
+                   "statusMessage" => "Saving memory..."}
                 ]
               }],
               "SessionStart" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => context_cmd, "timeout" => 5}
+                  {"type" => "command", "command" => context_cmd, "timeout" => 5,
+                   "statusMessage" => "Loading memory..."}
                 ]
               }],
               "PreCompact" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 30},
-                  {"type" => "command", "command" => sweep_cmd, "timeout" => 30}
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 30,
+                   "statusMessage" => "Saving memory..."},
+                  {"type" => "command", "command" => sweep_cmd, "timeout" => 30,
+                   "statusMessage" => "Sweeping memory..."}
                 ]
               }],
               "SessionEnd" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 30},
-                  {"type" => "command", "command" => sweep_cmd, "timeout" => 30}
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 30,
+                   "statusMessage" => "Saving memory..."},
+                  {"type" => "command", "command" => sweep_cmd, "timeout" => 30,
+                   "statusMessage" => "Sweeping memory..."}
                 ]
               }],
               "TaskCompleted" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10}
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 10,
+                   "statusMessage" => "Saving memory..."}
                 ]
               }],
               "TeammateIdle" => [{
                 "hooks" => [
-                  {"type" => "command", "command" => ingest_cmd, "timeout" => 15}
+                  {"type" => "command", "command" => ingest_cmd, "timeout" => 15,
+                   "statusMessage" => "Saving memory..."}
+                ]
+              }],
+              "Notification" => [{
+                "matcher" => "idle_prompt",
+                "hooks" => [
+                  {"type" => "command", "command" => sweep_cmd, "timeout" => 10,
+                   "statusMessage" => "Sweeping memory..."}
                 ]
               }]
             }
@@ -144,7 +165,18 @@ module ClaudeMemory
           {}
         end
 
-        def merge_hooks!(existing_hooks, new_hooks)
+        def merge_hooks!(existing_hooks, new_hooks, replace: false)
+          if replace
+            # Remove all claude-memory hooks first, then add fresh ones
+            existing_hooks.each do |event, hook_arrays|
+              next unless hook_arrays.is_a?(Array)
+              hook_arrays.reject! do |ha|
+                ha.is_a?(Hash) && ha["hooks"]&.any? { |h| h["command"]&.include?("claude-memory") }
+              end
+            end
+            existing_hooks.delete_if { |_, v| v.is_a?(Array) && v.empty? }
+          end
+
           new_hooks.each do |event, hook_arrays|
             existing_hooks[event] ||= []
 

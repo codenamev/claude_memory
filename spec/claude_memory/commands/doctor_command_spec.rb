@@ -63,6 +63,7 @@ RSpec.describe ClaudeMemory::Commands::DoctorCommand do
           File.write(".claude/settings.json", JSON.generate({
             hooks: {
               "Stop" => [hook_entry],
+              "StopFailure" => [hook_entry],
               "SessionStart" => [hook_entry],
               "PreCompact" => [hook_entry],
               "SessionEnd" => [hook_entry]

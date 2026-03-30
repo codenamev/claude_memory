@@ -8,7 +8,7 @@ module ClaudeMemory
       # Checks hooks configuration in settings files
       class HooksCheck
         SETTINGS_PATHS = [".claude/settings.json", ".claude/settings.local.json"].freeze
-        EXPECTED_HOOKS = %w[Stop SessionStart PreCompact SessionEnd].freeze
+        EXPECTED_HOOKS = %w[Stop StopFailure SessionStart PreCompact SessionEnd].freeze
 
         def call
           hooks_found = false
@@ -86,7 +86,7 @@ module ClaudeMemory
             # Check for missing recommended hooks
             missing = EXPECTED_HOOKS - config["hooks"].keys
             if missing.any?
-              warnings << "Missing recommended hooks in #{path}: #{missing.join(", ")}"
+              warnings << "Missing recommended hooks in #{path}: #{missing.join(", ")}. Run 'claude-memory init' to add them"
             end
 
             {has_hooks: true, warnings: warnings}

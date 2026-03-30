@@ -68,6 +68,7 @@ module ClaudeMemory
             @skip_hooks = true
           else
             @stdout.puts "\nUpdating hooks..."
+            @replace_hooks = true
           end
         end
 
@@ -81,7 +82,7 @@ module ClaudeMemory
         end
 
         def configure_hooks
-          HooksConfigurator.new(@stdout).configure_project_hooks
+          HooksConfigurator.new(@stdout).configure_project_hooks(replace: @replace_hooks || false)
         end
 
         def configure_mcp

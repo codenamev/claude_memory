@@ -6,7 +6,20 @@
           {
             "type": "command",
             "command": "claude-memory hook ingest",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "Saving memory..."
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest",
+            "timeout": 10,
+            "statusMessage": "Saving memory..."
           }
         ]
       }
@@ -17,7 +30,8 @@
           {
             "type": "command",
             "command": "claude-memory hook ingest",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "Saving memory..."
           }
         ]
       }
@@ -28,12 +42,14 @@
           {
             "type": "command",
             "command": "claude-memory hook ingest",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Saving memory..."
           },
           {
             "type": "command",
             "command": "claude-memory hook sweep",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Sweeping memory..."
           }
         ]
       }
@@ -44,12 +60,14 @@
           {
             "type": "command",
             "command": "claude-memory hook ingest",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Saving memory..."
           },
           {
             "type": "command",
             "command": "claude-memory hook sweep",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Sweeping memory..."
           }
         ]
       }
@@ -61,7 +79,8 @@
           {
             "type": "command",
             "command": "claude-memory hook sweep",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "Sweeping memory..."
           }
         ]
       }
