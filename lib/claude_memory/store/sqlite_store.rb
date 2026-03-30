@@ -338,6 +338,28 @@ module ClaudeMemory
         }
       end
 
+      def backfill_distillation_metrics!
+        undistilled_ids = content_items
+          .left_join(:ingestion_metrics, content_item_id: :id)
+          .where(Sequel[:ingestion_metrics][:id] => nil)
+          .select_map(Sequel[:content_items][:id])
+
+        return 0 if undistilled_ids.empty?
+
+        now = Time.now.utc.iso8601
+        undistilled_ids.each do |cid|
+          ingestion_metrics.insert(
+            content_item_id: cid,
+            input_tokens: 0,
+            output_tokens: 0,
+            facts_extracted: 0,
+            created_at: now
+          )
+        end
+
+        undistilled_ids.size
+      end
+
       # --- LLM cache ---
 
       def llm_cache_lookup(cache_key)

@@ -39,13 +39,21 @@ RSpec.describe ClaudeMemory::Commands::DoctorCommand do
 
           # Insert content so project DB doesn't warn about empty ingestion
           project_store = manager.project_store
-          project_store.content_items.insert(
+          content_id = project_store.content_items.insert(
             session_id: "test-session",
             source: "test",
             raw_text: "test content",
             text_hash: "abc123",
             byte_len: 12,
             ingested_at: Time.now.utc.iso8601
+          )
+
+          # Add distillation metrics so distill check passes
+          project_store.record_ingestion_metrics(
+            content_item_id: content_id,
+            input_tokens: 0,
+            output_tokens: 0,
+            facts_extracted: 0
           )
 
           manager.close
