@@ -9,6 +9,15 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -36,6 +45,20 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "claude-memory hook sweep --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -52,6 +75,20 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "claude-memory hook sweep --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "TaskCompleted": [
@@ -63,6 +100,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "TeammateIdle": [
@@ -71,6 +117,15 @@
           {
             "type": "command",
             "command": "claude-memory hook ingest",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
             "timeout": 15
           }
         ]

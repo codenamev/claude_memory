@@ -51,5 +51,6 @@
       "Skill(improve:*)"
     ]
   },
-  "enableAllProjectMcpServers": true
+  "enableAllProjectMcpServers": true,
+  "outputStyle": "memory-aware"
 }

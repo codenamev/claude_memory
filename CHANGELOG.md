@@ -4,22 +4,53 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-03-30
+
 ### Added
 
 **Three-Layer Distillation Pipeline**
 - Automatic distillation via NullDistiller in ingest pipeline (Layer 1: regex-based, P95 < 5ms)
 - Context hook injection for LLM-based extraction at SessionStart (Layer 2: Claude Code as distiller, zero extra cost)
 - `/distill-transcripts` skill for manual deep extraction (Layer 3: on-demand, depth-aware prompts)
-- `memory.undistilled` MCP tool to list content items not yet deeply distilled
-- `memory.mark_distilled` MCP tool to mark content items as distilled after extraction
+- `memory.undistilled` and `memory.mark_distilled` MCP tools for distillation tracking
+- `Hook::DistillationRunner` extracted from Handler for context hook injection
 - `TaskCompleted` and `TeammateIdle` hook events for ingest triggers
 - Distillation metrics backfill on database initialization
 - Doctor check for undistilled content
+- Pending distillation count in `memory.status` output
+
+**Recall Enhancements**
+- Intent parameter for recall query disambiguation (#3)
+- Retrieval score traces for semantic search (#5)
+- Configurable embedding providers with dimension checking
+
+**Hook Enhancements**
+- `statusMessage` on all hooks for descriptive spinner text during hook execution
+- `StopFailure` hook to capture transcript data even on session errors (rate limits, server errors)
+- `Notification` hook with `idle_prompt` matcher for opportunistic sweep during idle
+
+**New Commands & Skills**
+- `install-skill` command and `memory-recall` agent (#8, #12)
+- Shell completion command for bash and zsh (#18)
 
 **Distillation Benchmark Results**
 - NullDistiller: Concept Recall 0.952, Fact Precision/Recall 1.000 (31 test cases)
 - Claude Code LLM: Concept Recall 0.902 (all 41 cases), 0.900 on semantic cases (vs 0.333 for regex)
 - Average 1.6 facts stored per case across LLM extraction
+- E2E distillation recall benchmark and extraction quality benchmarks
+- Concept-based matching for distiller-agnostic benchmark comparison
+
+### Fixed
+
+- `--allowedTools` added to `ClaudeCliRunner` for MCP tool permissions
+- Test isolation for context hook when global database has facts
+
+### Internal
+- Extracted `RetryHandler` and `SchemaManager` modules from `SQLiteStore`
+- Extracted `Recall` into engine strategy pattern with `DualEngine`, `LegacyEngine`, and shared `QueryCore`
+- Extracted `Tools` god object into 6 handler modules
+- Added 36 specs for 5 previously untested files
+- All 3 god objects eliminated, 0 files over 500 lines
 
 ## [0.7.1] - 2026-03-17
 
