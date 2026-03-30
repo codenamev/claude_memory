@@ -6,9 +6,22 @@ require "tmpdir"
 
 module EvalHelpers
   class ClaudeCliRunner
-    def initialize(working_dir:, memory_enabled: true)
+    MEMORY_TOOLS = %w[
+      mcp__memory__memory_store_extraction
+      mcp__memory__memory_recall
+      mcp__memory__memory_recall_index
+      mcp__memory__memory_recall_semantic
+      mcp__memory__memory_mark_distilled
+      mcp__memory__memory_undistilled
+      mcp__memory__memory_decisions
+      mcp__memory__memory_conventions
+      mcp__memory__memory_status
+    ].freeze
+
+    def initialize(working_dir:, memory_enabled: true, allowed_tools: nil)
       @working_dir = working_dir
       @memory_enabled = memory_enabled
+      @allowed_tools = allowed_tools
     end
 
     # Run claude CLI with prompt and return response
@@ -31,7 +44,7 @@ module EvalHelpers
     private
 
     def build_command(prompt)
-      [
+      cmd = [
         "claude",
         "-p", # Print mode (non-interactive)
         prompt,
@@ -39,6 +52,10 @@ module EvalHelpers
         "--no-session-persistence", # Don't save session
         "--max-budget-usd", "0.10" # Per-test budget limit
       ]
+      if @allowed_tools&.any?
+        cmd += ["--allowedTools"] + @allowed_tools
+      end
+      cmd
     end
 
     def parse_output(text_output)

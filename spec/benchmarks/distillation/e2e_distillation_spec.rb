@@ -67,7 +67,8 @@ RSpec.describe "E2E Distillation Recall", :benchmark, :eval_real do
           # Phase A: Feed transcript to Claude for distillation
           distill_runner = EvalHelpers::ClaudeCliRunner.new(
             working_dir: tmpdir,
-            memory_enabled: true
+            memory_enabled: true,
+            allowed_tools: EvalHelpers::ClaudeCliRunner::MEMORY_TOOLS
           )
           distill_result = distill_runner.run(
             prompt: distillation_prompt(scenario)
@@ -81,7 +82,8 @@ RSpec.describe "E2E Distillation Recall", :benchmark, :eval_real do
           # Phase B: Query Claude with the question (memory-enabled)
           query_runner = EvalHelpers::ClaudeCliRunner.new(
             working_dir: tmpdir,
-            memory_enabled: true
+            memory_enabled: true,
+            allowed_tools: EvalHelpers::ClaudeCliRunner::MEMORY_TOOLS
           )
           memory_result = query_runner.run(prompt: scenario["prompt"])
 

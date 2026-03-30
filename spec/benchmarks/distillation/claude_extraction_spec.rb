@@ -155,7 +155,8 @@ RSpec.describe "Claude Code Extraction Quality", :benchmark do
           # Run Claude with extraction prompt
           runner = EvalHelpers::ClaudeCliRunner.new(
             working_dir: tmpdir,
-            memory_enabled: true
+            memory_enabled: true,
+            allowed_tools: EvalHelpers::ClaudeCliRunner::MEMORY_TOOLS
           )
           result = runner.run(prompt: extraction_prompt(tc["text"]))
 
