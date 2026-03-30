@@ -66,6 +66,16 @@ module ClaudeMemory
         - Use when: you need facts from a specific workflow context
         - Cost: ~300-800 tokens per call
 
+        ### Tier 5: Distillation Management
+
+        **memory.undistilled** — List content items not yet deeply distilled
+        - Use when: you want to find ingested content that hasn't been processed by LLM extraction
+        - Cost: ~200-400 tokens per call
+
+        **memory.mark_distilled** — Mark a content item as distilled after extraction
+        - Use after: performing LLM-based fact extraction on undistilled content
+        - Cost: ~100 tokens per call
+
         ## Recommended Workflow
 
         1. **Start broad**: `memory.recall` or shortcut tools (decisions/conventions/architecture)

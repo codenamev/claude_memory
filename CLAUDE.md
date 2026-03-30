@@ -99,6 +99,18 @@ bin/run-evals --comparative        # Run benchmarks with available tools
 bin/run-evals --comparative --setup-competitors  # Install + run in one step
 ```
 
+### Distillation Extraction Accuracy
+
+NullDistiller (regex, Layer 1):
+  - Concept Recall: 0.952 (regex-detectable entities/facts)
+  - Fact Precision: 1.000, Fact Recall: 1.000 (on 31 test cases)
+  - Pipeline latency: P95 < 5ms (medium text)
+
+Claude Code (LLM, Layers 2+3):
+  - Concept Recall: 0.902 (all 41 cases)
+  - Concept Recall on semantic cases: 0.900 (vs NullDistiller's 0.333)
+  - Avg facts stored per case: 1.6
+
 ## Architecture
 
 ### Dual-Database System
@@ -123,6 +135,16 @@ Transcripts → Ingest → Index (FTS5)
              Publish → .claude/rules/claude_memory.generated.md
 ```
 
+### Three-Layer Distillation
+
+The distillation pipeline operates at three levels of depth:
+
+- **Layer 1: NullDistiller** (automatic, regex, free) — Runs in the ingest pipeline on every hook event. Extracts entities, facts, and scope hints using pattern matching. P95 latency < 5ms.
+- **Layer 2: Context Hook Injection** (automatic, LLM, zero extra cost) — At SessionStart, undistilled content is injected into the session via `hookSpecificOutput.additionalContext` with extraction instructions. Claude Code itself acts as the distiller, extracting structured facts at no additional API cost.
+- **Layer 3: `/distill-transcripts` Skill** (manual, on-demand) — Deep extraction triggered by the user. Processes undistilled content with depth-aware prompts (initial extraction, consolidation, contradiction resolution).
+
+New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipeline by tracking which content items have been deeply distilled.
+
 ### Module Structure
 
 #### Application Layer
@@ -135,7 +157,7 @@ Transcripts → Ingest → Index (FTS5)
   - Each command is a separate class (HelpCommand, DoctorCommand, etc.)
   - All commands inherit from BaseCommand
   - Dependency injection for I/O (stdout, stderr, stdin)
-  - 22 commands total, each focused on single responsibility
+  - 23 commands total, each focused on single responsibility
 
 - **`Configuration`**: Centralized ENV access (`configuration.rb`)
   - Single source of truth for paths and environment variables
@@ -198,12 +220,13 @@ Transcripts → Ingest → Index (FTS5)
   - Modes: shared (repo), local (uncommitted), home (user directory)
 
 - **`MCP`**: Model Context Protocol server and tools (`mcp/`)
-  - Exposes memory tools to Claude Code (21 tools total)
+  - Exposes memory tools to Claude Code (23 tools total)
   - Dual content/structuredContent responses with compact mode
 
 - **`Hook`**: Hook entrypoint handlers (`hook/`)
   - Reads stdin JSON from Claude Code hooks
   - Routes to ingest/sweep/publish commands
+  - `DistillationRunner`: Manages context hook injection with undistilled content for LLM extraction
 
 ### Database Schema
 
@@ -288,7 +311,7 @@ Single-value predicates (like "uses_database") supersede old values. Multi-value
 
 - `lib/claude_memory.rb`: Main module, requires, database path helpers
 - `lib/claude_memory/cli.rb`: Thin command router (41 lines)
-- `lib/claude_memory/commands/`: Individual command classes (22 commands)
+- `lib/claude_memory/commands/`: Individual command classes (23 commands)
 - `lib/claude_memory/configuration.rb`: Centralized configuration and ENV access
 - `lib/claude_memory/domain/`: Domain models (Fact, Entity, Provenance, Conflict)
 - `lib/claude_memory/core/`: Value objects and null objects
@@ -303,12 +326,13 @@ Single-value predicates (like "uses_database") supersede old values. Multi-value
 
 The gem includes an MCP server (`claude-memory serve-mcp`) that exposes memory operations as tools. Configuration should be in `.mcp.json` at project root.
 
-Available MCP tools (21 total):
+Available MCP tools (23 total):
 - **Query & Recall**: `memory.recall`, `memory.recall_index`, `memory.recall_details`, `memory.recall_semantic`, `memory.search_concepts`
 - **Provenance**: `memory.explain`, `memory.fact_graph`
 - **Shortcuts**: `memory.decisions`, `memory.conventions`, `memory.architecture`
 - **Context**: `memory.facts_by_tool`, `memory.facts_by_context`
 - **Management**: `memory.promote`, `memory.store_extraction`
+- **Distillation**: `memory.undistilled`, `memory.mark_distilled`
 - **Monitoring**: `memory.status`, `memory.stats`, `memory.changes`, `memory.conflicts`
 - **Maintenance**: `memory.sweep_now`
 - **Discovery**: `memory.check_setup`, `memory.list_projects`
@@ -317,7 +341,7 @@ Available MCP tools (21 total):
 
 ClaudeMemory integrates with Claude Code via hooks in `.claude/settings.json`:
 
-- **Ingest hook**: Triggers on Stop/SessionStart/PreCompact/SessionEnd events
+- **Ingest hook**: Triggers on Stop/SessionStart/PreCompact/SessionEnd/TaskCompleted/TeammateIdle events
   - Calls `claude-memory hook ingest` with stdin JSON
   - Reads transcript delta and updates both global and project databases
 

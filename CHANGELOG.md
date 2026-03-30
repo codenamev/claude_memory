@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+**Three-Layer Distillation Pipeline**
+- Automatic distillation via NullDistiller in ingest pipeline (Layer 1: regex-based, P95 < 5ms)
+- Context hook injection for LLM-based extraction at SessionStart (Layer 2: Claude Code as distiller, zero extra cost)
+- `/distill-transcripts` skill for manual deep extraction (Layer 3: on-demand, depth-aware prompts)
+- `memory.undistilled` MCP tool to list content items not yet deeply distilled
+- `memory.mark_distilled` MCP tool to mark content items as distilled after extraction
+- `TaskCompleted` and `TeammateIdle` hook events for ingest triggers
+- Distillation metrics backfill on database initialization
+- Doctor check for undistilled content
+
+**Distillation Benchmark Results**
+- NullDistiller: Concept Recall 0.952, Fact Precision/Recall 1.000 (31 test cases)
+- Claude Code LLM: Concept Recall 0.902 (all 41 cases), 0.900 on semantic cases (vs 0.333 for regex)
+- Average 1.6 facts stored per case across LLM extraction
+
 ## [0.7.1] - 2026-03-17
 
 ### Added
@@ -45,7 +62,7 @@ All notable changes to this project will be documented in this file.
 - Opt-out: set `CLAUDE_MEMORY_ISOLATE_WORKTREES=1` for per-worktree isolation
 
 **MCP Enhancements**
-- Tool annotations: `readOnlyHint`, `idempotentHint`, `destructiveHint` on all 21 tools
+- Tool annotations: `readOnlyHint`, `idempotentHint`, `destructiveHint` on all 23 tools
 - Stdout protection: MCP server redirects `$stdout` to `$stderr` to prevent protocol corruption from accidental `puts`/`print` calls
 - Self-excluding agent conversations via `SELF_CONTEXT_MARKER` to prevent meta-pollution
 

@@ -30,7 +30,7 @@ Optional `intent` parameter added to `Recall#query`, `#query_index`, and `#query
 
 ### ~~4. MCP Tool Annotations~~ ✅ Implemented 2026-03-09
 
-Added `readOnlyHint`, `idempotentHint`, `destructiveHint` annotations to all 21 MCP tools via shared constants (READ_ONLY, WRITE, WRITE_IDEMPOTENT). 17 query tools marked read-only, store_extraction/sweep_now as write, promote as write-idempotent.
+Added `readOnlyHint`, `idempotentHint`, `destructiveHint` annotations to all 23 MCP tools via shared constants (READ_ONLY, WRITE, WRITE_IDEMPOTENT). 19 query tools marked read-only, store_extraction/sweep_now/mark_distilled as write, promote as write-idempotent.
 
 ### ~~5. Retrieval Score Traces~~ ✅ Implemented 2026-03-20
 
