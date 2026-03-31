@@ -3,6 +3,7 @@
 *Analysis Date: 2026-03-02*
 *Repository: https://github.com/thedotmack/claude-mem*
 *Version: 10.5.2 (commit ecb09df)*
+*Re-studied: 2026-03-30 — v10.6.3 (commit d068821). 4 releases since last study (v10.5.6, v10.6.0, v10.6.1, v10.6.2, v10.6.3). Key changes: OpenClaw system prompt context injection replacing MEMORY.md writes (v10.6.0), compressed context output ~53% smaller (v10.6.1), timeline report skill (v10.6.1), process supervisor hardening with PID 0 fix and signal race condition fix (v10.5.6), activity spinner orphan session fix (v10.6.2), Gemini CLI integration (v10.6.3), 7 critical cross-platform bug fixes (v10.6.3). Context injection pattern (appendSystemContext with 60s cache) aligns with our SessionStart hook approach. Compressed context format worth studying. No new adoptable patterns beyond what we already implement.*
 
 ---
 

@@ -1,6 +1,7 @@
 # KBS (Knowledge-Based System) Analysis
 
 *Analysis Date: 2026-03-02*
+*Re-studied: 2026-03-30 — no changes since v0.2.1*
 *Repository: https://github.com/MadBomber/kbs*
 *Version: v0.2.1 (commit c04561d)*
 

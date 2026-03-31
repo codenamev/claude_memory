@@ -1,14 +1,14 @@
 # Improvements to Consider
 
-*Updated: 2026-03-24 - Implemented automatic distillation pipeline: NullDistiller wired into ingest hooks (Stop/SessionStart/PreCompact/SessionEnd/TaskCompleted/TeammateIdle), context hook injection for LLM extraction, `memory.undistilled` and `memory.mark_distilled` MCP tools, `/distill-transcripts` skill. Previously: Intent Parameter for Recall (#3), Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18), and 12 earlier features. Studied lossless-claw (v0.3.0). Other 6 repos unchanged since 2026-03-10.*
+*Updated: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
 *Sources:*
-- *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5, studied 2026-03-09)*
-- *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, studied 2026-03-09)*
-- *[yoanbernabeu/grepai](https://github.com/yoanbernabeu/grepai) - Semantic code search (latest, studied 2026-03-09)*
-- *[supermemoryai/claude-supermemory](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed persistent memory (v2.0.1, studied 2026-03-09)*
-- *[tobi/qmd](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1, studied 2026-03-10)*
-- *[MadBomber/kbs](https://github.com/MadBomber/kbs) - Knowledge-Based System with RETE inference (v0.2.1, studied 2026-03-09 — no changes)*
-- *[martian-engineering/lossless-claw](https://github.com/martian-engineering/lossless-claw) - DAG-based lossless context management (v0.3.0, studied 2026-03-16)*
+- *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.6.3, re-studied 2026-03-30)*
+- *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, re-studied 2026-03-30 — no changes)*
+- *[yoanbernabeu/grepai](https://github.com/yoanbernabeu/grepai) - Semantic code search (v0.35.0, re-studied 2026-03-30)*
+- *[supermemoryai/claude-supermemory](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed persistent memory (v2.0.1, re-studied 2026-03-30 — no changes)*
+- *[tobi/qmd](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1+unreleased, re-studied 2026-03-30)*
+- *[MadBomber/kbs](https://github.com/MadBomber/kbs) - Knowledge-Based System with RETE inference (v0.2.1, studied 2026-03-30 — no changes)*
+- *[martian-engineering/lossless-claw](https://github.com/martian-engineering/lossless-claw) - DAG-based lossless context management (v0.5.2, re-studied 2026-03-30)*
 
 This document contains only unimplemented improvements. Completed items are removed.
 
@@ -128,6 +128,37 @@ Source: QMD study (updated 2026-03-02)
 
 `--async` flag on hook ingest/sweep/publish subcommands. Fork+detach for non-blocking execution, fallback to sync when fork unavailable.
 
+### 26. CLAUDE_CONFIG_DIR Support
+
+Source: episodic-memory re-study (2026-03-30)
+
+- **Value**: Support users with multiple Claude Code profiles or non-standard config locations
+- **Implementation**: Check `ENV["CLAUDE_CONFIG_DIR"]` in `Configuration#global_db_path` before falling back to `~/.claude`
+- **Evidence**: episodic-memory `src/paths.ts:20-22` — `process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude')`
+- **Effort**: 0.5 days
+- **Trade-off**: None — purely additive, backwards compatible
+
+### 28. Code-Aware Transcript Chunking
+
+Source: QMD v2.0.1+unreleased re-study (2026-03-30)
+
+- **Value**: Better embeddings for transcripts containing code — detect fenced code blocks and apply AST-aware break points (function/class/import boundaries) rather than naive text splitting
+- **Implementation**: Detect ` ```language ` fences in transcript content, parse code blocks with tree-sitter (via ruby_tree_sitter gem or shelling out), score break points (class=100, func=90, type=80, import=60), merge with markdown break points from #22
+- **Evidence**: QMD `src/ast.ts` (392 lines) — web-tree-sitter with WASM grammars, `mergeBreakPoints()` combining AST + regex scores, graceful degradation on parse failure
+- **Consideration**: Only useful in combination with #22 (Document Chunking). Transcripts often contain significant code in tool_use results and assistant responses
+- **Effort**: 2-3 days (after #22)
+- **Trade-off**: Adds tree-sitter dependency; graceful fallback to regex-only chunking when grammar unavailable
+
+### 27. Usage Stats / ROI Tracking
+
+Source: grepai v0.35.0 re-study (2026-03-30)
+
+- **Value**: Demonstrate memory value to users — track recall hits, fact counts, query latency, and show ROI over time
+- **Implementation**: NDJSON stats file (`.claude/memory-stats.json`), fire-and-forget recording in MCP tool calls, `claude-memory stats` command for summary
+- **Evidence**: grepai `stats/` package — `stats.Recorder` with file-locking, goroutine recording with 100ms timeout, `stats.Summarize()` aggregation, per-day history
+- **Effort**: 2-3 days
+- **Trade-off**: Minor disk I/O per query; use fire-and-forget pattern to avoid latency impact
+
 ---
 
 ## Low Priority / Defer
@@ -219,6 +250,11 @@ Added `claude-memory export` command. Dumps facts with entities and provenance t
 - **Sub-Agent Delegation for Deep Recall** — lossless-claw spawns sub-agents for DAG traversal. Adds latency and complexity; our direct MCP tool responses are simpler and faster
 - **Message Parts Polymorphism** — lossless-claw's 10-column message_parts for tool calls, reasoning, patches. We don't store raw messages, so irrelevant
 - **OpenClaw ContextEngine Interface** — Tight framework coupling. Our MCP + hooks approach is more portable
+- **Chunk Strategy Option** — QMD's `--chunk-strategy auto` for code files. ClaudeMemory has no standalone chunking pipeline to configure (QMD v0.35.0)
+- **Custom Instructions via Env Var** — lossless-claw's `LCM_CUSTOM_INSTRUCTIONS` config stub exists but is never wired to summarization prompts. Incomplete pattern; our skill-based prompts are better (lossless-claw v0.5.2)
+- **OpenClaw Context Injection** — claude-mem v10.6.0's `appendSystemContext` with 60s cache replaces MEMORY.md writes. Our SessionStart hook context injection already does this (claude-mem v10.6.0)
+- **Message Parts Polymorphism** — lossless-claw's 10-column message_parts for tool calls, reasoning, patches. We don't store raw messages, so irrelevant
+- **OpenClaw ContextEngine Interface** — Tight framework coupling. Our MCP + hooks approach is more portable
 
 ---
 
@@ -241,22 +277,22 @@ Added `claude-memory export` command. Dumps facts with entities and provenance t
 ## References
 
 - [episodic-memory GitHub](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15)
-- [claude-mem GitHub](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.5.5)
-- [grepai GitHub](https://github.com/yoanbernabeu/grepai) - Semantic code search (latest)
+- [claude-mem GitHub](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.6.3)
+- [grepai GitHub](https://github.com/yoanbernabeu/grepai) - Semantic code search (v0.35.0)
 - [claude-supermemory GitHub](https://github.com/supermemoryai/claude-supermemory) - Cloud-backed memory (v2.0.1)
-- [QMD GitHub](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1)
+- [QMD GitHub](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1+unreleased)
 - [KBS GitHub](https://github.com/MadBomber/kbs) - Knowledge-Based System with RETE inference (v0.2.1)
-- [lossless-claw GitHub](https://github.com/martian-engineering/lossless-claw) - DAG-based lossless context management (v0.3.0)
+- [lossless-claw GitHub](https://github.com/martian-engineering/lossless-claw) - DAG-based lossless context management (v0.5.2)
 
 Influence documents:
-- [docs/influence/qmd.md](influence/qmd.md) - Updated 2026-03-10
-- [docs/influence/episodic-memory.md](influence/episodic-memory.md) - Updated 2026-03-09
-- [docs/influence/claude-mem.md](influence/claude-mem.md) - Updated 2026-03-09
-- [docs/influence/grepai.md](influence/grepai.md) - Updated 2026-03-09
-- [docs/influence/claude-supermemory.md](influence/claude-supermemory.md) - Updated 2026-03-09
-- [docs/influence/kbs.md](influence/kbs.md) - Updated 2026-03-09 (no changes)
-- [docs/influence/lossless-claw.md](influence/lossless-claw.md) - Updated 2026-03-16
+- [docs/influence/qmd.md](influence/qmd.md) - Re-studied 2026-03-30
+- [docs/influence/episodic-memory.md](influence/episodic-memory.md) - Re-studied 2026-03-30
+- [docs/influence/claude-mem.md](influence/claude-mem.md) - Re-studied 2026-03-30
+- [docs/influence/grepai.md](influence/grepai.md) - Re-studied 2026-03-30
+- [docs/influence/claude-supermemory.md](influence/claude-supermemory.md) - Re-studied 2026-03-30
+- [docs/influence/kbs.md](influence/kbs.md) - Re-studied 2026-03-30 (no changes)
+- [docs/influence/lossless-claw.md](influence/lossless-claw.md) - Re-studied 2026-03-30
 
 ---
 
-*Last updated: 2026-03-24 - Implemented 14 features total. Latest: Automatic Distillation Pipeline (#13 partial, #17), Intent Parameter for Recall (#3). Previously: Retrieval Score Traces (#5), Search Agent Delegation (#8), Embedded Skill Distribution (#12), Shell Completion (#18), Dynamic MCP Instructions (#11), Structured Error Classification (#16), Content-Addressed Dedup (#19), Dedup Before Vector Scoring (#20), Dedicated Maintenance Class (#10), Three-Level Escalation (#14), Tool Escalation Workflow (#15). Studied lossless-claw (v0.3.0). Implemented earlier: MCP Tool Annotations, MCP Stdout Protection, Worktree-Aware Git Root, Self-Excluding Conversations, Plugin Distribution, sqlite-vec, Database Compact, Fact Export, Background Processing, MCP Discovery Tools.*
+*Last updated: 2026-03-30 - Re-studied all 7 influencer repos. New improvements: CLAUDE_CONFIG_DIR support (#26), Usage Stats / ROI Tracking (#27). 7 new Features to Avoid entries. 14 features previously implemented through 2026-03-24.*

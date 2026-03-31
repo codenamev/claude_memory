@@ -3,6 +3,7 @@
 *Analysis Date: 2026-03-16*
 *Repository: https://github.com/martian-engineering/lossless-claw*
 *Version: 0.3.0 (commit 49949fb)*
+*Re-studied: 2026-03-30 — v0.5.2. 5 releases since last study. Core DAG architecture unchanged; changes are operational hardening. Custom Instructions (`LCM_CUSTOM_INSTRUCTIONS`) — config stub exists but never wired to summarization prompts, do not adopt. Session exclusion patterns (ignore + stateless) — clean implementation but low priority (we already have ContentSanitizer exclusion tags). Prompt Slot Pattern — does not exist in codebase, not applicable. New: CJK-aware FTS5 fallback with `icu` tokenizer detection worth considering. Also: provider auth error surfacing, summarizer timeouts, bootstrap checkpoints, Docker support, TUI doctor command.*
 
 ---
 

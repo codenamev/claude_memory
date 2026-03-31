@@ -3,6 +3,7 @@
 *Analysis Date: 2026-03-02*
 *Repository: https://github.com/obra/episodic-memory*
 *Version: 1.0.15 (commit 6feaa5b)*
+*Re-studied: 2026-03-30 — No changes since v1.0.15. Repo dormant. One adoptable pattern identified: CLAUDE_CONFIG_DIR env var support (`src/paths.ts:20-22`) for configurable Claude config directory. Orphaned MCP process prevention (SIGHUP handler in wrapper) not applicable — ClaudeMemory runs as single Ruby process, no wrapper/child architecture.*
 
 ---
 

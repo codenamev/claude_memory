@@ -4,6 +4,7 @@
 *Previous Analysis: 2026-03-02, 2026-02-02*
 *Repository: https://github.com/tobi/qmd*
 *Version: 2.0.1 (commit ae3604c)*
+*Re-studied: 2026-03-30 — v2.0.1+unreleased. One significant addition: AST-aware chunking (`src/ast.ts`, 392 lines) using web-tree-sitter with WASM grammars for TS/JS/Python/Go/Rust. Detects language from extension, parses AST, extracts break points at function/class/import boundaries (class=100, func=90, type=80, import=60). Merged with regex break points via `mergeBreakPoints()`. Opt-in via `--chunk-strategy auto`. While we ingest transcripts rather than source code, transcripts frequently contain embedded code in tool results and assistant responses. AST-aware break points could improve embedding quality for code-heavy transcripts when combined with Document Chunking (#22). Added as improvement #28 (Code-Aware Transcript Chunking).*
 
 ---
 

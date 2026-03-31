@@ -4,6 +4,7 @@
 *Previous Analysis: 2026-01-29*
 *Repository: https://github.com/yoanbernabeu/grepai*
 *Version: 0.34.0 (commit 1c7aba9)*
+*Re-studied: 2026-03-30 — v0.35.0. One release since last study (2026-03-16). Key addition: privacy-first usage stats tracking (`stats/` package) recording every search/trace to NDJSON file (`.grepai/stats.json`), computing output tokens vs grep-equivalent tokens with savings percentages and optional USD cost savings. Fire-and-forget recording via goroutine with 100ms timeout, file-locking for cross-process safety. Shell completion also added (we already have this via #18). `.grepaiignore` support not relevant.*
 
 ---
 

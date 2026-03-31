@@ -2,6 +2,7 @@
 
 *Analysis Date: 2026-03-02*
 *Previous Analysis: 2026-02-02*
+*Re-studied: 2026-03-30 — No meaningful code changes since v2.0.1. marketplace.json bumped to 0.0.3, added claude-code-review GitHub Action (anthropics/claude-code-action@v1). All findings remain current.*
 *Repository: https://github.com/supermemoryai/claude-supermemory*
 *Version: 2.0.0 (commit de39413)*
 
