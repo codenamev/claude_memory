@@ -5,17 +5,21 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest",
-            "timeout": 5
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 5,
+            "statusMessage": "Saving memory..."
           }
         ]
-      },
+      }
+    ],
+    "StopFailure": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "Saving memory..."
           }
         ]
       }
@@ -26,7 +30,8 @@
           {
             "type": "command",
             "command": "claude-memory hook context",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "Loading memory..."
           }
         ]
       }
@@ -36,27 +41,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "claude-memory hook sweep",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
             "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Saving memory..."
           },
           {
             "type": "command",
             "command": "claude-memory hook sweep --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Sweeping memory..."
           }
         ]
       }
@@ -66,27 +59,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "claude-memory hook sweep",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
             "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Saving memory..."
           },
           {
             "type": "command",
             "command": "claude-memory hook sweep --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Sweeping memory..."
           }
         ]
       }
@@ -96,17 +77,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
             "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "Saving memory..."
           }
         ]
       }
@@ -116,17 +89,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest",
-            "timeout": 15
+            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 15,
+            "statusMessage": "Saving memory..."
           }
         ]
-      },
+      }
+    ],
+    "Notification": [
       {
+        "matcher": "idle_prompt",
         "hooks": [
           {
             "type": "command",
-            "command": "claude-memory hook ingest --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
-            "timeout": 15
+            "command": "claude-memory hook sweep --db /Users/valentinostoll/src/claude_memory/.claude/memory.sqlite3",
+            "timeout": 10,
+            "statusMessage": "Sweeping memory..."
           }
         ]
       }
