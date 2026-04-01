@@ -22,19 +22,20 @@ module ClaudeMemory
       DEFAULT_API_URL = "https://api.openai.com/v1/embeddings"
       DEFAULT_MODEL = "text-embedding-3-small"
 
-      def initialize(env: ENV)
+      def initialize(model: nil, env: ENV)
         @api_key = env["CLAUDE_MEMORY_EMBEDDING_API_KEY"] || env["OPENAI_API_KEY"]
         @api_url = env["CLAUDE_MEMORY_EMBEDDING_API_URL"] || DEFAULT_API_URL
-        @model = env["CLAUDE_MEMORY_EMBEDDING_MODEL"] || DEFAULT_MODEL
+        @model = model || env["CLAUDE_MEMORY_EMBEDDING_MODEL"] || DEFAULT_MODEL
+        @known_dimensions = ModelRegistry.dimensions_for(@model)
 
         raise ArgumentError, "Set CLAUDE_MEMORY_EMBEDDING_API_KEY or OPENAI_API_KEY" unless @api_key
       end
 
       def name = "api"
 
-      # Dimensions are lazy — derived from the first API response and cached.
+      # Dimensions resolved from registry if known, otherwise lazy from first API response.
       def dimensions
-        @dimensions ||= fetch_dimensions
+        @dimensions ||= @known_dimensions || fetch_dimensions
       end
 
       # Generate embedding for a query text.

@@ -32,7 +32,8 @@ module ClaudeMemory
         "export" => "ExportCommand",
         "git-lfs" => "GitLfsCommand",
         "install-skill" => "InstallSkillCommand",
-        "completion" => "CompletionCommand"
+        "completion" => "CompletionCommand",
+        "embeddings" => "EmbeddingsCommand"
       }.freeze
 
       # Find a command class by name
