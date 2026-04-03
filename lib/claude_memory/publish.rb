@@ -70,6 +70,7 @@ module ClaudeMemory
           Sequel[:facts][:status],
           Sequel[:facts][:confidence],
           Sequel[:facts][:created_at],
+          Sequel[:facts][:category],
           Sequel[:entities][:canonical_name].as(:subject_name)
         )
         .where(Sequel[:facts][:status] => "active")
@@ -98,7 +99,7 @@ module ClaudeMemory
     end
 
     def generate_decisions_section(facts)
-      decisions = facts.select { |f| f[:predicate] == "decision" || f[:predicate]&.start_with?("decided_") }
+      decisions = facts.select { |f| f[:category] == "decision" }
       return "" if decisions.empty?
 
       lines = ["## Current Decisions\n"]
@@ -109,7 +110,7 @@ module ClaudeMemory
     end
 
     def generate_conventions_section(facts)
-      conventions = facts.select { |f| f[:predicate] == "convention" || f[:predicate]&.include?("_convention") }
+      conventions = facts.select { |f| f[:category] == "convention" }
       return "" if conventions.empty?
 
       lines = ["## Conventions\n"]
@@ -119,15 +120,46 @@ module ClaudeMemory
       lines.join("\n") + "\n"
     end
 
-    def generate_constraints_section(facts)
-      constraints = facts.select do |f|
-        %w[uses_database uses_framework deployment_platform auth_method].include?(f[:predicate])
+    def generate_architecture_section(facts)
+      arch = facts.select { |f| f[:category] == "architecture" }
+      return "" if arch.empty?
+
+      lines = ["## Architecture\n"]
+      arch.each do |a|
+        lines << "- **#{humanize(a[:predicate])}**: #{a[:object_literal]}"
       end
+      lines.join("\n") + "\n"
+    end
+
+    def generate_preferences_section(facts)
+      prefs = facts.select { |f| f[:category] == "preference" }
+      return "" if prefs.empty?
+
+      lines = ["## Preferences\n"]
+      prefs.each do |p|
+        lines << "- #{p[:object_literal]}"
+      end
+      lines.join("\n") + "\n"
+    end
+
+    def generate_constraints_section(facts)
+      constraints = facts.select { |f| f[:category] == "constraint" }
       return "" if constraints.empty?
 
-      lines = ["## Technical Constraints\n"]
+      lines = ["## Constraints\n"]
       constraints.each do |c|
-        lines << "- **#{humanize(c[:predicate])}**: #{c[:object_literal]}"
+        lines << "- #{c[:object_literal]}"
+      end
+      lines.join("\n") + "\n"
+    end
+
+    def generate_dependencies_section(facts)
+      deps = facts.select { |f| f[:category] == "dependency" }
+      return "" if deps.empty?
+
+      lines = ["## Dependencies\n"]
+      deps.each do |d|
+        lines << "- #{d[:object_literal]}"
       end
       lines.join("\n") + "\n"
     end
@@ -161,7 +193,10 @@ module ClaudeMemory
       sections = []
       sections << generate_decisions_section(facts)
       sections << generate_conventions_section(facts)
+      sections << generate_architecture_section(facts)
+      sections << generate_preferences_section(facts)
       sections << generate_constraints_section(facts)
+      sections << generate_dependencies_section(facts)
       sections << generate_conflicts_section(conflicts) if conflicts.any?
       sections << generate_supersessions_section(recent_supersessions) if recent_supersessions.any?
 

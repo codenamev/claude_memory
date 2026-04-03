@@ -31,6 +31,7 @@ module ClaudeMemory
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
+          category: result[:fact][:category],
           status: result[:fact][:status],
           source: result[:source]
         }
@@ -274,6 +275,7 @@ module ClaudeMemory
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
+          category: result[:fact][:category],
           scope: result[:fact][:scope],
           source: result[:source],
           similarity: result[:similarity]
@@ -342,6 +344,7 @@ module ClaudeMemory
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
+          category: result[:fact][:category],
           scope: result[:fact][:scope],
           source: result[:source]
         }
@@ -387,6 +390,7 @@ module ClaudeMemory
           subject: result[:fact][:subject_name],
           predicate: result[:fact][:predicate],
           object: result[:fact][:object_literal],
+          category: result[:fact][:category],
           scope: result[:fact][:scope],
           source: result[:source],
           receipts: result[:receipts].map { |r| format_receipt(r) }

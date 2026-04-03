@@ -170,8 +170,9 @@ module ClaudeMemory
                     type: "object",
                     properties: {
                       subject: {type: "string", description: "Entity name or 'repo' for project-level facts"},
-                      predicate: {type: "string", description: "Relationship type: uses_database, uses_framework, convention, decision, auth_method, deployment_platform"},
+                      predicate: {type: "string", description: "Relationship type: uses_database, uses_framework, convention, decision, auth_method, deployment_platform, testing_framework, api_style, depends_on, prefers, avoids, architecture_pattern, naming_convention"},
                       object: {type: "string", description: "The value or target entity"},
+                      category: {type: "string", enum: ["decision", "convention", "architecture", "preference", "constraint", "dependency", "general"], description: "Knowledge category. Auto-inferred from predicate if omitted."},
                       confidence: {type: "number", description: "0.0-1.0 how confident"},
                       quote: {type: "string", description: "Source text excerpt (max 200 chars)"},
                       strength: {type: "string", enum: ["stated", "inferred"], description: "Was this explicitly stated or inferred?"},

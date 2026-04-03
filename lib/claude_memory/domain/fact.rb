@@ -7,7 +7,7 @@ module ClaudeMemory
     class Fact
       attr_reader :id, :docid, :subject_name, :predicate, :object_literal,
         :status, :confidence, :scope, :project_path,
-        :valid_from, :valid_to, :created_at
+        :valid_from, :valid_to, :created_at, :category
 
       def initialize(attributes)
         @id = attributes[:id]
@@ -22,6 +22,7 @@ module ClaudeMemory
         @valid_from = attributes[:valid_from]
         @valid_to = attributes[:valid_to]
         @created_at = attributes[:created_at]
+        @category = attributes[:category] || "general"
 
         validate!
         freeze
@@ -56,7 +57,8 @@ module ClaudeMemory
           project_path: project_path,
           valid_from: valid_from,
           valid_to: valid_to,
-          created_at: created_at
+          created_at: created_at,
+          category: category
         }
       end
 

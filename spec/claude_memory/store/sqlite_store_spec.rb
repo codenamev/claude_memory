@@ -159,6 +159,31 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore do
       expect(facts.size).to eq(1)
       expect(facts.first[:status]).to eq("superseded")
     end
+
+    it "auto-infers category from predicate" do
+      id = store.insert_fact(subject_entity_id: entity_id, predicate: "uses_database", object_literal: "postgresql")
+      fact = store.facts.where(id: id).first
+      expect(fact[:category]).to eq("architecture")
+    end
+
+    it "uses explicit category when provided" do
+      id = store.insert_fact(subject_entity_id: entity_id, predicate: "uses_database", object_literal: "postgresql", category: "decision")
+      fact = store.facts.where(id: id).first
+      expect(fact[:category]).to eq("decision")
+    end
+
+    it "retrieves facts by category" do
+      store.insert_fact(subject_entity_id: entity_id, predicate: "uses_database", object_literal: "postgresql")
+      store.insert_fact(subject_entity_id: entity_id, predicate: "convention", object_literal: "snake_case")
+
+      arch_facts = store.facts_by_category("architecture")
+      expect(arch_facts.size).to eq(1)
+      expect(arch_facts.first[:object_literal]).to eq("postgresql")
+
+      conv_facts = store.facts_by_category("convention")
+      expect(conv_facts.size).to eq(1)
+      expect(conv_facts.first[:object_literal]).to eq("snake_case")
+    end
   end
 
   describe "provenance" do

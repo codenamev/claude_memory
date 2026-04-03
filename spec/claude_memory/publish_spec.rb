@@ -52,12 +52,12 @@ RSpec.describe ClaudeMemory::Publish do
       end
     end
 
-    context "with constraints" do
-      it "includes constraints section" do
+    context "with architecture facts" do
+      it "includes architecture section" do
         create_fact("uses_database", "postgresql")
         create_fact("deployment_platform", "aws")
         snapshot = publish.generate_snapshot
-        expect(snapshot).to include("## Technical Constraints")
+        expect(snapshot).to include("## Architecture")
         expect(snapshot).to include("postgresql")
         expect(snapshot).to include("aws")
       end

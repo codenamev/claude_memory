@@ -76,6 +76,28 @@ module ClaudeMemory
         end
       end
 
+      # Yields each store with its source label ("project"/"global").
+      # Scope "all" yields both, "project"/"global" yields one.
+      def each_store(scope: "all")
+        case scope
+        when "all"
+          if project_exists?
+            ensure_project!
+            yield @project_store, "project"
+          end
+          if global_exists?
+            ensure_global!
+            yield @global_store, "global"
+          end
+        when "project"
+          ensure_project!
+          yield @project_store, "project"
+        when "global"
+          ensure_global!
+          yield @global_store, "global"
+        end
+      end
+
       def promote_fact(fact_id)
         ensure_both!
 
@@ -116,7 +138,8 @@ module ClaudeMemory
             confidence: fact[:confidence],
             created_from: "promoted:#{@project_path}:#{fact_id}",
             scope: "global",
-            project_path: nil
+            project_path: nil,
+            category: fact[:category] || "general"
           )
 
           provenance_records.each do |prov|

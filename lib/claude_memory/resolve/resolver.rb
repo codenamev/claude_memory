@@ -121,6 +121,10 @@ module ClaudeMemory
       def insert_new_fact(fact_data, subject_id, entity_ids, occurred_at, project_path:, scope:)
         fact_scope = fact_data[:scope_hint] || scope
         fact_project = (fact_scope == "global") ? nil : project_path
+        category = Core::CategoryInference.infer(
+          fact_data[:predicate],
+          explicit_category: fact_data[:category]
+        )
 
         @store.insert_fact(
           subject_entity_id: subject_id,
@@ -131,7 +135,8 @@ module ClaudeMemory
           confidence: fact_data[:confidence] || 1.0,
           valid_from: occurred_at,
           scope: fact_scope,
-          project_path: fact_project
+          project_path: fact_project,
+          category: category
         )
       end
 
@@ -159,6 +164,10 @@ module ClaudeMemory
 
       def create_conflict(existing_fact_id, new_fact_data, subject_id, content_item_id, occurred_at, project_path:, scope:)
         # Already within transaction from resolve_fact
+        category = Core::CategoryInference.infer(
+          new_fact_data[:predicate],
+          explicit_category: new_fact_data[:category]
+        )
         new_fact_id = @store.insert_fact(
           subject_entity_id: subject_id,
           predicate: new_fact_data[:predicate],
@@ -168,7 +177,8 @@ module ClaudeMemory
           status: "disputed",
           valid_from: occurred_at,
           scope: scope,
-          project_path: project_path
+          project_path: project_path,
+          category: category
         )
 
         @store.insert_conflict(

@@ -5,7 +5,7 @@ module ClaudeMemory
     # Schema migration and version management for SQLiteStore.
     # Handles Sequel migrations, legacy version syncing, and initial setup.
     module SchemaManager
-      SCHEMA_VERSION = 12
+      SCHEMA_VERSION = 13
 
       private
 

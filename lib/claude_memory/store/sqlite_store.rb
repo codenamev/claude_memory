@@ -168,9 +168,10 @@ module ClaudeMemory
 
       def insert_fact(subject_entity_id:, predicate:, object_entity_id: nil, object_literal: nil,
         datatype: nil, polarity: "positive", valid_from: nil, status: "active",
-        confidence: 1.0, created_from: nil, scope: "project", project_path: nil)
+        confidence: 1.0, created_from: nil, scope: "project", project_path: nil, category: nil)
         now = Time.now.utc.iso8601
         docid = generate_docid(subject_entity_id, predicate, object_literal, now)
+        resolved_category = category || Core::CategoryInference.infer(predicate)
         facts.insert(
           subject_entity_id: subject_entity_id,
           predicate: predicate,
@@ -185,7 +186,8 @@ module ClaudeMemory
           created_at: now,
           scope: scope,
           project_path: project_path,
-          docid: docid
+          docid: docid,
+          category: resolved_category
         )
       end
 
@@ -222,6 +224,27 @@ module ClaudeMemory
           .where(Sequel.~(embedding_json: nil))
           .where(status: "active")
           .select(:id, :subject_entity_id, :predicate, :object_literal, :embedding_json, :scope)
+          .limit(limit)
+          .all
+      end
+
+      def facts_by_category(category, limit: 20, status: "active")
+        facts
+          .left_join(:entities, id: :subject_entity_id)
+          .where(Sequel[:facts][:category] => category, Sequel[:facts][:status] => status)
+          .select(
+            Sequel[:facts][:id],
+            Sequel[:facts][:docid],
+            Sequel[:facts][:predicate],
+            Sequel[:facts][:object_literal],
+            Sequel[:facts][:category],
+            Sequel[:facts][:status],
+            Sequel[:facts][:confidence],
+            Sequel[:facts][:scope],
+            Sequel[:facts][:created_at],
+            Sequel[:entities][:canonical_name].as(:subject_name)
+          )
+          .order(Sequel.desc(Sequel[:facts][:created_at]))
           .limit(limit)
           .all
       end

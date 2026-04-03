@@ -115,7 +115,8 @@ module ClaudeMemory
           confidence: 0.7,
           quote: quote,
           strength: "inferred",
-          scope_hint: scope_hint
+          scope_hint: scope_hint,
+          category: Core::CategoryInference.infer(predicate)
         }
       end
     end

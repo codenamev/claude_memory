@@ -163,7 +163,8 @@ RSpec.describe ClaudeMemory::Domain::Fact do
         project_path: "/path",
         valid_from: "2024-01-01",
         valid_to: "2024-12-31",
-        created_at: "2024-01-01"
+        created_at: "2024-01-01",
+        category: "general"
       })
     end
 

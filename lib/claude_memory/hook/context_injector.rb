@@ -15,9 +15,9 @@ module ClaudeMemory
       FRESH_SESSION_SOURCES = %w[startup resume clear].freeze
 
       QUERIES = {
-        decisions: {query: "decision constraint rule requirement", scope: "all"},
-        conventions: {query: "convention style format pattern prefer", scope: "all"},
-        architecture: {query: "uses framework implements architecture pattern", scope: "all"}
+        decisions: {query: "decision constraint rule requirement", category: "decision", scope: "all"},
+        conventions: {query: "convention style format pattern prefer", category: "convention", scope: "all"},
+        architecture: {query: "uses framework implements architecture pattern", category: "architecture", scope: "all"}
       }.freeze
 
       def initialize(manager, source: nil)
@@ -54,12 +54,26 @@ module ClaudeMemory
         @source.nil? || FRESH_SESSION_SOURCES.include?(@source)
       end
 
-      def fetch(category, limit)
-        config = QUERIES.fetch(category)
+      def fetch(shortcut_name, limit)
+        config = QUERIES.fetch(shortcut_name)
         results = @recall.query(config[:query], limit: limit, scope: config[:scope])
-        results.map { |r| format_fact(r[:fact]) }
+        formatted = results.map { |r| format_fact(r[:fact]) }
+
+        # Supplement with category-based lookup for better coverage
+        if config[:category] && @manager.respond_to?(:each_store)
+          seen = formatted.compact.to_set
+          @manager.each_store(scope: config[:scope]) do |store, _source|
+            store.facts_by_category(config[:category], limit: limit).each do |f|
+              text = format_fact(f)
+              formatted << text if text && !seen.include?(text)
+              seen << text if text
+            end
+          end
+        end
+
+        formatted.compact.uniq.first(limit)
       rescue => e
-        ClaudeMemory.logger.debug("ContextInjector#fetch(#{category}) failed: #{e.message}")
+        ClaudeMemory.logger.debug("ContextInjector#fetch(#{shortcut_name}) failed: #{e.message}")
         []
       end
 
@@ -104,6 +118,7 @@ module ClaudeMemory
           "followed by `memory.mark_distilled` for each item.",
           "",
           "**What to extract:** technology decisions, conventions, preferences, architecture",
+          "**Fact categories:** decision, convention, architecture, preference, constraint, dependency",
           "**What to skip:** debugging steps, code output, transient errors"
         ]
 
