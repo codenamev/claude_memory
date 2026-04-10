@@ -31,6 +31,10 @@ module ClaudeMemory
 
       private
 
+      def inspector
+        @inspector ||= Embeddings::Inspector.new
+      end
+
       def show_config
         provider = ENV["CLAUDE_MEMORY_EMBEDDING_PROVIDER"] || "tfidf"
         model = ENV["CLAUDE_MEMORY_EMBEDDING_MODEL"]
@@ -41,7 +45,6 @@ module ClaudeMemory
         stdout.puts "Provider:  #{provider}"
         stdout.puts "Model:     #{model || "(default)"}"
 
-        # Show resolved model info
         if model
           info = Embeddings::ModelRegistry.find(model)
           if info
@@ -60,8 +63,10 @@ module ClaudeMemory
 
         stdout.puts "API URL:   #{api_url}" if api_url && provider == "api"
 
-        # Show database state if available
-        show_database_state
+        inspector.database_states.each do |state|
+          stdout.puts ""
+          stdout.puts "#{state.label.capitalize} DB: provider=#{state.provider || "unknown"}, dimensions=#{state.dimensions || "unknown"}"
+        end
 
         stdout.puts ""
         stdout.puts "ENV variables:"
@@ -101,41 +106,62 @@ module ClaudeMemory
         stdout.puts ""
 
         ok = true
-
-        # Check provider availability
-        case provider_name
-        when "fastembed"
-          ok &= check_fastembed
-        when "api"
-          ok &= check_api_config
-        when "tfidf"
-          stdout.puts "  [OK] tfidf provider (built-in, always available)"
-        else
-          stdout.puts "  [FAIL] Unknown provider: #{provider_name}"
-          ok = false
-        end
-
-        # Check model validity
-        if model_name
-          info = Embeddings::ModelRegistry.find(model_name)
-          if info
-            if info.provider != provider_name
-              stdout.puts "  [WARN] Model '#{model_name}' is for '#{info.provider}' provider, but '#{provider_name}' is selected"
-              stdout.puts "         Set CLAUDE_MEMORY_EMBEDDING_PROVIDER=#{info.provider}"
-            else
-              stdout.puts "  [OK] Model '#{model_name}' (#{info.dimensions}-dim)"
-            end
-          else
-            stdout.puts "  [INFO] Model '#{model_name}' not in registry (dimensions will be auto-detected)"
-          end
-        end
-
-        # Check database dimension compatibility
-        ok &= check_dimension_compatibility(provider_name, model_name)
+        ok &= check_provider(provider_name)
+        ok &= check_model(provider_name, model_name) if model_name
+        ok &= render_dimension_checks(provider_name, model_name)
 
         stdout.puts ""
         stdout.puts ok ? "All checks passed." : "Some checks failed. See above."
         ok ? 0 : 1
+      end
+
+      def check_provider(name)
+        case name
+        when "fastembed"
+          check_fastembed
+        when "api"
+          check_api_config
+        when "tfidf"
+          stdout.puts "  [OK] tfidf provider (built-in, always available)"
+          true
+        else
+          stdout.puts "  [FAIL] Unknown provider: #{name}"
+          false
+        end
+      end
+
+      def check_model(provider_name, model_name)
+        info = Embeddings::ModelRegistry.find(model_name)
+        if info
+          if info.provider != provider_name
+            stdout.puts "  [WARN] Model '#{model_name}' is for '#{info.provider}' provider, but '#{provider_name}' is selected"
+            stdout.puts "         Set CLAUDE_MEMORY_EMBEDDING_PROVIDER=#{info.provider}"
+          else
+            stdout.puts "  [OK] Model '#{model_name}' (#{info.dimensions}-dim)"
+          end
+        else
+          stdout.puts "  [INFO] Model '#{model_name}' not in registry (dimensions will be auto-detected)"
+        end
+        true
+      end
+
+      def render_dimension_checks(provider_name, model_name)
+        ok = true
+
+        inspector.dimension_checks(provider_name, model_name).each do |check|
+          case check.status
+          when :mismatch
+            stdout.puts "  [WARN] #{check.label}: Dimension mismatch (stored: #{check.stored_dims}, current: #{check.current_dims})"
+            stdout.puts "         Re-index with: claude-memory index --force --scope #{check.label}"
+            ok = false
+          when :match
+            stdout.puts "  [OK] #{check.label}: #{check.stored_dims}-dim (provider: #{check.stored_provider || "unknown"})"
+          when :fresh
+            stdout.puts "  [INFO] #{check.label}: No embeddings indexed yet"
+          end
+        end
+
+        ok
       end
 
       def check_fastembed
@@ -160,71 +186,11 @@ module ClaudeMemory
         end
       end
 
-      def check_dimension_compatibility(provider_name, model_name)
-        ok = true
-
-        with_each_store do |label, store|
-          stored_dims = store.get_meta("embedding_dimensions")&.to_i
-          stored_provider = store.get_meta("embedding_provider")
-
-          if stored_dims
-            current_dims = resolve_current_dimensions(provider_name, model_name)
-
-            if current_dims && current_dims != stored_dims
-              stdout.puts "  [WARN] #{label}: Dimension mismatch (stored: #{stored_dims}, current: #{current_dims})"
-              stdout.puts "         Re-index with: claude-memory index --force --scope #{label}"
-              ok = false
-            else
-              stdout.puts "  [OK] #{label}: #{stored_dims}-dim (provider: #{stored_provider || "unknown"})"
-            end
-          else
-            stdout.puts "  [INFO] #{label}: No embeddings indexed yet"
-          end
-        end
-
-        ok
-      end
-
-      def resolve_current_dimensions(provider_name, model_name)
-        if model_name
-          Embeddings::ModelRegistry.dimensions_for(model_name)
-        else
-          Embeddings::ModelRegistry.default_for_provider(provider_name)&.dimensions
-        end
-      end
-
       def provider_label(provider)
         case provider
         when "fastembed" then "fastembed (local ONNX, no API key)"
         when "api" then "api (OpenAI-compatible endpoints, requires API key)"
         when "tfidf" then "tfidf (built-in, no dependencies)"
-        end
-      end
-
-      def show_database_state
-        with_each_store do |label, store|
-          stored_provider = store.get_meta("embedding_provider")
-          stored_dims = store.get_meta("embedding_dimensions")
-
-          next unless stored_provider || stored_dims
-
-          stdout.puts ""
-          stdout.puts "#{label.capitalize} DB: provider=#{stored_provider || "unknown"}, dimensions=#{stored_dims || "unknown"}"
-        end
-      end
-
-      def with_each_store
-        config = Configuration.new
-
-        [["global", config.global_db_path], ["project", config.project_db_path]].each do |label, path|
-          next unless File.exist?(path)
-
-          store = Store::SQLiteStore.new(path)
-          begin
-            yield label, store
-          ensure
-            store.close
-          end
         end
       end
     end

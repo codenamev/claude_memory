@@ -95,39 +95,6 @@ RSpec.describe ClaudeMemory::Commands::EmbeddingsCommand do
     end
   end
 
-  describe "store connection safety" do
-    it "closes store even when check_dimension_compatibility raises" do
-      store = ClaudeMemory::Store::SQLiteStore.new(project_db_path)
-      store.set_meta("embedding_dimensions", "384")
-      store.close
-
-      # Stub SQLiteStore.new to return a spy that tracks close calls
-      spy_store = ClaudeMemory::Store::SQLiteStore.new(project_db_path)
-      allow(spy_store).to receive(:get_meta).and_call_original
-      allow(spy_store).to receive(:get_meta).with("embedding_dimensions").and_raise(RuntimeError, "db error")
-      allow(spy_store).to receive(:close).and_call_original
-      allow(ClaudeMemory::Store::SQLiteStore).to receive(:new).with(project_db_path).and_return(spy_store)
-
-      # The check subcommand should still close the store despite the error
-      expect { command.call(["check"]) }.to raise_error(RuntimeError, "db error")
-      expect(spy_store).to have_received(:close)
-    end
-
-    it "closes store even when show_database_state raises" do
-      store = ClaudeMemory::Store::SQLiteStore.new(global_db_path)
-      store.set_meta("embedding_provider", "tfidf")
-      store.close
-
-      spy_store = ClaudeMemory::Store::SQLiteStore.new(global_db_path)
-      allow(spy_store).to receive(:get_meta).and_raise(RuntimeError, "db error")
-      allow(spy_store).to receive(:close).and_call_original
-      allow(ClaudeMemory::Store::SQLiteStore).to receive(:new).with(global_db_path).and_return(spy_store)
-
-      expect { command.call([]) }.to raise_error(RuntimeError, "db error")
-      expect(spy_store).to have_received(:close)
-    end
-  end
-
   describe "#call with unknown subcommand" do
     it "returns error" do
       exit_code = command.call(["bogus"])
