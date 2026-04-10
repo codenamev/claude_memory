@@ -4,6 +4,13 @@ require "spec_helper"
 
 RSpec.describe ClaudeMemory::Embeddings do
   describe ".resolve" do
+    # Helper to resolve fastembed providers, skipping when gem unavailable
+    def resolve_or_skip(...)
+      described_class.resolve(...)
+    rescue LoadError, StandardError => e
+      skip "fastembed not available: #{e.message}"
+    end
+
     it "defaults to tfidf when no name or ENV is set" do
       provider = described_class.resolve(env: {})
       expect(provider).to be_a(ClaudeMemory::Embeddings::Generator)
@@ -17,11 +24,7 @@ RSpec.describe ClaudeMemory::Embeddings do
     end
 
     it "resolves 'fastembed' by name" do
-      provider = begin
-        described_class.resolve("fastembed", env: {})
-      rescue LoadError, StandardError => e
-        skip "fastembed not available: #{e.message}"
-      end
+      provider = resolve_or_skip("fastembed", env: {})
       expect(provider).to be_a(ClaudeMemory::Embeddings::FastembedAdapter)
       expect(provider.name).to eq("fastembed")
       expect(provider.dimensions).to eq(384)
@@ -57,11 +60,7 @@ RSpec.describe ClaudeMemory::Embeddings do
 
     context "with model: parameter" do
       it "forwards model to fastembed adapter with correct dimensions" do
-        adapter = begin
-          described_class.resolve("fastembed", model: "BAAI/bge-base-en-v1.5", env: {})
-        rescue LoadError, StandardError => e
-          skip "fastembed not available: #{e.message}"
-        end
+        adapter = resolve_or_skip("fastembed", model: "BAAI/bge-base-en-v1.5", env: {})
         expect(adapter.model_name).to eq("BAAI/bge-base-en-v1.5")
         expect(adapter.dimensions).to eq(768)
       end
@@ -72,11 +71,7 @@ RSpec.describe ClaudeMemory::Embeddings do
       end
 
       it "infers fastembed provider from model name" do
-        provider = begin
-          described_class.resolve(model: "BAAI/bge-small-en-v1.5", env: {})
-        rescue LoadError, StandardError => e
-          skip "fastembed not available: #{e.message}"
-        end
+        provider = resolve_or_skip(model: "BAAI/bge-small-en-v1.5", env: {})
         expect(provider).to be_a(ClaudeMemory::Embeddings::FastembedAdapter)
       end
 
@@ -86,11 +81,7 @@ RSpec.describe ClaudeMemory::Embeddings do
       end
 
       it "reads model from CLAUDE_MEMORY_EMBEDDING_MODEL ENV and infers provider" do
-        provider = begin
-          described_class.resolve(env: {"CLAUDE_MEMORY_EMBEDDING_MODEL" => "BAAI/bge-base-en-v1.5"})
-        rescue LoadError, StandardError => e
-          skip "fastembed not available: #{e.message}"
-        end
+        provider = resolve_or_skip(env: {"CLAUDE_MEMORY_EMBEDDING_MODEL" => "BAAI/bge-base-en-v1.5"})
         expect(provider).to be_a(ClaudeMemory::Embeddings::FastembedAdapter)
         expect(provider.dimensions).to eq(768)
       end

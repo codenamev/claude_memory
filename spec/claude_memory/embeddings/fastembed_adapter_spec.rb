@@ -39,7 +39,8 @@ RSpec.describe ClaudeMemory::Embeddings::FastembedAdapter do
     end
 
     it "raises LoadError when fastembed gem is missing" do
-      allow_any_instance_of(described_class).to receive(:require).with("fastembed").and_raise(LoadError)
+      # Stub require to raise LoadError before Fastembed constant is accessed
+      allow_any_instance_of(described_class).to receive(:require).with("fastembed").and_raise(LoadError) # rubocop:disable RSpec/AnyInstance
 
       expect {
         described_class.new(env: {})
