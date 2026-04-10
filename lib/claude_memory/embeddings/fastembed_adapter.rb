@@ -73,8 +73,8 @@ module ClaudeMemory
       # This handles models added to fastembed-rb but not yet in our registry.
       def probe_dimensions_from_fastembed
         if defined?(Fastembed::SUPPORTED_MODELS)
-          entry = Fastembed::SUPPORTED_MODELS.find { |name, _info| name == @model_name }
-          return entry[1].dim if entry
+          info = Fastembed::SUPPORTED_MODELS[@model_name]
+          return info.dim if info
         end
 
         # Last resort: generate a test embedding and measure its size
