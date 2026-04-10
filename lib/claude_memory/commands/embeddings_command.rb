@@ -169,24 +169,26 @@ module ClaudeMemory
           next unless File.exist?(path)
 
           store = Store::SQLiteStore.new(path)
-          stored_dims = store.get_meta("embedding_dimensions")&.to_i
-          stored_provider = store.get_meta("embedding_provider")
+          begin
+            stored_dims = store.get_meta("embedding_dimensions")&.to_i
+            stored_provider = store.get_meta("embedding_provider")
 
-          if stored_dims
-            current_dims = resolve_current_dimensions(provider_name, model_name)
+            if stored_dims
+              current_dims = resolve_current_dimensions(provider_name, model_name)
 
-            if current_dims && current_dims != stored_dims
-              stdout.puts "  [WARN] #{label}: Dimension mismatch (stored: #{stored_dims}, current: #{current_dims})"
-              stdout.puts "         Re-index with: claude-memory index --force --scope #{label}"
-              ok = false
+              if current_dims && current_dims != stored_dims
+                stdout.puts "  [WARN] #{label}: Dimension mismatch (stored: #{stored_dims}, current: #{current_dims})"
+                stdout.puts "         Re-index with: claude-memory index --force --scope #{label}"
+                ok = false
+              else
+                stdout.puts "  [OK] #{label}: #{stored_dims}-dim (provider: #{stored_provider || "unknown"})"
+              end
             else
-              stdout.puts "  [OK] #{label}: #{stored_dims}-dim (provider: #{stored_provider || "unknown"})"
+              stdout.puts "  [INFO] #{label}: No embeddings indexed yet"
             end
-          else
-            stdout.puts "  [INFO] #{label}: No embeddings indexed yet"
+          ensure
+            store.close
           end
-
-          store.close
         end
 
         ok
@@ -224,14 +226,17 @@ module ClaudeMemory
           next unless File.exist?(path)
 
           store = Store::SQLiteStore.new(path)
-          stored_provider = store.get_meta("embedding_provider")
-          stored_dims = store.get_meta("embedding_dimensions")
-          store.close
+          begin
+            stored_provider = store.get_meta("embedding_provider")
+            stored_dims = store.get_meta("embedding_dimensions")
 
-          next unless stored_provider || stored_dims
+            next unless stored_provider || stored_dims
 
-          stdout.puts ""
-          stdout.puts "#{label.capitalize} DB: provider=#{stored_provider || "unknown"}, dimensions=#{stored_dims || "unknown"}"
+            stdout.puts ""
+            stdout.puts "#{label.capitalize} DB: provider=#{stored_provider || "unknown"}, dimensions=#{stored_dims || "unknown"}"
+          ensure
+            store.close
+          end
         end
       end
     end
