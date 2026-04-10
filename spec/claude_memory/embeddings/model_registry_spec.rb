@@ -73,6 +73,30 @@ RSpec.describe ClaudeMemory::Embeddings::ModelRegistry do
     end
   end
 
+  describe ".default_for_provider" do
+    it "returns the default fastembed model" do
+      info = described_class.default_for_provider("fastembed")
+      expect(info).not_to be_nil
+      expect(info.name).to eq("BAAI/bge-small-en-v1.5")
+    end
+
+    it "returns the default api model" do
+      info = described_class.default_for_provider("api")
+      expect(info).not_to be_nil
+      expect(info.name).to eq("text-embedding-3-small")
+    end
+
+    it "returns the default tfidf model" do
+      info = described_class.default_for_provider("tfidf")
+      expect(info).not_to be_nil
+      expect(info.name).to eq("tfidf")
+    end
+
+    it "returns nil for unknown provider" do
+      expect(described_class.default_for_provider("unknown")).to be_nil
+    end
+  end
+
   describe "MODELS" do
     it "all have required fields" do
       described_class::MODELS.each do |model|

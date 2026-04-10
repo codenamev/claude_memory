@@ -159,6 +159,12 @@ module ClaudeMemory
 
       MODELS_BY_NAME = MODELS.each_with_object({}) { |m, h| h[m.name] = m }.freeze
 
+      DEFAULTS = {
+        "fastembed" => "BAAI/bge-small-en-v1.5",
+        "api" => "text-embedding-3-small",
+        "tfidf" => "tfidf"
+      }.freeze
+
       # Find a model by name.
       # @param name [String] model name (e.g., "BAAI/bge-small-en-v1.5")
       # @return [ModelInfo, nil]
@@ -190,6 +196,14 @@ module ClaudeMemory
       # @return [Integer, nil]
       def self.dimensions_for(name)
         find(name)&.dimensions
+      end
+
+      # Return the default ModelInfo for a provider.
+      # @param provider [String] "fastembed", "api", or "tfidf"
+      # @return [ModelInfo, nil]
+      def self.default_for_provider(provider)
+        default_name = DEFAULTS[provider]
+        find(default_name) if default_name
       end
     end
   end

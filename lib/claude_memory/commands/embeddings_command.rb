@@ -51,10 +51,9 @@ module ClaudeMemory
             stdout.puts "Dimensions: (unknown - will be discovered at runtime)"
           end
         else
-          default_model = default_model_for(provider)
-          info = Embeddings::ModelRegistry.find(default_model)
+          info = Embeddings::ModelRegistry.default_for_provider(provider)
           if info
-            stdout.puts "Default model: #{default_model}"
+            stdout.puts "Default model: #{info.name}"
             stdout.puts "Dimensions: #{info.dimensions}"
           end
         end
@@ -162,32 +161,24 @@ module ClaudeMemory
       end
 
       def check_dimension_compatibility(provider_name, model_name)
-        config = Configuration.new
         ok = true
 
-        [["global", config.global_db_path], ["project", config.project_db_path]].each do |label, path|
-          next unless File.exist?(path)
+        with_each_store do |label, store|
+          stored_dims = store.get_meta("embedding_dimensions")&.to_i
+          stored_provider = store.get_meta("embedding_provider")
 
-          store = Store::SQLiteStore.new(path)
-          begin
-            stored_dims = store.get_meta("embedding_dimensions")&.to_i
-            stored_provider = store.get_meta("embedding_provider")
+          if stored_dims
+            current_dims = resolve_current_dimensions(provider_name, model_name)
 
-            if stored_dims
-              current_dims = resolve_current_dimensions(provider_name, model_name)
-
-              if current_dims && current_dims != stored_dims
-                stdout.puts "  [WARN] #{label}: Dimension mismatch (stored: #{stored_dims}, current: #{current_dims})"
-                stdout.puts "         Re-index with: claude-memory index --force --scope #{label}"
-                ok = false
-              else
-                stdout.puts "  [OK] #{label}: #{stored_dims}-dim (provider: #{stored_provider || "unknown"})"
-              end
+            if current_dims && current_dims != stored_dims
+              stdout.puts "  [WARN] #{label}: Dimension mismatch (stored: #{stored_dims}, current: #{current_dims})"
+              stdout.puts "         Re-index with: claude-memory index --force --scope #{label}"
+              ok = false
             else
-              stdout.puts "  [INFO] #{label}: No embeddings indexed yet"
+              stdout.puts "  [OK] #{label}: #{stored_dims}-dim (provider: #{stored_provider || "unknown"})"
             end
-          ensure
-            store.close
+          else
+            stdout.puts "  [INFO] #{label}: No embeddings indexed yet"
           end
         end
 
@@ -198,16 +189,7 @@ module ClaudeMemory
         if model_name
           Embeddings::ModelRegistry.dimensions_for(model_name)
         else
-          default = default_model_for(provider_name)
-          Embeddings::ModelRegistry.dimensions_for(default)
-        end
-      end
-
-      def default_model_for(provider)
-        case provider
-        when "tfidf" then "tfidf"
-        when "fastembed" then FastembedAdapter::DEFAULT_MODEL
-        when "api" then ApiAdapter::DEFAULT_MODEL
+          Embeddings::ModelRegistry.default_for_provider(provider_name)&.dimensions
         end
       end
 
@@ -220,6 +202,18 @@ module ClaudeMemory
       end
 
       def show_database_state
+        with_each_store do |label, store|
+          stored_provider = store.get_meta("embedding_provider")
+          stored_dims = store.get_meta("embedding_dimensions")
+
+          next unless stored_provider || stored_dims
+
+          stdout.puts ""
+          stdout.puts "#{label.capitalize} DB: provider=#{stored_provider || "unknown"}, dimensions=#{stored_dims || "unknown"}"
+        end
+      end
+
+      def with_each_store
         config = Configuration.new
 
         [["global", config.global_db_path], ["project", config.project_db_path]].each do |label, path|
@@ -227,13 +221,7 @@ module ClaudeMemory
 
           store = Store::SQLiteStore.new(path)
           begin
-            stored_provider = store.get_meta("embedding_provider")
-            stored_dims = store.get_meta("embedding_dimensions")
-
-            next unless stored_provider || stored_dims
-
-            stdout.puts ""
-            stdout.puts "#{label.capitalize} DB: provider=#{stored_provider || "unknown"}, dimensions=#{stored_dims || "unknown"}"
+            yield label, store
           ensure
             store.close
           end
