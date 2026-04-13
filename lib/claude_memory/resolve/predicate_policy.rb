@@ -4,15 +4,31 @@ module ClaudeMemory
   module Resolve
     class PredicatePolicy
       POLICIES = {
+        # Core predicates (original)
         "convention" => {cardinality: :multi, exclusive: false},
         "decision" => {cardinality: :multi, exclusive: false},
         "auth_method" => {cardinality: :single, exclusive: true},
         "uses_database" => {cardinality: :single, exclusive: true},
         "uses_framework" => {cardinality: :single, exclusive: true},
-        "deployment_platform" => {cardinality: :single, exclusive: true}
+        "deployment_platform" => {cardinality: :single, exclusive: true},
+
+        # Extended multi-value predicates (accumulate)
+        "preference" => {cardinality: :multi, exclusive: false},
+        "workflow" => {cardinality: :multi, exclusive: false},
+        "dependency" => {cardinality: :multi, exclusive: false},
+        "testing_strategy" => {cardinality: :multi, exclusive: false},
+        "tool_usage" => {cardinality: :multi, exclusive: false},
+
+        # Extended single-value predicates (conflict detection)
+        "primary_language" => {cardinality: :single, exclusive: true},
+        "ci_platform" => {cardinality: :single, exclusive: true}
       }.freeze
 
       DEFAULT_POLICY = {cardinality: :multi, exclusive: false}.freeze
+
+      def self.known_predicates
+        POLICIES.keys
+      end
 
       def self.policy_for(predicate)
         POLICIES.fetch(predicate, DEFAULT_POLICY)
