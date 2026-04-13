@@ -48,7 +48,8 @@
       "Bash(claude-memory search:*)",
       "Bash(bundle exec:*)",
       "Skill(improve)",
-      "Skill(improve:*)"
+      "Skill(improve:*)",
+      "WebFetch(domain:arxiv.org)"
     ]
   },
   "enableAllProjectMcpServers": true,
