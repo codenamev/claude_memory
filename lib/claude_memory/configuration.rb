@@ -20,8 +20,12 @@ module ClaudeMemory
       env["CLAUDE_PROJECT_DIR"] || resolve_project_dir
     end
 
+    def claude_config_dir
+      env["CLAUDE_CONFIG_DIR"] || File.join(home_dir, ".claude")
+    end
+
     def global_db_path
-      File.join(home_dir, ".claude", "memory.sqlite3")
+      File.join(claude_config_dir, "memory.sqlite3")
     end
 
     def project_db_path(project_path = nil)

@@ -70,10 +70,27 @@ RSpec.describe ClaudeMemory::Configuration do
     end
   end
 
+  describe "#claude_config_dir" do
+    it "returns CLAUDE_CONFIG_DIR when set" do
+      config = described_class.new({"CLAUDE_CONFIG_DIR" => "/custom/claude"})
+      expect(config.claude_config_dir).to eq("/custom/claude")
+    end
+
+    it "falls back to ~/.claude when CLAUDE_CONFIG_DIR not set" do
+      config = described_class.new({"HOME" => "/home/user"})
+      expect(config.claude_config_dir).to eq("/home/user/.claude")
+    end
+  end
+
   describe "#global_db_path" do
     it "returns path to global database" do
       config = described_class.new({"HOME" => "/home/user"})
       expect(config.global_db_path).to eq("/home/user/.claude/memory.sqlite3")
+    end
+
+    it "honors CLAUDE_CONFIG_DIR when set" do
+      config = described_class.new({"CLAUDE_CONFIG_DIR" => "/alt/claude", "HOME" => "/home/user"})
+      expect(config.global_db_path).to eq("/alt/claude/memory.sqlite3")
     end
   end
 

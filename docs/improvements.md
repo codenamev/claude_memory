@@ -128,15 +128,9 @@ Source: QMD study (updated 2026-03-02)
 
 `--async` flag on hook ingest/sweep/publish subcommands. Fork+detach for non-blocking execution, fallback to sync when fork unavailable.
 
-### 26. CLAUDE_CONFIG_DIR Support
+### ~~26. CLAUDE_CONFIG_DIR Support~~ ✅ Implemented 2026-04-13
 
-Source: episodic-memory re-study (2026-03-30)
-
-- **Value**: Support users with multiple Claude Code profiles or non-standard config locations
-- **Implementation**: Check `ENV["CLAUDE_CONFIG_DIR"]` in `Configuration#global_db_path` before falling back to `~/.claude`
-- **Evidence**: episodic-memory `src/paths.ts:20-22` — `process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude')`
-- **Effort**: 0.5 days
-- **Trade-off**: None — purely additive, backwards compatible
+`Configuration#claude_config_dir` reads `CLAUDE_CONFIG_DIR` env var before falling back to `~/.claude`. `global_db_path` routes through it, so users with non-standard Claude Code config locations (or multiple profiles) can point the global memory DB anywhere without touching project DB resolution.
 
 ### 28. Code-Aware Transcript Chunking
 
@@ -295,4 +289,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-03-30 - Re-studied all 7 influencer repos. New improvements: CLAUDE_CONFIG_DIR support (#26), Usage Stats / ROI Tracking (#27). 7 new Features to Avoid entries. 14 features previously implemented through 2026-03-24.*
+*Last updated: 2026-04-13 - Implemented #26 CLAUDE_CONFIG_DIR support.*
