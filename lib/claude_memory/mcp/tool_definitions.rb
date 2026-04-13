@@ -156,7 +156,7 @@ module ClaudeMemory
                   items: {
                     type: "object",
                     properties: {
-                      type: {type: "string", description: "Entity type: database, framework, language, platform, repo, module, person, service"},
+                      type: {type: "string", description: "Entity type. Common types: database, framework, language, platform, repo, module, person, service, tool, library, concept. You may use other types if needed."},
                       name: {type: "string", description: "Canonical name"},
                       confidence: {type: "number", description: "0.0-1.0 extraction confidence"}
                     },
@@ -170,7 +170,7 @@ module ClaudeMemory
                     type: "object",
                     properties: {
                       subject: {type: "string", description: "Entity name or 'repo' for project-level facts"},
-                      predicate: {type: "string", description: "Relationship type: uses_database, uses_framework, convention, decision, auth_method, deployment_platform"},
+                      predicate: {type: "string", description: "Relationship type. Common predicates: convention, decision, preference, workflow, dependency, testing_strategy, uses_database, uses_framework, auth_method, deployment_platform, primary_language, ci_platform, tool_usage. You may also use other snake_case predicates for relations that don't fit these — be specific and reuse existing predicates when possible."},
                       object: {type: "string", description: "The value or target entity"},
                       confidence: {type: "number", description: "0.0-1.0 how confident"},
                       quote: {type: "string", description: "Source text excerpt (max 200 chars)"},
