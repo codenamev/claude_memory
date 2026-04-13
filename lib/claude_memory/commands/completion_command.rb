@@ -149,6 +149,7 @@ module ClaudeMemory
           "conflicts" => "Show open conflicts",
           "db:init" => "Initialize database",
           "doctor" => "Check system health",
+          "embeddings" => "Inspect embedding backend",
           "explain" => "Explain a fact with receipts",
           "export" => "Export facts to JSON",
           "git-lfs" => "Git LFS integration",
