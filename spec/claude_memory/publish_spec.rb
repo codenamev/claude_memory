@@ -63,6 +63,42 @@ RSpec.describe ClaudeMemory::Publish do
       end
     end
 
+    context "with novel predicates" do
+      it "includes additional knowledge section" do
+        create_fact("preference", "dark mode for editor")
+        create_fact("workflow", "trunk-based development")
+        snapshot = publish.generate_snapshot
+        expect(snapshot).to include("## Additional Knowledge")
+        expect(snapshot).to include("dark mode for editor")
+        expect(snapshot).to include("trunk-based development")
+      end
+
+      it "does not duplicate facts already in other sections" do
+        create_fact("decision", "Use PostgreSQL")
+        create_fact("preference", "dark mode")
+        snapshot = publish.generate_snapshot
+        expect(snapshot.scan("Use PostgreSQL").size).to eq(1)
+        expect(snapshot).to include("## Additional Knowledge")
+        expect(snapshot).to include("dark mode")
+      end
+
+      it "groups novel predicates by type" do
+        create_fact("workflow", "trunk-based development")
+        create_fact("workflow", "squash merge PRs")
+        snapshot = publish.generate_snapshot
+        expect(snapshot).to include("### Workflow")
+        expect(snapshot).to include("trunk-based development")
+        expect(snapshot).to include("squash merge PRs")
+      end
+
+      it "handles completely unknown predicates" do
+        create_fact("error_handling_strategy", "fail fast with clear messages")
+        snapshot = publish.generate_snapshot
+        expect(snapshot).to include("### Error handling strategy")
+        expect(snapshot).to include("fail fast with clear messages")
+      end
+    end
+
     context "with conflicts" do
       it "includes conflicts section" do
         fact_a = create_fact("uses_database", "mysql")

@@ -132,6 +132,28 @@ module ClaudeMemory
       lines.join("\n") + "\n"
     end
 
+    def generate_additional_section(facts)
+      additional = facts.reject { |f|
+        pred = f[:predicate].to_s
+        pred == "decision" || pred.start_with?("decided_") ||
+          pred == "convention" || pred.include?("_convention") ||
+          %w[uses_database uses_framework deployment_platform auth_method].include?(pred)
+      }
+      return "" if additional.empty?
+
+      grouped = additional.group_by { |f| f[:predicate] }
+      lines = ["## Additional Knowledge\n"]
+      grouped.each do |predicate, group_facts|
+        lines << "### #{humanize(predicate)}\n"
+        group_facts.each do |f|
+          subject = f[:subject_name] || "repo"
+          lines << "- #{subject}: #{f[:object_literal]}"
+        end
+        lines << ""
+      end
+      lines.join("\n") + "\n"
+    end
+
     def generate_conflicts_section(conflicts)
       return "" if conflicts.empty?
 
@@ -162,6 +184,7 @@ module ClaudeMemory
       sections << generate_decisions_section(facts)
       sections << generate_conventions_section(facts)
       sections << generate_constraints_section(facts)
+      sections << generate_additional_section(facts)
       sections << generate_conflicts_section(conflicts) if conflicts.any?
       sections << generate_supersessions_section(recent_supersessions) if recent_supersessions.any?
 
