@@ -14,6 +14,59 @@ module ClaudeMemory
       # Annotations for idempotent writes (safe to retry)
       WRITE_IDEMPOTENT = {readOnlyHint: false, idempotentHint: true, destructiveHint: false}.freeze
 
+      # Schema for {predicate, count} entries
+      PREDICATE_COUNT_SCHEMA = {
+        type: "object",
+        properties: {
+          predicate: {type: "string"},
+          count: {type: "integer"}
+        },
+        required: ["predicate", "count"]
+      }.freeze
+
+      # Schema for per-database stats block returned by memory.stats
+      DATABASE_STATS_SCHEMA = {
+        type: "object",
+        properties: {
+          exists: {type: "boolean"},
+          schema_version: {type: "integer"},
+          facts: {
+            type: "object",
+            properties: {
+              total: {type: "integer"},
+              active: {type: "integer"},
+              superseded: {type: "integer"},
+              top_predicates: {
+                type: "array",
+                description: "Top 10 predicates by count (known + novel combined)",
+                items: PREDICATE_COUNT_SCHEMA
+              },
+              predicates_known: {
+                type: "array",
+                description: "Predicates with explicit cardinality policies in PredicatePolicy::POLICIES, sorted by count desc",
+                items: PREDICATE_COUNT_SCHEMA
+              },
+              predicates_novel: {
+                type: "array",
+                description: "Predicates not in PredicatePolicy::POLICIES, sorted by count desc. Novel predicates with high counts are candidates for promotion to known status with explicit cardinality policies (canonicalization signal).",
+                items: PREDICATE_COUNT_SCHEMA
+              }
+            }
+          },
+          entities: {
+            type: "object",
+            properties: {
+              total: {type: "integer"},
+              by_type: {type: "array", items: {type: "object"}}
+            }
+          },
+          content_items: {type: "object"},
+          provenance: {type: "object"},
+          conflicts: {type: "object"},
+          vec: {type: "object"}
+        }
+      }.freeze
+
       # Returns array of tool definitions for MCP protocol
       # @return [Array<Hash>] Tool definitions with name, description, and inputSchema
       def self.all
@@ -123,12 +176,28 @@ module ClaudeMemory
           },
           {
             name: "memory.stats",
-            description: "Get detailed statistics about the memory system (facts by predicate, entities by type, provenance coverage, conflicts, database sizes)",
+            description: "Get detailed statistics about the memory system (facts by predicate, entities by type, provenance coverage, conflicts, database sizes).",
             inputSchema: {
               type: "object",
               properties: {
                 scope: {type: "string", enum: ["all", "global", "project"], description: "Show stats for: all (default), global, or project", default: "all"}
               }
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                scope: {type: "string", enum: ["all", "global", "project"]},
+                databases: {
+                  type: "object",
+                  description: "Per-database stats. Keys are 'global', 'project', or 'legacy' depending on connection mode.",
+                  properties: {
+                    global: DATABASE_STATS_SCHEMA,
+                    project: DATABASE_STATS_SCHEMA,
+                    legacy: DATABASE_STATS_SCHEMA
+                  }
+                }
+              },
+              required: ["scope", "databases"]
             },
             annotations: READ_ONLY
           },

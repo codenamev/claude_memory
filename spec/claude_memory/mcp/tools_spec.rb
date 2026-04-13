@@ -572,6 +572,22 @@ RSpec.describe ClaudeMemory::MCP::Tools do
     end
   end
 
+  describe "memory.stats outputSchema" do
+    it "declares an outputSchema covering predicate canonicalization fields" do
+      stats_def = tools.definitions.find { |d| d[:name] == "memory.stats" }
+      output_schema = stats_def[:outputSchema]
+
+      expect(output_schema).to be_a(Hash)
+      expect(output_schema[:type]).to eq("object")
+      expect(output_schema[:required]).to include("scope", "databases")
+
+      db_schema = output_schema.dig(:properties, :databases, :properties, :legacy)
+      facts_props = db_schema.dig(:properties, :facts, :properties)
+      expect(facts_props).to include(:predicates_known, :predicates_novel, :top_predicates)
+      expect(facts_props[:predicates_novel][:description]).to include("canonicalization signal")
+    end
+  end
+
   describe "memory.stats predicate frequency" do
     it "splits predicates into known and novel for canonicalization signal" do
       create_fact("uses_database", "postgresql")
