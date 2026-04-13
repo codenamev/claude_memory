@@ -571,4 +571,26 @@ RSpec.describe ClaudeMemory::MCP::Tools do
       end
     end
   end
+
+  describe "memory.stats predicate frequency" do
+    it "splits predicates into known and novel for canonicalization signal" do
+      create_fact("uses_database", "postgresql")
+      create_fact("convention", "frozen_string_literal")
+      create_fact("error_handling_strategy", "fail fast")
+      create_fact("error_handling_strategy", "result objects")
+      create_fact("naming_pattern", "snake_case")
+
+      result = tools.call("memory.stats", {})
+      fact_stats = result.dig(:databases, :legacy, :facts)
+
+      expect(fact_stats[:predicates_known]).to contain_exactly(
+        {predicate: "uses_database", count: 1},
+        {predicate: "convention", count: 1}
+      )
+      expect(fact_stats[:predicates_novel]).to contain_exactly(
+        {predicate: "error_handling_strategy", count: 2},
+        {predicate: "naming_pattern", count: 1}
+      )
+    end
+  end
 end

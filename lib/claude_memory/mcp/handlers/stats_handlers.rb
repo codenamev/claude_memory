@@ -129,13 +129,16 @@ module ClaudeMemory
           }
 
           if active_facts > 0
-            stats[:top_predicates] = store.db[:facts]
+            all_predicates = store.db[:facts]
               .where(status: "active")
               .group_and_count(:predicate)
               .order(Sequel.desc(:count))
-              .limit(10)
               .all
               .map { |row| {predicate: row[:predicate], count: row[:count]} }
+
+            stats[:top_predicates] = all_predicates.first(10)
+            stats[:predicates_known], stats[:predicates_novel] =
+              all_predicates.partition { |row| Resolve::PredicatePolicy.known_predicates.include?(row[:predicate]) }
           end
 
           stats
