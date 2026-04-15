@@ -37,7 +37,7 @@ module ClaudeMemory
       end
 
       def zsh_completion
-        commands_with_desc = command_descriptions.map { |name, desc|
+        commands_with_desc = Registry.descriptions.sort.map { |name, desc|
           "    '#{name}:#{desc}'"
         }.join("\n")
 
@@ -139,37 +139,6 @@ module ClaudeMemory
 
           complete -F _claude_memory claude-memory
         BASH
-      end
-
-      def command_descriptions
-        {
-          "changes" => "Show recent fact changes",
-          "compact" => "Compact databases",
-          "completion" => "Generate shell completions",
-          "conflicts" => "Show open conflicts",
-          "db:init" => "Initialize database",
-          "doctor" => "Check system health",
-          "embeddings" => "Inspect embedding backend",
-          "explain" => "Explain a fact with receipts",
-          "export" => "Export facts to JSON",
-          "git-lfs" => "Git LFS integration",
-          "help" => "Show help message",
-          "hook" => "Run hook entrypoints",
-          "index" => "Index content",
-          "ingest" => "Ingest transcript delta",
-          "init" => "Initialize ClaudeMemory",
-          "install-skill" => "Install agent skills",
-          "promote" => "Promote fact to global",
-          "publish" => "Publish snapshot",
-          "recall" => "Recall facts matching query",
-          "recover" => "Recover database",
-          "search" => "Search indexed content",
-          "serve-mcp" => "Start MCP server",
-          "stats" => "Show statistics",
-          "sweep" => "Run maintenance",
-          "uninstall" => "Remove configuration",
-          "version" => "Show version"
-        }
       end
 
       def skill_names

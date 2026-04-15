@@ -157,6 +157,10 @@ Source: grepai v0.35.0 re-study (2026-03-30)
 
 ## Low Priority / Defer
 
+### ~~29. Derive CompletionCommand Descriptions from Registry~~ ✅ Implemented 2026-04-15
+
+`Registry::COMMANDS` now stores `{class:, description:}` entries as the single source of truth. New `Registry.description` and `Registry.descriptions` accessors. `CompletionCommand` reads descriptions via `Registry.descriptions` instead of maintaining its own parallel hash. `Registry.find` also simplified — class references stored directly since command files are required before the Registry, eliminating `const_get` string indirection. Drift between the command list and completion output is now impossible without a deliberate edit to a single file.
+
 ### 23. REST API Endpoint
 
 Source: QMD v2.0.1 study (2026-03-10)
@@ -289,4 +293,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-13 - Implemented #26 CLAUDE_CONFIG_DIR support.*
+*Last updated: 2026-04-15 - Implemented #29 Registry-sourced completion descriptions.*
