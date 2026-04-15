@@ -125,6 +125,99 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
     end
   end
 
+  describe "#restore_multi_value_supersessions" do
+    let!(:repo_id) { store.find_or_create_entity(type: "repo", name: "test-repo") }
+
+    def make_fact(object, status: "active")
+      id = store.insert_fact(subject_entity_id: repo_id, predicate: "uses_framework", object_literal: object)
+      if status != "active"
+        store.facts.where(id: id).update(status: status, valid_to: Time.now.utc.iso8601)
+      end
+      id
+    end
+
+    def link_supersession(new_id, old_id)
+      store.insert_fact_link(from_fact_id: new_id, to_fact_id: old_id, link_type: "supersedes")
+    end
+
+    it "restores token-disjoint superseded facts" do
+      active_id = make_fact("Stripe for payments")
+      rails_id = make_fact("Rails 8.1", status: "superseded")
+      tailwind_id = make_fact("Tailwind CSS", status: "superseded")
+      link_supersession(active_id, rails_id)
+      link_supersession(active_id, tailwind_id)
+
+      result = maintenance.restore_multi_value_supersessions(predicate: "uses_framework")
+
+      expect(result[:inspected]).to eq(2)
+      expect(result[:restored]).to eq(2)
+      expect(result[:skipped_ambiguous]).to eq(0)
+
+      expect(store.facts.where(id: rails_id).get(:status)).to eq("active")
+      expect(store.facts.where(id: tailwind_id).get(:status)).to eq("active")
+      expect(store.facts.where(id: rails_id).get(:valid_to)).to be_nil
+      expect(store.fact_links.where(to_fact_id: rails_id, link_type: "supersedes").count).to eq(0)
+      expect(store.fact_links.where(to_fact_id: tailwind_id, link_type: "supersedes").count).to eq(0)
+    end
+
+    it "skips token-overlapping supersessions (likely corrections)" do
+      new_id = make_fact("Rails 8.1")
+      old_id = make_fact("Rails 8.0", status: "superseded")
+      link_supersession(new_id, old_id)
+
+      result = maintenance.restore_multi_value_supersessions(predicate: "uses_framework")
+
+      expect(result[:inspected]).to eq(1)
+      expect(result[:restored]).to eq(0)
+      expect(result[:skipped_ambiguous]).to eq(1)
+      expect(store.facts.where(id: old_id).get(:status)).to eq("superseded")
+    end
+
+    it "leaves rejected facts alone" do
+      rejected_id = make_fact("react", status: "rejected")
+      result = maintenance.restore_multi_value_supersessions(predicate: "uses_framework")
+
+      expect(result[:inspected]).to eq(0)
+      expect(store.facts.where(id: rejected_id).get(:status)).to eq("rejected")
+    end
+
+    it "refuses to run on a still-single-value predicate" do
+      expect {
+        maintenance.restore_multi_value_supersessions(predicate: "uses_database")
+      }.to raise_error(ArgumentError, /still classified single-value/)
+    end
+
+    it "supports dry-run mode" do
+      active_id = make_fact("Stripe")
+      rails_id = make_fact("Rails 8.1", status: "superseded")
+      link_supersession(active_id, rails_id)
+
+      result = maintenance.restore_multi_value_supersessions(predicate: "uses_framework", dry_run: true)
+
+      expect(result[:restored]).to eq(1)
+      expect(result[:decisions]).to contain_exactly(
+        hash_including(fact_id: rails_id, action: :restore)
+      )
+      expect(store.facts.where(id: rails_id).get(:status)).to eq("superseded")
+    end
+
+    it "treats rejected siblings as overlap evidence" do
+      # If an identical-ish fact was explicitly rejected, don't restore.
+      # Use two-token names so drop-short-tokens doesn't reduce both to
+      # a single shared token (which would overlap regardless).
+      active_id = make_fact("Stripe payments")
+      rejected_id = make_fact("Rails stimulus", status: "rejected")
+      superseded_id = make_fact("Rails stimulus extensions", status: "superseded")
+      link_supersession(active_id, superseded_id)
+
+      result = maintenance.restore_multi_value_supersessions(predicate: "uses_framework")
+
+      expect(result[:skipped_ambiguous]).to eq(1)
+      expect(store.facts.where(id: superseded_id).get(:status)).to eq("superseded")
+      expect(store.facts.where(id: rejected_id).get(:status)).to eq("rejected")
+    end
+  end
+
   describe "#prune_old_mcp_tool_calls" do
     def create_mcp_call(days_ago:, tool_name: "memory.recall")
       called_at = (Time.now - days_ago * 86400).utc.iso8601

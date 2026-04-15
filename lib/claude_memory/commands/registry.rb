@@ -36,7 +36,8 @@ module ClaudeMemory
         "install-skill" => {class: InstallSkillCommand, description: "Install agent skills"},
         "completion" => {class: CompletionCommand, description: "Generate shell completions"},
         "embeddings" => {class: EmbeddingsCommand, description: "Inspect embedding backend"},
-        "reject" => {class: RejectCommand, description: "Mark a fact as rejected"}
+        "reject" => {class: RejectCommand, description: "Mark a fact as rejected"},
+        "restore" => {class: RestoreCommand, description: "Restore superseded facts from obsolete single-value classification"}
       }.freeze
 
       # Find a command class by name

@@ -8,6 +8,11 @@ module ClaudeMemory
     #
     # Source: QMD v2.0.1 Maintenance class pattern
     class Maintenance
+      # Short / noise tokens dropped before Jaccard comparison.
+      # Intentionally minimal — we want conservative token extraction that
+      # still treats "Rails 8.0" and "Rails 8.1" as overlapping.
+      RESTORE_STOPWORDS = %w[for the and with via of in on to by is are].to_set.freeze
+      RESTORE_JACCARD_THRESHOLD = 0.5
       DEFAULT_CONFIG = {
         proposed_fact_ttl_days: 14,
         disputed_fact_ttl_days: 30,
@@ -97,6 +102,76 @@ module ClaudeMemory
         0
       end
 
+      # Restore superseded facts in a (subject, predicate) slot that were
+      # only superseded because of an obsolete single-value classification.
+      # Uses Jaccard-based token overlap to distinguish bug-superseded facts
+      # (token-disjoint siblings) from legitimate corrections (overlapping
+      # siblings).
+      #
+      # Refuses to run on predicates still classified as single-value — they
+      # should stay superseded by design.
+      #
+      # Never touches status: "rejected" facts (explicit user decisions).
+      #
+      # @return [Hash] {inspected, restored, skipped_ambiguous, skipped_rejected, decisions}
+      def restore_multi_value_supersessions(predicate:, dry_run: false)
+        if ClaudeMemory::Resolve::PredicatePolicy.single?(predicate)
+          raise ArgumentError, "Predicate '#{predicate}' is still classified single-value; refusing to restore"
+        end
+
+        result = {inspected: 0, restored: 0, skipped_ambiguous: 0, skipped_rejected: 0, decisions: []}
+
+        rows_by_subject = @store.facts
+          .where(predicate: predicate)
+          .exclude(status: "rejected")
+          .select(:id, :subject_entity_id, :object_literal, :status)
+          .all
+          .group_by { |r| r[:subject_entity_id] }
+
+        rejected_by_subject = @store.facts
+          .where(predicate: predicate, status: "rejected")
+          .select(:id, :subject_entity_id, :object_literal)
+          .all
+          .group_by { |r| r[:subject_entity_id] }
+
+        @store.db.transaction do
+          rows_by_subject.each do |subject_id, rows|
+            rejected_rows = rejected_by_subject[subject_id] || []
+            siblings = rows + rejected_rows
+
+            rows.each do |candidate|
+              next unless candidate[:status] == "superseded"
+              result[:inspected] += 1
+
+              candidate_tokens = restore_tokenize(candidate[:object_literal])
+              ambiguous_against = find_overlapping_siblings(candidate, siblings, candidate_tokens)
+
+              if ambiguous_against.empty?
+                result[:restored] += 1
+                result[:decisions] << {
+                  subject_entity_id: subject_id,
+                  fact_id: candidate[:id],
+                  object: candidate[:object_literal],
+                  action: :restore
+                }
+                restore_fact!(candidate[:id]) unless dry_run
+              else
+                result[:skipped_ambiguous] += 1
+                result[:decisions] << {
+                  subject_entity_id: subject_id,
+                  fact_id: candidate[:id],
+                  object: candidate[:object_literal],
+                  action: :skip_ambiguous,
+                  overlaps_with: ambiguous_against.map { |s| s[:object_literal] }
+                }
+              end
+            end
+          end
+        end
+
+        result
+      end
+
       # Delete MCP tool-call telemetry rows older than retention window.
       # Returns: Integer count of deleted rows (0 if table missing).
       def prune_old_mcp_tool_calls
@@ -121,6 +196,35 @@ module ClaudeMemory
       end
 
       private
+
+      def restore_tokenize(text)
+        return Set.new if text.nil?
+        text.downcase
+          .scan(/[a-z0-9]+/)
+          .reject { |t| t.length <= 2 || RESTORE_STOPWORDS.include?(t) }
+          .to_set
+      end
+
+      def restore_jaccard(a, b)
+        return 0.0 if a.empty? && b.empty?
+        intersection = (a & b).size
+        union = (a | b).size
+        return 0.0 if union.zero?
+        intersection.to_f / union
+      end
+
+      def find_overlapping_siblings(candidate, siblings, candidate_tokens)
+        siblings.select do |other|
+          next false if other[:id] == candidate[:id]
+          other_tokens = restore_tokenize(other[:object_literal])
+          restore_jaccard(candidate_tokens, other_tokens) >= RESTORE_JACCARD_THRESHOLD
+        end
+      end
+
+      def restore_fact!(fact_id)
+        @store.facts.where(id: fact_id).update(status: "active", valid_to: nil)
+        @store.fact_links.where(to_fact_id: fact_id, link_type: "supersedes").delete
+      end
 
       def cutoff_time(days)
         (Time.now - days * 86400).utc.iso8601
