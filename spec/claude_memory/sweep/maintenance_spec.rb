@@ -125,6 +125,37 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
     end
   end
 
+  describe "#prune_old_mcp_tool_calls" do
+    def create_mcp_call(days_ago:, tool_name: "memory.recall")
+      called_at = (Time.now - days_ago * 86400).utc.iso8601
+      store.insert_mcp_tool_call(
+        tool_name: tool_name,
+        duration_ms: 5,
+        result_count: 1,
+        called_at: called_at
+      )
+    end
+
+    it "deletes rows older than the retention window and keeps recent ones" do
+      create_mcp_call(days_ago: 120)
+      create_mcp_call(days_ago: 100)
+      create_mcp_call(days_ago: 10)
+
+      deleted = maintenance.prune_old_mcp_tool_calls
+      expect(deleted).to eq(2)
+      expect(store.mcp_tool_calls.count).to eq(1)
+    end
+
+    it "respects a custom retention window" do
+      custom = described_class.new(store, config: {mcp_tool_call_retention_days: 7})
+      create_mcp_call(days_ago: 30)
+      create_mcp_call(days_ago: 3)
+
+      expect(custom.prune_old_mcp_tool_calls).to eq(1)
+      expect(store.mcp_tool_calls.count).to eq(1)
+    end
+  end
+
   describe "custom config" do
     it "respects custom TTLs" do
       custom = described_class.new(store, config: {proposed_fact_ttl_days: 5})

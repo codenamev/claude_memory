@@ -11,7 +11,8 @@ module ClaudeMemory
       DEFAULT_CONFIG = {
         proposed_fact_ttl_days: 14,
         disputed_fact_ttl_days: 30,
-        content_retention_days: 30
+        content_retention_days: 30,
+        mcp_tool_call_retention_days: 90
       }.freeze
 
       attr_reader :store
@@ -94,6 +95,15 @@ module ClaudeMemory
           return stale_ids.size
         end
         0
+      end
+
+      # Delete MCP tool-call telemetry rows older than retention window.
+      # Returns: Integer count of deleted rows (0 if table missing).
+      def prune_old_mcp_tool_calls
+        return 0 unless @store.db.table_exists?(:mcp_tool_calls)
+
+        cutoff = cutoff_time(@config[:mcp_tool_call_retention_days])
+        @store.mcp_tool_calls.where { called_at < cutoff }.delete
       end
 
       # Checkpoint the SQLite WAL file for compaction.

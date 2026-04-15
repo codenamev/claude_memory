@@ -69,6 +69,22 @@ module ClaudeMemory
 
       def llm_cache = @db[:llm_cache]
 
+      def mcp_tool_calls = @db[:mcp_tool_calls]
+
+      # Record a single MCP tool invocation for telemetry.
+      # Inserts synchronously; callers wrap in with_retry at the call site
+      # if needed. Called_at defaults to now in UTC ISO8601.
+      def insert_mcp_tool_call(tool_name:, duration_ms:, result_count: nil, scope: nil, error_class: nil, called_at: nil)
+        mcp_tool_calls.insert(
+          tool_name: tool_name,
+          called_at: called_at || Time.now.utc.iso8601,
+          duration_ms: duration_ms,
+          result_count: result_count,
+          scope: scope,
+          error_class: error_class
+        )
+      end
+
       # --- Content items ---
 
       def upsert_content_item(source:, text_hash:, byte_len:, session_id: nil, transcript_path: nil,

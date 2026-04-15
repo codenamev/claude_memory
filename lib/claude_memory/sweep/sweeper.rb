@@ -7,6 +7,7 @@ module ClaudeMemory
         proposed_fact_ttl_days: 14,
         disputed_fact_ttl_days: 30,
         content_retention_days: 30,
+        mcp_tool_call_retention_days: 90,
         default_budget_seconds: 5
       }.freeze
 
@@ -29,6 +30,7 @@ module ClaudeMemory
           disputed_facts_expired: 0,
           orphaned_provenance_deleted: 0,
           old_content_pruned: 0,
+          mcp_tool_calls_pruned: 0,
           escalation_level: :normal
         }
 
@@ -38,6 +40,7 @@ module ClaudeMemory
         run_if_within_budget { @stats[:disputed_facts_expired] = maintenance.expire_disputed_facts }
         run_if_within_budget { @stats[:orphaned_provenance_deleted] = maintenance.prune_orphaned_provenance }
         run_if_within_budget { @stats[:old_content_pruned] = maintenance.prune_old_content }
+        run_if_within_budget { @stats[:mcp_tool_calls_pruned] = maintenance.prune_old_mcp_tool_calls }
         run_if_within_budget { @stats[:vec_backfilled] = maintenance.backfill_vec_index }
         run_if_within_budget { @stats[:vec_cleaned] = maintenance.cleanup_vec_expired }
         run_if_within_budget { @stats[:wal_checkpointed] = maintenance.checkpoint_wal }

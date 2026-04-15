@@ -143,15 +143,9 @@ Source: QMD v2.0.1+unreleased re-study (2026-03-30)
 - **Effort**: 2-3 days (after #22)
 - **Trade-off**: Adds tree-sitter dependency; graceful fallback to regex-only chunking when grammar unavailable
 
-### 27. Usage Stats / ROI Tracking
+### ~~27. Usage Stats / ROI Tracking~~ ✅ Implemented 2026-04-15
 
-Source: grepai v0.35.0 re-study (2026-03-30)
-
-- **Value**: Demonstrate memory value to users — track recall hits, fact counts, query latency, and show ROI over time
-- **Implementation**: NDJSON stats file (`.claude/memory-stats.json`), fire-and-forget recording in MCP tool calls, `claude-memory stats` command for summary
-- **Evidence**: grepai `stats/` package — `stats.Recorder` with file-locking, goroutine recording with 100ms timeout, `stats.Summarize()` aggregation, per-day history
-- **Effort**: 2-3 days
-- **Trade-off**: Minor disk I/O per query; use fire-and-forget pattern to avoid latency impact
+Schema migration v13 adds `mcp_tool_calls` telemetry table (tool_name, called_at, duration_ms, result_count, scope, error_class). `MCP::Telemetry` wraps `Server#handle_tools_call` with monotonic-clock timing, captures errors, and records to the project DB; DB errors are swallowed so telemetry never fails a real tool call. `StatsCommand` gains `--tools` and `--since DAYS` flags showing total calls, error rate, and per-tool breakdown (calls, avg ms, p95 ms, error rate). `Sweep::Maintenance#prune_old_mcp_tool_calls` enforces a 90-day retention window, wired into `Sweeper#run!`. Rejected NDJSON in favor of SQLite for schema/query consistency with the rest of the gem. Dropped query-text capture (YAGNI — the dedup insight the hash would enable also needs raw text). Also fixed a latent bug where `StatsCommand` opened the DB via `Sequel.sqlite` (requiring the unlisted `sqlite3` gem); now uses the extralite adapter consistently.
 
 ---
 
@@ -293,4 +287,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-15 - Implemented #29 Registry-sourced completion descriptions.*
+*Last updated: 2026-04-15 - Implemented #27 MCP tool-call telemetry and #29 Registry-sourced completion descriptions.*

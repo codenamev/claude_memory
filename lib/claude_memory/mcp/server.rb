@@ -5,6 +5,7 @@ require_relative "instructions_builder"
 require_relative "query_guide"
 require_relative "text_summary"
 require_relative "error_classifier"
+require_relative "telemetry"
 
 module ClaudeMemory
   module MCP
@@ -14,6 +15,7 @@ module ClaudeMemory
       def initialize(store_or_manager, input: $stdin, output: $stdout)
         @store_or_manager = store_or_manager
         @tools = Tools.new(store_or_manager)
+        @telemetry = Telemetry.new(store_or_manager)
         @input = input
         @output = output
         @running = false
@@ -107,7 +109,9 @@ module ClaudeMemory
         name = params["name"]
         arguments = params["arguments"] || {}
 
-        result = @tools.call(name, arguments)
+        result = @telemetry.record(name, arguments) do
+          @tools.call(name, arguments)
+        end
 
         # Release database connections after each tool call
         # This prevents lock contention with hook commands

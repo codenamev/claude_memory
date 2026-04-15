@@ -13,14 +13,20 @@ module ClaudeMemory
       SCOPE_PROJECT = "project"
 
       def call(args)
-        opts = parse_options(args, {scope: SCOPE_ALL}) do |o|
+        opts = parse_options(args, {scope: SCOPE_ALL, tools: false, since_days: nil}) do |o|
           OptionParser.new do |parser|
             parser.banner = "Usage: claude-memory stats [options]"
             parser.on("--scope SCOPE", ["all", "global", "project"],
               "Show stats for: all (default), global, or project") { |v| o[:scope] = v }
+            parser.on("--tools", "Show MCP tool-call usage stats") { o[:tools] = true }
+            parser.on("--since DAYS", Integer, "Limit --tools to last N days") { |v| o[:since_days] = v }
           end
         end
         return 1 if opts.nil?
+
+        if opts[:tools]
+          return print_mcp_tool_call_stats(opts[:since_days])
+        end
 
         manager = ClaudeMemory::Store::StoreManager.new
 
@@ -42,6 +48,10 @@ module ClaudeMemory
 
       private
 
+      def open_readonly(db_path)
+        Sequel.connect("extralite://#{db_path}")
+      end
+
       def print_database_stats(label, db_path)
         stdout.puts "## #{label} DATABASE"
         stdout.puts
@@ -53,7 +63,7 @@ module ClaudeMemory
         end
 
         begin
-          db = Sequel.sqlite(db_path, readonly: true)
+          db = open_readonly(db_path)
 
           # Facts statistics
           print_fact_stats(db)
@@ -244,6 +254,92 @@ module ClaudeMemory
       def format_number(num)
         # Format number with comma separators (e.g., 1234567 => "1,234,567")
         num.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse
+      end
+
+      def print_mcp_tool_call_stats(since_days)
+        manager = ClaudeMemory::Store::StoreManager.new
+        db_path = manager.project_db_path
+
+        stdout.puts "MCP Tool Call Statistics"
+        stdout.puts "=" * 50
+
+        unless File.exist?(db_path)
+          stdout.puts "Project database does not exist: #{db_path}"
+          manager.close
+          return 0
+        end
+
+        db = open_readonly(db_path)
+
+        unless db.table_exists?(:mcp_tool_calls)
+          stdout.puts "No telemetry recorded yet (run MCP server first)."
+          db.disconnect
+          manager.close
+          return 0
+        end
+
+        dataset = db[:mcp_tool_calls]
+        if since_days
+          cutoff = (Time.now - since_days * 86400).utc.iso8601
+          dataset = dataset.where { called_at >= cutoff }
+          stdout.puts "Window: last #{since_days} day#{"s" unless since_days == 1}"
+        else
+          stdout.puts "Window: all time"
+        end
+        stdout.puts
+
+        total = dataset.count
+        if total.zero?
+          stdout.puts "No tool calls recorded in window."
+          db.disconnect
+          manager.close
+          return 0
+        end
+
+        errors = dataset.exclude(error_class: nil).count
+        error_rate = (errors * 100.0 / total).round(1)
+        stdout.puts "Total calls: #{format_number(total)}"
+        stdout.puts "Errors: #{format_number(errors)} (#{error_rate}%)"
+        stdout.puts
+
+        print_per_tool_breakdown(dataset)
+
+        db.disconnect
+        manager.close
+        0
+      rescue Sequel::DatabaseError, Extralite::Error => e
+        stderr.puts "Error reading telemetry: #{e.message}"
+        1
+      end
+
+      def print_per_tool_breakdown(dataset)
+        stdout.puts "Per-tool breakdown:"
+        stdout.puts "  #{"Tool".ljust(28)} #{"Calls".rjust(7)}  #{"Avg ms".rjust(8)}  #{"P95 ms".rjust(8)}  #{"Err %".rjust(6)}"
+
+        rows = dataset
+          .group_and_count(:tool_name)
+          .order(Sequel.desc(:count))
+          .all
+
+        rows.each do |row|
+          tool = row[:tool_name]
+          calls = row[:count]
+          durations = dataset.where(tool_name: tool).select_map(:duration_ms).sort
+          avg = (durations.sum.to_f / calls).round(1)
+          p95 = percentile(durations, 0.95)
+          tool_errors = dataset.where(tool_name: tool).exclude(error_class: nil).count
+          tool_err_rate = (tool_errors * 100.0 / calls).round(1)
+
+          stdout.puts "  #{tool.to_s.ljust(28)} #{calls.to_s.rjust(7)}  #{avg.to_s.rjust(8)}  #{p95.to_s.rjust(8)}  #{tool_err_rate.to_s.rjust(6)}"
+        end
+      end
+
+      def percentile(sorted, pct)
+        return 0 if sorted.empty?
+        idx = (sorted.size * pct).ceil - 1
+        idx = 0 if idx < 0
+        idx = sorted.size - 1 if idx >= sorted.size
+        sorted[idx]
       end
     end
   end
