@@ -39,6 +39,13 @@ RSpec.describe ClaudeMemory::Resolve::PredicatePolicy do
       expect(described_class.single?("testing_strategy")).to be false
       expect(described_class.single?("tool_usage")).to be false
     end
+
+    it "treats uses_framework as multi-cardinality" do
+      # Real projects use multiple frameworks (Rails + Turbo + Tailwind).
+      # Regression: prior single-value classification silently superseded
+      # legitimate facts across several project DBs.
+      expect(described_class.single?("uses_framework")).to be false
+    end
   end
 
   describe ".exclusive?" do
@@ -52,6 +59,7 @@ RSpec.describe ClaudeMemory::Resolve::PredicatePolicy do
       expect(described_class.exclusive?("convention")).to be false
       expect(described_class.exclusive?("preference")).to be false
       expect(described_class.exclusive?("workflow")).to be false
+      expect(described_class.exclusive?("uses_framework")).to be false
     end
   end
 end

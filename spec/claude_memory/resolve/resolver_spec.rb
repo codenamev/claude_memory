@@ -121,6 +121,35 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
           expect(result[:facts_created]).to eq(1)
           expect(result[:conflicts_created]).to eq(0)
         end
+
+        it "accumulates multiple uses_framework facts without supersession" do
+          # Regression: uses_framework was single-value, which caused
+          # multi-framework stacks (Rails + Turbo + Tailwind in the same
+          # project) to silently supersede each other. Surveyed 9 real
+          # project DBs where this destroyed valid knowledge.
+          framework_facts = [
+            {subject: "repo", predicate: "uses_framework", object: "Rails 8.1", strength: "stated"},
+            {subject: "repo", predicate: "uses_framework", object: "Hotwire", strength: "stated"},
+            {subject: "repo", predicate: "uses_framework", object: "Tailwind CSS", strength: "stated"}
+          ]
+
+          total_superseded = 0
+          total_conflicts = 0
+          framework_facts.each do |fact|
+            extraction = ClaudeMemory::Distill::Extraction.new(facts: [fact])
+            result = resolver.apply(extraction)
+            total_superseded += result[:facts_superseded]
+            total_conflicts += result[:conflicts_created]
+          end
+
+          expect(total_superseded).to eq(0)
+          expect(total_conflicts).to eq(0)
+
+          repo_id = store.find_or_create_entity(type: "repo", name: "repo")
+          active = store.facts_for_slot(repo_id, "uses_framework")
+          expect(active.size).to eq(3)
+          expect(active.map { |f| f[:object_literal] }).to contain_exactly("Rails 8.1", "Hotwire", "Tailwind CSS")
+        end
       end
     end
 

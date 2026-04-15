@@ -9,7 +9,11 @@ module ClaudeMemory
         "decision" => {cardinality: :multi, exclusive: false},
         "auth_method" => {cardinality: :single, exclusive: true},
         "uses_database" => {cardinality: :single, exclusive: true},
-        "uses_framework" => {cardinality: :single, exclusive: true},
+        # uses_framework is multi-value: real projects use multiple frameworks
+        # (e.g. Rails + Turbo + Tailwind). Historically marked single-value,
+        # which caused valid facts to be silently superseded across several
+        # project databases — see docs/influence/predicate_retrospective.md.
+        "uses_framework" => {cardinality: :multi, exclusive: false},
         "deployment_platform" => {cardinality: :single, exclusive: true},
 
         # Extended multi-value predicates (accumulate)
