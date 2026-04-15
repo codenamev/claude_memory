@@ -60,6 +60,28 @@ RSpec.describe ClaudeMemory::Resolve::PredicatePolicy do
     end
   end
 
+  describe ".section_for" do
+    it "maps canonical predicates to their snapshot sections" do
+      expect(described_class.section_for("decision")).to eq(:decisions)
+      expect(described_class.section_for("convention")).to eq(:conventions)
+      expect(described_class.section_for("uses_database")).to eq(:constraints)
+      expect(described_class.section_for("uses_framework")).to eq(:constraints)
+      expect(described_class.section_for("uses_language")).to eq(:constraints)
+      expect(described_class.section_for("deployment_platform")).to eq(:constraints)
+      expect(described_class.section_for("auth_method")).to eq(:constraints)
+    end
+
+    it "honors legacy prefix and suffix patterns" do
+      expect(described_class.section_for("decided_pattern")).to eq(:decisions)
+      expect(described_class.section_for("naming_convention")).to eq(:conventions)
+    end
+
+    it "routes unknown and unmapped predicates to :additional" do
+      expect(described_class.section_for("architecture")).to eq(:additional)
+      expect(described_class.section_for("something_novel")).to eq(:additional)
+    end
+  end
+
   describe ".exclusive?" do
     it "returns true for exclusive predicates" do
       expect(described_class.exclusive?("deployment_platform")).to be true

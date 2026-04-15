@@ -98,7 +98,7 @@ module ClaudeMemory
     end
 
     def generate_decisions_section(facts)
-      decisions = facts.select { |f| f[:predicate] == "decision" || f[:predicate]&.start_with?("decided_") }
+      decisions = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :decisions }
       return "" if decisions.empty?
 
       lines = ["## Current Decisions\n"]
@@ -109,7 +109,7 @@ module ClaudeMemory
     end
 
     def generate_conventions_section(facts)
-      conventions = facts.select { |f| f[:predicate] == "convention" || f[:predicate]&.include?("_convention") }
+      conventions = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :conventions }
       return "" if conventions.empty?
 
       lines = ["## Conventions\n"]
@@ -120,9 +120,7 @@ module ClaudeMemory
     end
 
     def generate_constraints_section(facts)
-      constraints = facts.select do |f|
-        %w[uses_database uses_framework deployment_platform auth_method].include?(f[:predicate])
-      end
+      constraints = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :constraints }
       return "" if constraints.empty?
 
       lines = ["## Technical Constraints\n"]
@@ -133,12 +131,7 @@ module ClaudeMemory
     end
 
     def generate_additional_section(facts)
-      additional = facts.reject { |f|
-        pred = f[:predicate].to_s
-        pred == "decision" || pred.start_with?("decided_") ||
-          pred == "convention" || pred.include?("_convention") ||
-          %w[uses_database uses_framework deployment_platform auth_method].include?(pred)
-      }
+      additional = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :additional }
       return "" if additional.empty?
 
       grouped = additional.group_by { |f| f[:predicate] }

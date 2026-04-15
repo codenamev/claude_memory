@@ -26,8 +26,31 @@ module ClaudeMemory
 
       DEFAULT_POLICY = {cardinality: :multi, exclusive: false}.freeze
 
+      # Section classification for the published snapshot. Keeps Publish
+      # from hard-coding predicate names; adding a new predicate to the
+      # policy and the section map in one place updates everything.
+      SECTION_MAP = {
+        "decision" => :decisions,
+        "convention" => :conventions,
+        "uses_database" => :constraints,
+        "uses_framework" => :constraints,
+        "uses_language" => :constraints,
+        "deployment_platform" => :constraints,
+        "auth_method" => :constraints
+        # architecture intentionally falls through to :additional for now
+      }.freeze
+
       def self.known_predicates
         POLICIES.keys
+      end
+
+      # Return the snapshot section a predicate belongs to.
+      # Respects legacy prefix/suffix patterns (decided_*, *_convention)
+      # that pre-date the policy.
+      def self.section_for(predicate)
+        return :decisions if predicate&.start_with?("decided_")
+        return :conventions if predicate&.include?("_convention")
+        SECTION_MAP.fetch(predicate, :additional)
       end
 
       def self.policy_for(predicate)

@@ -30,7 +30,11 @@ For each content item, carefully read the raw_text and extract:
 
 **Facts** — Knowledge learned:
 - subject: Entity name or "repo" for project-level facts
-- predicate: uses_database, uses_framework, convention, decision, auth_method, deployment_platform, depends_on, testing_strategy
+- predicate: prefer a predicate from the canonical vocabulary defined in
+  `lib/claude_memory/resolve/predicate_policy.rb` (convention, decision,
+  architecture, uses_framework, uses_language, uses_database,
+  deployment_platform, auth_method). Other snake_case predicates are
+  accepted but fall through to the default multi-value policy.
 - object: The value
 - confidence: 0.0-1.0
 - quote: Source excerpt (max 200 chars)
