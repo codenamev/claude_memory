@@ -49,6 +49,13 @@ module ClaudeMemory
       end
 
       def resolve_fact(fact_data, entity_ids, content_item_id, occurred_at, project_path:, scope:)
+        # Canonicalize drift-prone predicate synonyms (has_convention →
+        # convention, primary_language → uses_language) before anything
+        # else looks at the predicate.
+        if (canonical = PredicatePolicy.canonicalize(fact_data[:predicate])) != fact_data[:predicate]
+          fact_data = fact_data.merge(predicate: canonical)
+        end
+
         subject_id = resolve_subject(fact_data, entity_ids)
         existing_facts = @store.facts_for_slot(subject_id, fact_data[:predicate])
         resolution = determine_resolution(existing_facts, fact_data, entity_ids)

@@ -60,6 +60,22 @@ RSpec.describe ClaudeMemory::Resolve::PredicatePolicy do
     end
   end
 
+  describe ".canonicalize" do
+    it "rewrites known synonyms to the canonical form" do
+      expect(described_class.canonicalize("has_convention")).to eq("convention")
+      expect(described_class.canonicalize("primary_language")).to eq("uses_language")
+    end
+
+    it "leaves unknown and already-canonical predicates alone" do
+      expect(described_class.canonicalize("convention")).to eq("convention")
+      expect(described_class.canonicalize("something_novel")).to eq("something_novel")
+    end
+
+    it "handles nil safely" do
+      expect(described_class.canonicalize(nil)).to be_nil
+    end
+  end
+
   describe ".section_for" do
     it "maps canonical predicates to their snapshot sections" do
       expect(described_class.section_for("decision")).to eq(:decisions)

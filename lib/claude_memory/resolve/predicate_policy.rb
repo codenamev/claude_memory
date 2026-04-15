@@ -26,6 +26,20 @@ module ClaudeMemory
 
       DEFAULT_POLICY = {cardinality: :multi, exclusive: false}.freeze
 
+      # Drift canonicalization. Maps predicate names the distiller has
+      # organically coined onto the canonical form in POLICIES. Consulted
+      # at insert time by the Resolver so synonym drift never fragments
+      # the knowledge graph.
+      #
+      # Entries observed in real project DBs:
+      # - has_convention (chaos_to_the_rescue): prefix-drift of convention
+      # - primary_language (prior policy entry): supplanted by uses_language
+      #   which the distiller emits naturally and has multi-value semantics
+      SYNONYMS = {
+        "has_convention" => "convention",
+        "primary_language" => "uses_language"
+      }.freeze
+
       # Section classification for the published snapshot. Keeps Publish
       # from hard-coding predicate names; adding a new predicate to the
       # policy and the section map in one place updates everything.
@@ -42,6 +56,13 @@ module ClaudeMemory
 
       def self.known_predicates
         POLICIES.keys
+      end
+
+      # Return the canonical form of a predicate name, applying known
+      # synonym mappings. Leaves unmapped predicates unchanged.
+      def self.canonicalize(predicate)
+        return predicate if predicate.nil?
+        SYNONYMS.fetch(predicate, predicate)
       end
 
       # Return the snapshot section a predicate belongs to.

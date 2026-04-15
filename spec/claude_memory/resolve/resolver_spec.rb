@@ -122,6 +122,40 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
           expect(result[:conflicts_created]).to eq(0)
         end
 
+        it "canonicalizes synonym predicates before insertion" do
+          # has_convention should land under the canonical "convention"
+          # predicate so downstream queries and snapshot rendering find it.
+          extraction = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "has_convention", object: "use frozen_string_literal"}]
+          )
+          resolver.apply(extraction)
+
+          repo_id = store.find_or_create_entity(type: "repo", name: "repo")
+          convention_facts = store.facts_for_slot(repo_id, "convention")
+          expect(convention_facts.size).to eq(1)
+          expect(convention_facts.first[:object_literal]).to eq("use frozen_string_literal")
+
+          has_convention_facts = store.facts_for_slot(repo_id, "has_convention")
+          expect(has_convention_facts).to be_empty
+        end
+
+        it "canonicalizes primary_language to uses_language" do
+          extraction = ClaudeMemory::Distill::Extraction.new(
+            facts: [
+              {subject: "repo", predicate: "primary_language", object: "Ruby"},
+              {subject: "repo", predicate: "uses_language", object: "Python"}
+            ]
+          )
+          resolver.apply(extraction)
+
+          repo_id = store.find_or_create_entity(type: "repo", name: "repo")
+          facts = store.facts_for_slot(repo_id, "uses_language")
+          # Both facts should accumulate under uses_language (multi-value);
+          # the primary_language one was canonicalized before resolution.
+          expect(facts.size).to eq(2)
+          expect(facts.map { |f| f[:object_literal] }).to contain_exactly("Ruby", "Python")
+        end
+
         it "accumulates multiple uses_framework facts without supersession" do
           # Regression: uses_framework was single-value, which caused
           # multi-framework stacks (Rails + Turbo + Tailwind in the same
