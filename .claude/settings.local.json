@@ -49,7 +49,8 @@
       "Bash(bundle exec:*)",
       "Skill(improve)",
       "Skill(improve:*)",
-      "WebFetch(domain:arxiv.org)"
+      "WebFetch(domain:arxiv.org)",
+      "mcp__memory__memory_conflicts"
     ]
   },
   "enableAllProjectMcpServers": true,
