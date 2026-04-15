@@ -35,7 +35,8 @@ module ClaudeMemory
         "git-lfs" => {class: GitLfsCommand, description: "Git LFS integration"},
         "install-skill" => {class: InstallSkillCommand, description: "Install agent skills"},
         "completion" => {class: CompletionCommand, description: "Generate shell completions"},
-        "embeddings" => {class: EmbeddingsCommand, description: "Inspect embedding backend"}
+        "embeddings" => {class: EmbeddingsCommand, description: "Inspect embedding backend"},
+        "reject" => {class: RejectCommand, description: "Mark a fact as rejected"}
       }.freeze
 
       # Find a command class by name

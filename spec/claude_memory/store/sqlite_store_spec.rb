@@ -159,6 +159,53 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore do
       expect(facts.size).to eq(1)
       expect(facts.first[:status]).to eq("superseded")
     end
+
+    describe "#reject_fact" do
+      it "marks a fact rejected and sets valid_to" do
+        id = store.insert_fact(subject_entity_id: entity_id, predicate: "uses_framework", object_literal: "rails")
+        result = store.reject_fact(id)
+
+        row = store.facts.where(id: id).first
+        expect(row[:status]).to eq("rejected")
+        expect(row[:valid_to]).not_to be_nil
+        expect(result).to eq({rejected: true, conflicts_resolved: 0})
+      end
+
+      it "resolves open conflicts involving the rejected fact" do
+        a_id = store.insert_fact(subject_entity_id: entity_id, predicate: "uses_framework", object_literal: "rails")
+        b_id = store.insert_fact(subject_entity_id: entity_id, predicate: "uses_framework", object_literal: "sinatra")
+        c_id = store.insert_fact(subject_entity_id: entity_id, predicate: "uses_framework", object_literal: "react")
+        store.insert_conflict(fact_a_id: a_id, fact_b_id: b_id, notes: "contradicting frameworks")
+        store.insert_conflict(fact_a_id: a_id, fact_b_id: c_id, notes: "contradicting frameworks")
+
+        result = store.reject_fact(a_id, reason: "hallucinated")
+
+        expect(result[:conflicts_resolved]).to eq(2)
+        expect(store.conflicts.where(status: "open").count).to eq(0)
+        resolved_note = store.conflicts.first[:notes]
+        expect(resolved_note).to include("hallucinated")
+        expect(resolved_note).to include("rejected fact #{a_id}")
+      end
+
+      it "returns nil when the fact does not exist" do
+        expect(store.reject_fact(999_999)).to be_nil
+      end
+
+      it "does not resolve conflicts for other facts" do
+        a_id = store.insert_fact(subject_entity_id: entity_id, predicate: "uses_framework", object_literal: "rails")
+        b_id = store.insert_fact(subject_entity_id: entity_id, predicate: "uses_framework", object_literal: "sinatra")
+        c_id = store.insert_fact(subject_entity_id: entity_id, predicate: "deployment_platform", object_literal: "aws")
+        d_id = store.insert_fact(subject_entity_id: entity_id, predicate: "deployment_platform", object_literal: "gcp")
+        store.insert_conflict(fact_a_id: a_id, fact_b_id: b_id)
+        store.insert_conflict(fact_a_id: c_id, fact_b_id: d_id)
+
+        store.reject_fact(a_id)
+
+        open = store.conflicts.where(status: "open").all
+        expect(open.size).to eq(1)
+        expect(open.first[:fact_a_id]).to eq(c_id)
+      end
+    end
   end
 
   describe "provenance" do

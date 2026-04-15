@@ -223,6 +223,55 @@ RSpec.describe ClaudeMemory::MCP::Tools do
       end
     end
 
+    describe "memory.reject_fact" do
+      it "rejects a fact and resolves its open conflicts" do
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test-repo")
+        bad = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "uses_framework",
+          object_literal: "rails"
+        )
+        other = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "uses_framework",
+          object_literal: "sinatra"
+        )
+        manager.project_store.insert_conflict(fact_a_id: bad, fact_b_id: other)
+
+        result = manager_tools.call("memory.reject_fact", {"fact_id" => bad, "reason" => "hallucinated"})
+
+        expect(result[:success]).to be true
+        expect(result[:conflicts_resolved]).to eq(1)
+        expect(manager.project_store.facts.where(id: bad).get(:status)).to eq("rejected")
+        expect(manager.project_store.conflicts.where(status: "open").count).to eq(0)
+      end
+
+      it "accepts a docid instead of integer id" do
+        entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "test-repo")
+        fact_id = manager.project_store.insert_fact(
+          subject_entity_id: entity_id,
+          predicate: "uses_framework",
+          object_literal: "rails"
+        )
+        docid = manager.project_store.facts.where(id: fact_id).get(:docid)
+
+        result = manager_tools.call("memory.reject_fact", {"docid" => docid})
+
+        expect(result[:success]).to be true
+        expect(result[:fact_id]).to eq(fact_id)
+      end
+
+      it "returns error when neither fact_id nor docid provided" do
+        result = manager_tools.call("memory.reject_fact", {})
+        expect(result[:error]).to match(/required/)
+      end
+
+      it "returns error for non-existent fact" do
+        result = manager_tools.call("memory.reject_fact", {"fact_id" => 999})
+        expect(result[:error]).to include("not found")
+      end
+    end
+
     describe "memory.recall_index" do
       it "returns lightweight index format" do
         # Create content and fact

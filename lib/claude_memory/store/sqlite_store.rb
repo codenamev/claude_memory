@@ -233,6 +233,39 @@ module ClaudeMemory
         facts.where(id: fact_id).update(embedding_json: embedding_vector.to_json)
       end
 
+      # Reject a fact as incorrect (e.g. a distiller hallucination).
+      # Sets status to "rejected", closes any open conflicts involving
+      # the fact, and records the reason in conflict notes when provided.
+      # All updates run in a single transaction.
+      #
+      # @return [Hash, nil] {rejected: bool, conflicts_resolved: Integer}
+      #   or nil if the fact does not exist.
+      def reject_fact(fact_id, reason: nil)
+        row = facts.where(id: fact_id).first
+        return nil unless row
+
+        now = Time.now.utc.iso8601
+        resolved = 0
+
+        @db.transaction do
+          facts.where(id: fact_id).update(status: "rejected", valid_to: now)
+
+          open_conflict_rows = conflicts
+            .where(status: "open")
+            .where { (fact_a_id =~ fact_id) | (fact_b_id =~ fact_id) }
+            .all
+
+          open_conflict_rows.each do |conflict|
+            suffix = reason ? " | resolved: rejected fact #{fact_id} (#{reason})" : " | resolved: rejected fact #{fact_id}"
+            notes = "#{conflict[:notes]}#{suffix}"
+            conflicts.where(id: conflict[:id]).update(status: "resolved", notes: notes)
+          end
+          resolved = open_conflict_rows.size
+        end
+
+        {rejected: true, conflicts_resolved: resolved}
+      end
+
       def facts_with_embeddings(limit: 1000)
         facts
           .where(Sequel.~(embedding_json: nil))

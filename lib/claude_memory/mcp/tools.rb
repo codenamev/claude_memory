@@ -51,6 +51,7 @@ module ClaudeMemory
         when "memory.status" then status
         when "memory.stats" then stats(arguments)
         when "memory.promote" then promote(arguments)
+        when "memory.reject_fact" then reject_fact(arguments)
         when "memory.store_extraction" then store_extraction(arguments)
         when "memory.decisions" then decisions(arguments)
         when "memory.conventions" then conventions(arguments)

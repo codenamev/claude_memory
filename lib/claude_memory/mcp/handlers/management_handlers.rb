@@ -66,6 +66,30 @@ module ClaudeMemory
           end
         end
 
+        def reject_fact(args)
+          scope = args["scope"] || "project"
+          store = get_store_for_scope(scope)
+          return {error: "Database not available"} unless store
+
+          fact_id = args["fact_id"]
+          if fact_id.nil? && args["docid"]
+            row = store.find_fact_by_docid(args["docid"])
+            fact_id = row && row[:id]
+          end
+          return {error: "fact_id or docid required"} if fact_id.nil?
+
+          result = store.reject_fact(fact_id, reason: args["reason"])
+          return {error: "Fact #{fact_id} not found in #{scope} database"} if result.nil?
+
+          {
+            success: true,
+            scope: scope,
+            fact_id: fact_id,
+            conflicts_resolved: result[:conflicts_resolved],
+            message: "Fact rejected"
+          }
+        end
+
         def sweep_now(args)
           scope = args["scope"] || "project"
           store = get_store_for_scope(scope)

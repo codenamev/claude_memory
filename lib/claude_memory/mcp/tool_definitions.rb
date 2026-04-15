@@ -214,6 +214,20 @@ module ClaudeMemory
             annotations: WRITE_IDEMPOTENT
           },
           {
+            name: "memory.reject_fact",
+            description: "Mark a fact as rejected (e.g. a distiller hallucination). Sets status to 'rejected' and closes any open conflicts involving the fact. Use when the user confirms a fact is wrong.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                fact_id: {type: "integer", description: "Fact ID to reject"},
+                docid: {type: "string", description: "8-char docid (alternative to fact_id)"},
+                reason: {type: "string", description: "Why the fact is wrong (recorded in conflict notes)"},
+                scope: {type: "string", enum: ["project", "global"], description: "Database scope", default: "project"}
+              }
+            },
+            annotations: WRITE_IDEMPOTENT
+          },
+          {
             name: "memory.store_extraction",
             description: "Store extracted facts, entities, and decisions from a conversation. Call this to persist knowledge you've learned during the session.",
             inputSchema: {

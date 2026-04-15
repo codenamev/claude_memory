@@ -35,6 +35,10 @@ module ClaudeMemory
         status == "superseded"
       end
 
+      def rejected?
+        status == "rejected"
+      end
+
       def global?
         scope == "global"
       end
