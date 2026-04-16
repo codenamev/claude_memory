@@ -122,6 +122,39 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
           expect(result[:conflicts_created]).to eq(0)
         end
 
+        it "logs a warning when a novel predicate is encountered" do
+          logger = instance_double("Logging::Logger")
+          allow(logger).to receive(:warn)
+          allow(logger).to receive(:debug)
+          allow(logger).to receive(:info)
+          allow(ClaudeMemory).to receive(:logger).and_return(logger)
+
+          extraction = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "totally_new_predicate", object: "foo"}]
+          )
+          resolver.apply(extraction)
+
+          expect(logger).to have_received(:warn).with(
+            "resolve",
+            hash_including(message: "Novel predicate encountered", predicate: "totally_new_predicate")
+          )
+        end
+
+        it "does not warn on known predicates" do
+          logger = instance_double("Logging::Logger")
+          allow(logger).to receive(:warn)
+          allow(logger).to receive(:debug)
+          allow(logger).to receive(:info)
+          allow(ClaudeMemory).to receive(:logger).and_return(logger)
+
+          extraction = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "convention", object: "use frozen_string_literal"}]
+          )
+          resolver.apply(extraction)
+
+          expect(logger).not_to have_received(:warn)
+        end
+
         it "canonicalizes synonym predicates before insertion" do
           # has_convention should land under the canonical "convention"
           # predicate so downstream queries and snapshot rendering find it.

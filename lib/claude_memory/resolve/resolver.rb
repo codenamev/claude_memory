@@ -52,9 +52,17 @@ module ClaudeMemory
         # Canonicalize drift-prone predicate synonyms (has_convention →
         # convention, primary_language → uses_language) before anything
         # else looks at the predicate.
-        if (canonical = PredicatePolicy.canonicalize(fact_data[:predicate])) != fact_data[:predicate]
+        original_predicate = fact_data[:predicate]
+        canonical = PredicatePolicy.canonicalize(original_predicate)
+        if canonical != original_predicate
+          ClaudeMemory.logger.debug("resolve",
+            message: "Canonicalized predicate",
+            from: original_predicate,
+            to: canonical)
           fact_data = fact_data.merge(predicate: canonical)
         end
+
+        log_novel_predicate(canonical) unless PredicatePolicy.known_predicates.include?(canonical)
 
         subject_id = resolve_subject(fact_data, entity_ids)
         existing_facts = @store.facts_for_slot(subject_id, fact_data[:predicate])
@@ -62,6 +70,13 @@ module ClaudeMemory
 
         apply_resolution(resolution, fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts,
           project_path: project_path, scope: scope)
+      end
+
+      def log_novel_predicate(predicate)
+        ClaudeMemory.logger.warn("resolve",
+          message: "Novel predicate encountered",
+          predicate: predicate,
+          hint: "add to PredicatePolicy::POLICIES or PredicatePolicy::SYNONYMS to canonicalize")
       end
 
       def resolve_subject(fact_data, entity_ids)
