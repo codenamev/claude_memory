@@ -41,6 +41,25 @@ RSpec.describe ClaudeMemory::Dashboard::API do
       db_checks = result[:checks].select { |c| c[:name].include?("database") }
       expect(db_checks.size).to eq(2)
     end
+
+    it "includes remediation text for non-healthy checks" do
+      result = api.health
+      non_healthy = result[:checks].reject { |c| c[:status] == "healthy" }
+
+      non_healthy.each do |check|
+        expect(check[:fix]).to be_a(String), "expected fix text on #{check[:name]} (#{check[:status]})"
+        expect(check[:fix]).not_to be_empty
+      end
+    end
+
+    it "omits fix on healthy checks" do
+      result = api.health
+      healthy = result[:checks].select { |c| c[:status] == "healthy" }
+
+      healthy.each do |check|
+        expect(check).not_to have_key(:fix)
+      end
+    end
   end
 
   describe "#stats" do

@@ -264,6 +264,78 @@
   }
   .refresh-btn:hover { border-color: var(--accent); color: var(--text); }
 
+  #status-text.actionable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+  #status-text.actionable:hover { color: var(--text); }
+  .health-check.actionable { cursor: pointer; }
+  .health-check.actionable:hover { border-color: var(--accent); }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 48px 16px;
+    z-index: 100;
+    overflow-y: auto;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 720px;
+    padding: 20px 24px 24px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .modal-header h2 { font-size: 16px; font-weight: 600; }
+  .modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal-issue {
+    border-top: 1px solid var(--surface2);
+    padding: 16px 0;
+  }
+  .modal-issue:first-of-type { border-top: none; padding-top: 0; }
+  .modal-issue-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .modal-issue-msg { color: var(--text-dim); font-size: 13px; margin-bottom: 8px; }
+  .modal-issue-fix {
+    background: var(--surface2);
+    border-left: 3px solid var(--accent);
+    padding: 10px 12px;
+    border-radius: 0 4px 4px 0;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .modal-issue-fix code {
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .modal-empty { color: var(--text-dim); font-size: 13px; }
+
   @media (max-width: 768px) {
     .grid-2 { grid-template-columns: 1fr; }
     .grid-4 { grid-template-columns: repeat(2, 1fr); }
@@ -287,6 +359,16 @@
 
 <main>
   <div class="health-checks" id="health-checks"></div>
+
+  <div class="modal-backdrop" id="health-modal" role="dialog" aria-labelledby="health-modal-title" aria-modal="true">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="health-modal-title">How to fix</h2>
+        <button class="modal-close" aria-label="Close" onclick="closeHealthModal()">&times;</button>
+      </div>
+      <div id="health-modal-body"></div>
+    </div>
+  </div>
 
   <div class="tabs">
     <div class="tab active" data-tab="overview">Overview</div>
@@ -450,8 +532,11 @@ async function loadAll() {
   await Promise.all([loadHealth(), loadStats(), loadActivity(), loadFacts(), loadEfficacy(), loadTimeline()]);
 }
 
+let lastHealth = null;
+
 async function loadHealth() {
   const data = await api('health');
+  lastHealth = data;
   const dot = document.getElementById('status-dot');
   const text = document.getElementById('status-text');
   const version = document.getElementById('version-text');
@@ -460,15 +545,71 @@ async function loadHealth() {
   text.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
   version.textContent = 'v' + (data.version || '?');
 
+  const hasIssues = (data.checks || []).some(c => c.status !== 'healthy');
+  if (hasIssues) {
+    text.classList.add('actionable');
+    text.title = 'Click to see how to fix';
+    text.onclick = () => openHealthModal();
+  } else {
+    text.classList.remove('actionable');
+    text.title = '';
+    text.onclick = null;
+  }
+
   const container = document.getElementById('health-checks');
-  container.innerHTML = (data.checks || []).map(c => `
-    <div class="health-check">
-      <span class="status-dot ${c.status}"></span>
-      <span class="label">${c.name.replace('_', ' ')}</span>
-      <span class="msg">${c.message}</span>
-    </div>
-  `).join('');
+  container.innerHTML = (data.checks || []).map((c, i) => {
+    const actionable = c.status !== 'healthy' && c.fix;
+    return `
+      <div class="health-check ${actionable ? 'actionable' : ''}"
+           ${actionable ? `onclick="openHealthModal('${c.name}')" title="Click to see how to fix"` : ''}>
+        <span class="status-dot ${c.status}"></span>
+        <span class="label">${c.name.replace('_', ' ')}</span>
+        <span class="msg">${esc(c.message)}</span>
+      </div>
+    `;
+  }).join('');
 }
+
+function openHealthModal(focusName) {
+  if (!lastHealth) return;
+  const issues = (lastHealth.checks || []).filter(c => c.status !== 'healthy');
+  const body = document.getElementById('health-modal-body');
+
+  if (issues.length === 0) {
+    body.innerHTML = '<p class="modal-empty">Everything looks healthy. Nothing to fix.</p>';
+  } else {
+    const ordered = focusName
+      ? [...issues.filter(c => c.name === focusName), ...issues.filter(c => c.name !== focusName)]
+      : issues;
+    body.innerHTML = ordered.map(c => `
+      <div class="modal-issue">
+        <div class="modal-issue-title">
+          <span class="status-dot ${c.status}"></span>
+          <span>${c.name.replace('_', ' ')}</span>
+          <span class="badge badge-${c.status === 'error' ? 'error' : 'warning'}">${c.status}</span>
+        </div>
+        <div class="modal-issue-msg">${esc(c.message)}</div>
+        ${c.fix ? `<div class="modal-issue-fix">${renderFix(c.fix)}</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('health-modal').classList.add('open');
+}
+
+function closeHealthModal() {
+  document.getElementById('health-modal').classList.remove('open');
+}
+
+function renderFix(fixText) {
+  // Escape, then wrap `backticked` spans in <code> for copy-friendliness.
+  return esc(fixText).replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`);
+}
+
+document.getElementById('health-modal').addEventListener('click', closeHealthModal);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeHealthModal();
+});
 
 async function loadStats() {
   const data = await api('stats');
