@@ -1,7 +1,7 @@
 {
   "name": "claude-memory",
   "version": "0.8.0",
-  "description": "Long-term self-managed memory for Claude Code with fact extraction, truth maintenance, and provenance tracking",
+  "description": "Long-term memory for Claude Code. Recalls architecture, conventions, and decisions across sessions — so Claude explains your codebase without file traversal, follows your patterns, and never re-asks what it already learned.",
   "author": {
     "name": "Valentino Stoll",
     "email": "v@codenamev.com"
@@ -9,7 +9,7 @@
   "homepage": "https://github.com/codenamev/claude_memory",
   "repository": "https://github.com/codenamev/claude_memory",
   "license": "MIT",
-  "keywords": ["memory", "facts", "knowledge", "persistence", "long-term-memory"],
+  "keywords": ["memory", "architecture", "conventions", "decisions", "recall", "preferences", "long-term-memory"],
   "mcpServers": {
     "memory": {
       "command": "${CLAUDE_PLUGIN_ROOT}/scripts/serve-mcp.sh",

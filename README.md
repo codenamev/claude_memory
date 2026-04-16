@@ -83,6 +83,41 @@ Claude: "Based on my memory, you're using Rails with PostgreSQL..."
 👉 **[See Getting Started Guide →](docs/GETTING_STARTED.md)**
 👉 **[View Example Conversations →](docs/EXAMPLES.md)**
 
+## Why It Matters — Real A/B Test Results
+
+We tested identical prompts with and without ClaudeMemory to measure the actual impact. Here's what we found:
+
+### Architecture Recall Without File Traversal
+
+> **Prompt:** "Explain the conflict detection and resolution system. Answer from knowledge only — do not read any files."
+
+| | Without Memory | With Memory |
+|---|---|---|
+| **Response** | 16 lines: "I don't know this codebase — let me read the files" | 76 lines: correct 4-role PredicatePolicy explanation, resolution pipeline, specific examples |
+| **Outcome** | Honest refusal — zero architectural understanding | Deep understanding without touching the filesystem |
+
+### Correct File Paths vs Hallucinated Guesses
+
+> **Prompt:** "I want to add a new predicate. Walk me through every file I need to update."
+
+| | Without Memory | With Memory |
+|---|---|---|
+| **Response** | 6 steps targeting 3 **non-existent files** (`predicate.rb`, `predicate_synonyms.rb`, `json_schema.rb`) | 8 steps, all targeting **real files** with correct paths |
+| **Outcome** | Plausible but wrong — would waste developer time | Actionable, correct, references actual commits |
+
+### Cross-Project Preferences
+
+> **Prompt:** "What are my standard development environment preferences across all my projects?"
+
+| | Without Memory | With Memory |
+|---|---|---|
+| **Response** | "I don't have stored knowledge of your preferences" | Lists 7 real preferences: iTerm2, tmux, VS Code, PostgreSQL, Redis, Docker |
+| **Outcome** | Blank slate every session | Personalized from day one |
+
+### When Memory Doesn't Help
+
+File-searchable questions ("what version is this?") and one-shot code generation without explicit recall don't benefit — `grep` is equally effective. Memory shines when the answer **isn't in any single file**: architecture spanning dozens of classes, conventions from past sessions, decisions with rationale, and user preferences.
+
 ## How It Works
 
 1. **You chat with Claude** - Tell it about your project

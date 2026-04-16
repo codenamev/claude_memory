@@ -8,9 +8,10 @@ Gem::Specification.new do |spec|
   spec.authors = ["Valentino Stoll"]
   spec.email = ["v@codenamev.com"]
 
-  spec.summary = "Long-term, self-managed memory for Claude Code"
-  spec.description = "Turn-key Ruby gem providing Claude Code with instant, high-quality, " \
-                     "long-term, self-managed memory using Claude Code Hooks + MCP + Output Style."
+  spec.summary = "Long-term memory for Claude Code — architecture recall, convention enforcement, decision tracking"
+  spec.description = "Gives Claude Code persistent memory across sessions. Claude recalls your codebase architecture " \
+                     "without file traversal, enforces project conventions during code generation, tracks decisions " \
+                     "with rationale, and remembers your preferences across all projects. Zero-config via Hooks + MCP."
   spec.homepage = "https://github.com/codenamev/claude_memory"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"

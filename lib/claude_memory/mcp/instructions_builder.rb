@@ -108,7 +108,24 @@ module ClaudeMemory
 
         escalation = vec ? "recall_semantic, explain, or fact_graph" : "explain or fact_graph"
         lines << "Start with fast tools (recall, decisions, conventions) before escalating to #{escalation}."
+
+        lines << proactive_recall_guidance
         lines.join("\n")
+      end
+
+      # Directive guidance for when Claude should proactively consult memory.
+      # Validated by A/B testing: without these directives, Claude writes code
+      # using known-dangerous patterns (e.g. Sequel.sqlite) and hallucinates
+      # file paths instead of consulting memory for the correct structure.
+      def proactive_recall_guidance
+        <<~GUIDANCE.strip
+          IMPORTANT — check memory proactively in these situations:
+          - Before writing code: call memory.conventions to verify project patterns and avoid known gotchas
+          - Before explaining architecture: call memory.architecture for structural knowledge without file traversal
+          - Before refactoring: call memory.decisions to understand why past choices were made
+          - When asked about preferences: global facts store user environment and style preferences across all projects
+          - When adding to the codebase: recall which files and patterns to follow (memory knows correct paths and relationships)
+        GUIDANCE
       end
 
       def count_by_predicates(store, predicates)
