@@ -242,7 +242,12 @@ module ClaudeMemory
 
       def db_health(label, path)
         unless File.exist?(path)
-          return {name: "#{label}_database", status: "warning", message: "Not initialized"}
+          return {
+            name: "#{label}_database",
+            status: "warning",
+            message: "Not initialized",
+            fix: "Run `claude-memory init` to create the #{label} database at #{path}."
+          }
         end
 
         store = @manager.store_for_scope(label)
@@ -253,34 +258,81 @@ module ClaudeMemory
           message: "Schema v#{version}, #{store.facts.where(status: "active").count} active facts"
         }
       rescue => e
-        {name: "#{label}_database", status: "error", message: e.message}
+        {
+          name: "#{label}_database",
+          status: "error",
+          message: e.message,
+          fix: "Inspect the error above. Common causes: corrupt schema, file permissions, or a stale lock. Try `claude-memory recover --scope #{label}`, or remove the file at #{path} and re-run `claude-memory init`."
+        }
       end
 
+      HOOKS_SETTINGS_PATHS = [".claude/settings.json", ".claude/settings.local.json"].freeze
+
       def hooks_health
-        settings_path = File.join(Dir.pwd, ".claude", "settings.json")
-        unless File.exist?(settings_path)
-          return {name: "hooks", status: "warning", message: "No .claude/settings.json found"}
+        present = collect_configured_hook_types
+        expected = Commands::Checks::HooksCheck::EXPECTED_HOOKS
+        missing = expected - present
+
+        if present.empty?
+          return {
+            name: "hooks",
+            status: "error",
+            message: "No claude-memory hooks found in #{HOOKS_SETTINGS_PATHS.join(" or ")}",
+            fix: "Run `claude-memory init` to install the standard hook set (#{expected.join(", ")})."
+          }
         end
 
-        settings = JSON.parse(File.read(settings_path))
-        hooks = settings.dig("hooks") || {}
-        hook_types = %w[Stop SessionStart PreCompact]
-        configured = hook_types.count { |t| hooks.dig(t)&.any? { |h| h["command"]&.include?("claude-memory") } }
-
-        if configured == hook_types.size
-          {name: "hooks", status: "healthy", message: "All #{configured} hooks configured"}
-        elsif configured > 0
-          {name: "hooks", status: "warning", message: "#{configured}/#{hook_types.size} hooks configured"}
-        else
-          {name: "hooks", status: "error", message: "No hooks configured"}
+        if missing.empty?
+          return {name: "hooks", status: "healthy", message: "All #{expected.size} hooks configured"}
         end
+
+        {
+          name: "hooks",
+          status: "warning",
+          message: "#{present.size}/#{expected.size} hooks configured",
+          fix: "Missing hook(s): #{missing.join(", ")}. Run `claude-memory init` to install the standard set, or add them manually under `hooks.<EventName>[].hooks[]` in .claude/settings.json."
+        }
       rescue => e
-        {name: "hooks", status: "error", message: e.message}
+        {
+          name: "hooks",
+          status: "error",
+          message: e.message,
+          fix: "Failed to read hook settings. Verify .claude/settings.json is valid JSON, then re-run `claude-memory doctor`."
+        }
+      end
+
+      # Walks the two-level hook structure Claude Code uses:
+      # hooks.<EventName>[] -> matcher hash -> .hooks[] -> { type:, command: }
+      def collect_configured_hook_types
+        types = []
+        HOOKS_SETTINGS_PATHS.each do |relpath|
+          path = File.join(Dir.pwd, relpath)
+          next unless File.exist?(path)
+
+          settings = JSON.parse(File.read(path))
+          hooks = settings["hooks"] || {}
+          hooks.each do |event_type, matchers|
+            next unless matchers.is_a?(Array)
+            has_claude_memory = matchers.any? do |matcher|
+              next false unless matcher.is_a?(Hash) && matcher["hooks"].is_a?(Array)
+              matcher["hooks"].any? { |h| h.is_a?(Hash) && h["command"]&.include?("claude-memory") }
+            end
+            types << event_type if has_claude_memory
+          end
+        end
+        types.uniq
       end
 
       def vec_health
         store = default_store
-        return {name: "vectors", status: "warning", message: "No database"} unless store
+        unless store
+          return {
+            name: "vectors",
+            status: "warning",
+            message: "No database",
+            fix: "Initialize a database first with `claude-memory init`."
+          }
+        end
 
         vec = store.vector_index
         if vec.available?
@@ -288,10 +340,20 @@ module ClaudeMemory
           {name: "vectors", status: "healthy",
            message: "#{coverage[:vec_indexed]}/#{coverage[:facts_total]} facts indexed"}
         else
-          {name: "vectors", status: "warning", message: "sqlite-vec not available"}
+          {
+            name: "vectors",
+            status: "warning",
+            message: "sqlite-vec not available",
+            fix: "The sqlite-vec extension didn't load. Run `bundle install` to install the gem (>= 0.1.9). Semantic recall will be disabled until this is fixed; lexical recall still works."
+          }
         end
       rescue => e
-        {name: "vectors", status: "warning", message: e.message}
+        {
+          name: "vectors",
+          status: "warning",
+          message: e.message,
+          fix: "Vector index threw an error. Try `claude-memory index --vec --rebuild` to rebuild from facts."
+        }
       end
     end
   end
