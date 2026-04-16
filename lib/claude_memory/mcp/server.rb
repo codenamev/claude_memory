@@ -59,8 +59,9 @@ module ClaudeMemory
         rescue JSON::ParserError => e
           send_error(-32700, "Parse error: #{e.message}", 0)
         rescue => e
-          request_id = request&.fetch("id", nil) || 0
-          send_error(-32603, "Internal error: #{e.message}", request_id)
+          # Per JSON-RPC 2.0: never respond to notifications, even on error
+          request_id = request&.fetch("id", nil)
+          send_error(-32603, "Internal error: #{e.message}", request_id) unless request_id.nil?
         end
       end
 
@@ -68,6 +69,11 @@ module ClaudeMemory
       def process_request(request)
         id = request["id"]
         method = request["method"]
+
+        # Per JSON-RPC 2.0: a request without an id is a notification and
+        # MUST NOT receive a response. MCP relies on this for
+        # `notifications/initialized` after the initialize handshake.
+        return nil if id.nil?
 
         case method
         when "initialize"

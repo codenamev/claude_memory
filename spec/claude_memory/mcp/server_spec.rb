@@ -66,6 +66,35 @@ RSpec.describe ClaudeMemory::MCP::Server do
     end
   end
 
+  describe "notifications (no id)" do
+    it "does not respond to notifications/initialized" do
+      input.puts(JSON.generate({jsonrpc: "2.0", method: "notifications/initialized"}))
+      input.rewind
+      server.run
+
+      expect(output.string).to eq("")
+    end
+
+    it "does not respond to messages with a null id" do
+      input.puts(JSON.generate({jsonrpc: "2.0", id: nil, method: "notifications/cancelled"}))
+      input.rewind
+      server.run
+
+      expect(output.string).to eq("")
+    end
+
+    it "still processes subsequent requests after a notification" do
+      input.puts(JSON.generate({jsonrpc: "2.0", method: "notifications/initialized"}))
+      input.puts(JSON.generate({jsonrpc: "2.0", id: 1, method: "tools/list"}))
+      input.rewind
+      server.run
+
+      lines = output.string.strip.split("\n")
+      expect(lines.size).to eq(1)
+      expect(JSON.parse(lines.first)["id"]).to eq(1)
+    end
+  end
+
   describe "tools/call" do
     it "returns text summary in content" do
       response = send_request({
