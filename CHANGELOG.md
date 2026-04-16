@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-04-16
+
+### Fixed
+
+- MCP server now conforms to JSON-RPC 2.0: notifications (messages without an `id`) never receive a response. Previously, `notifications/initialized` — which Claude Code sends after every handshake — triggered a spurious `Method not found` error frame, causing strict MCP clients to mark the server failed on `/mcp` reconnect after the initial connection.
+
 ## [0.9.0] - 2026-04-16
 
 ### Added

@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    claude_memory (0.9.0)
+    claude_memory (0.9.1)
       extralite (~> 2.14)
       sequel (~> 5.102)
       sqlite-vec (~> 0.1, >= 0.1.9)
@@ -138,7 +138,7 @@ DEPENDENCIES
 CHECKSUMS
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
   bigdecimal (4.1.0) sha256=6dc07767aa3dc456ccd48e7ae70a07b474e9afd7c5bc576f80bd6da5c8dd6cae
-  claude_memory (0.9.0)
+  claude_memory (0.9.1)
   date (3.5.1) sha256=750d06384d7b9c15d562c76291407d89e368dda4d4fff957eb94962d325a0dc0
   diff-lcs (1.6.2) sha256=9ae0d2cba7d4df3075fe8cd8602a8604993efc0dfa934cff568969efb1909962
   erb (6.0.2) sha256=9fe6264d44f79422c87490a1558479bd0e7dad4dd0e317656e67ea3077b5242b
