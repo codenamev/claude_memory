@@ -101,6 +101,9 @@ module ClaudeMemory
       # @return [Sequel::Dataset]
       def mcp_tool_calls = @db[:mcp_tool_calls]
 
+      # @return [Sequel::Dataset]
+      def activity_events = @db[:activity_events]
+
       # Record a single MCP tool invocation for telemetry.
       # Inserts synchronously; callers wrap in with_retry at the call site
       # if needed.

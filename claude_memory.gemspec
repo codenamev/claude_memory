@@ -34,4 +34,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency "sequel", "~> 5.102"
   spec.add_dependency "extralite", "~> 2.14"
   spec.add_dependency "sqlite-vec", "~> 0.1", ">= 0.1.9"
+  spec.add_dependency "webrick", "~> 1.8"
 end

@@ -31,6 +31,8 @@ module ClaudeMemory
         when "memory.undistilled" then summarize_undistilled(result)
         when "memory.mark_distilled" then summarize_mark_distilled(result)
         when "memory.check_setup" then summarize_check_setup(result)
+        when "memory.activity" then summarize_activity(result)
+        when "memory.list_projects" then summarize_list_projects(result)
         else JSON.generate(result)
         end
       end
@@ -272,6 +274,33 @@ module ClaudeMemory
         warnings = result[:warnings] || []
         warnings.each { |w| lines << "Warning: #{w}" }
 
+        lines.join("\n")
+      end
+
+      def self.summarize_activity(result)
+        events = result[:events] || []
+        return "No activity events recorded." if events.empty?
+
+        summary = result[:summary] || {}
+        lines = ["#{result[:event_count]} event(s):"]
+        summary.each do |type, counts|
+          parts = counts.map { |status, count| "#{count} #{status}" }
+          lines << "  #{type}: #{parts.join(", ")}"
+        end
+        lines.join("\n")
+      end
+
+      def self.summarize_list_projects(result)
+        lines = ["Projects:"]
+        if result[:global]
+          lines << "- Global: #{result[:global][:facts_active] || 0} active facts"
+        end
+        if result[:current_project]
+          lines << "- Current: #{result[:current_project][:facts_active] || 0} active facts"
+        end
+        (result[:other_projects] || []).each do |p|
+          lines << "- #{p[:path]}: #{p[:facts_active] || 0} active facts"
+        end
         lines.join("\n")
       end
 

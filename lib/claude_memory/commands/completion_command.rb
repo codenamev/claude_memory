@@ -80,6 +80,9 @@ module ClaudeMemory
                   completion)
                     _arguments '--shell[Shell type]:shell:(bash zsh)'
                     ;;
+                  dashboard)
+                    _arguments '--port[Server port]:port:' '--no-open[Skip browser open]'
+                    ;;
                   install-skill)
                     local -a skills
                     skills=(#{skill_names.map { |s| "'#{s}'" }.join(" ")})

@@ -37,7 +37,8 @@ module ClaudeMemory
         "completion" => {class: CompletionCommand, description: "Generate shell completions"},
         "embeddings" => {class: EmbeddingsCommand, description: "Inspect embedding backend"},
         "reject" => {class: RejectCommand, description: "Mark a fact as rejected"},
-        "restore" => {class: RestoreCommand, description: "Restore superseded facts from obsolete single-value classification"}
+        "restore" => {class: RestoreCommand, description: "Restore superseded facts from obsolete single-value classification"},
+        "dashboard" => {class: DashboardCommand, description: "Open debugging dashboard"}
       }.freeze
 
       # Find a command class by name

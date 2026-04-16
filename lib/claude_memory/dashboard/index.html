@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClaudeMemory Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  .header-meta { color: var(--text-dim); font-size: 13px; }
+  .header-meta .version { color: var(--accent); }
+  .header-meta .status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .status-dot.healthy { background: var(--green); }
+  .status-dot.warning { background: var(--yellow); }
+  .status-dot.error { background: var(--red); }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .tab {
+    padding: 8px 16px;
+    cursor: pointer;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .grid { display: grid; gap: 16px; }
+  .grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .card h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .card .sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+  .health-checks {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .health-check {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 200px;
+  }
+  .health-check .label { font-weight: 500; }
+  .health-check .msg { color: var(--text-dim); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    font-weight: 500;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--surface2);
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--surface2); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .badge-success { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-warning { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge-error { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-info { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
+
+  .bar-chart { margin-top: 12px; }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .bar-label { width: 160px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; height: 20px; background: var(--surface2); border-radius: 4px; margin: 0 8px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.5s ease; min-width: 2px; }
+  .bar-value { width: 40px; text-align: right; color: var(--text-dim); font-size: 12px; }
+
+  .timeline-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 120px;
+    padding: 8px 0;
+  }
+  .timeline-bar {
+    flex: 1;
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+    position: relative;
+  }
+  .timeline-bar:hover { opacity: 1; }
+  .timeline-bar .tooltip {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .timeline-bar:hover .tooltip { display: block; }
+
+  .search-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 14px;
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 16px;
+    outline: none;
+  }
+  .search-box:focus { border-color: var(--accent); }
+
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-btn {
+    padding: 4px 12px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active { background: rgba(88,166,255,0.15); border-color: var(--accent); color: var(--accent); }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px;
+    color: var(--text-dim);
+  }
+  .empty-state p { font-size: 14px; margin-top: 8px; }
+
+  .efficacy-card {
+    text-align: center;
+    padding: 24px;
+  }
+  .efficacy-card .big-number {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .efficacy-card .label {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .refresh-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  @media (max-width: 768px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .health-checks { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>Claude</span>Memory Dashboard</h1>
+  <div class="header-meta">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Loading...</span>
+    &middot;
+    <span class="version" id="version-text"></span>
+    &middot;
+    <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+  </div>
+</header>
+
+<main>
+  <div class="health-checks" id="health-checks"></div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="overview">Overview</div>
+    <div class="tab" data-tab="activity">Activity</div>
+    <div class="tab" data-tab="facts">Facts</div>
+    <div class="tab" data-tab="efficacy">Efficacy</div>
+  </div>
+
+  <!-- Overview Tab -->
+  <div class="tab-panel active" id="tab-overview">
+    <div class="grid grid-4" id="metric-cards"></div>
+    <div class="grid grid-2" style="margin-top: 24px;">
+      <div class="card">
+        <h3>Top Predicates</h3>
+        <div class="bar-chart" id="predicate-chart"></div>
+      </div>
+      <div class="card">
+        <h3>Entity Types</h3>
+        <div class="bar-chart" id="entity-chart"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 24px;">
+      <h3>Activity Timeline (30 days)</h3>
+      <div class="timeline-chart" id="timeline-chart"></div>
+    </div>
+  </div>
+
+  <!-- Activity Tab -->
+  <div class="tab-panel" id="tab-activity">
+    <div class="filter-row">
+      <span style="color: var(--text-dim); font-size: 12px;">Filter:</span>
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="hook_ingest">Ingest</button>
+      <button class="filter-btn" data-filter="hook_context">Context</button>
+      <button class="filter-btn" data-filter="hook_sweep">Sweep</button>
+      <button class="filter-btn" data-filter="recall">Recall</button>
+      <button class="filter-btn" data-filter="store_extraction">Store</button>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Event</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="activity-tbody"></tbody>
+      </table>
+      <div class="empty-state" id="activity-empty" style="display:none;">
+        <p>No activity events recorded yet.</p>
+        <p>Events will appear here as hooks run and memory tools are used.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Facts Tab -->
+  <div class="tab-panel" id="tab-facts">
+    <div class="filter-row">
+      <input class="search-box" id="fact-search" placeholder="Search facts by predicate or value..." />
+      <button class="filter-btn active" data-status="active">Active</button>
+      <button class="filter-btn" data-status="superseded">Superseded</button>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Subject</th>
+            <th>Predicate</th>
+            <th>Object</th>
+            <th>Confidence</th>
+            <th>Scope</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody id="facts-tbody"></tbody>
+      </table>
+      <div class="empty-state" id="facts-empty" style="display:none;">
+        <p>No facts found.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Efficacy Tab -->
+  <div class="tab-panel" id="tab-efficacy">
+    <div class="grid grid-4" id="efficacy-cards"></div>
+    <div class="card" style="margin-top: 24px;">
+      <h3>Top Queries by Results Returned</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Query</th>
+            <th>Tool</th>
+            <th>Results</th>
+            <th>Duration</th>
+            <th>When</th>
+          </tr>
+        </thead>
+        <tbody id="top-queries-tbody"></tbody>
+      </table>
+      <div class="empty-state" id="efficacy-empty" style="display:none;">
+        <p>No recall events recorded yet.</p>
+        <p>As Claude uses memory.recall and related tools, efficacy metrics will appear here.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Tab navigation
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// Activity filter buttons
+document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadActivity(btn.dataset.filter === 'all' ? null : btn.dataset.filter);
+  });
+});
+
+// Fact status filter buttons
+document.querySelectorAll('.filter-btn[data-status]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn[data-status]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadFacts({status: btn.dataset.status});
+  });
+});
+
+// Fact search with debounce
+let searchTimeout;
+document.getElementById('fact-search').addEventListener('input', (e) => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    const activeStatus = document.querySelector('.filter-btn[data-status].active')?.dataset.status || 'active';
+    loadFacts({status: activeStatus, q: e.target.value});
+  }, 300);
+});
+
+// API calls
+async function api(path, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const url = qs ? `/api/${path}?${qs}` : `/api/${path}`;
+  const res = await fetch(url);
+  return res.json();
+}
+
+// Load all data
+async function loadAll() {
+  await Promise.all([loadHealth(), loadStats(), loadActivity(), loadFacts(), loadEfficacy(), loadTimeline()]);
+}
+
+async function loadHealth() {
+  const data = await api('health');
+  const dot = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  const version = document.getElementById('version-text');
+
+  dot.className = 'status-dot ' + data.status;
+  text.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+  version.textContent = 'v' + (data.version || '?');
+
+  const container = document.getElementById('health-checks');
+  container.innerHTML = (data.checks || []).map(c => `
+    <div class="health-check">
+      <span class="status-dot ${c.status}"></span>
+      <span class="label">${c.name.replace('_', ' ')}</span>
+      <span class="msg">${c.message}</span>
+    </div>
+  `).join('');
+}
+
+async function loadStats() {
+  const data = await api('stats');
+  const dbs = data.databases || {};
+  const cards = document.getElementById('metric-cards');
+
+  // Aggregate across databases
+  let totalFacts = 0, activeFacts = 0, totalEntities = 0, contentItems = 0, openConflicts = 0;
+  let allPredicates = [], allEntityTypes = [];
+
+  Object.values(dbs).forEach(db => {
+    if (!db.exists) return;
+    totalFacts += db.facts_total || 0;
+    activeFacts += db.facts_active || 0;
+    totalEntities += db.entities_total || 0;
+    contentItems += db.content_items || 0;
+    openConflicts += db.open_conflicts || 0;
+    allPredicates = allPredicates.concat(db.top_predicates || []);
+    allEntityTypes = allEntityTypes.concat(db.entity_types || []);
+  });
+
+  cards.innerHTML = [
+    metricCard('Active Facts', activeFacts, `${totalFacts} total`),
+    metricCard('Entities', totalEntities, ''),
+    metricCard('Content Items', contentItems, 'ingested transcripts'),
+    metricCard('Open Conflicts', openConflicts, openConflicts > 0 ? 'need resolution' : 'none')
+  ].join('');
+
+  renderBarChart('predicate-chart', mergeAndSort(allPredicates, 'predicate'));
+  renderBarChart('entity-chart', mergeAndSort(allEntityTypes, 'type'));
+}
+
+function mergeAndSort(items, key) {
+  const merged = {};
+  items.forEach(i => { merged[i[key]] = (merged[i[key]] || 0) + i.count; });
+  return Object.entries(merged)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([label, count]) => ({label, count}));
+}
+
+async function loadActivity(eventType) {
+  const params = {};
+  if (eventType) params.event_type = eventType;
+  const data = await api('activity', params);
+  const tbody = document.getElementById('activity-tbody');
+  const empty = document.getElementById('activity-empty');
+
+  if (!data.events || data.events.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = data.events.map(e => {
+    const details = e.details || {};
+    const detailStr = formatDetails(e.event_type, details);
+    return `<tr>
+      <td title="${e.occurred_at}">${e.occurred_ago || e.occurred_at}</td>
+      <td><span class="badge badge-info">${e.event_type}</span></td>
+      <td><span class="badge badge-${statusBadge(e.status)}">${e.status}</span></td>
+      <td>${e.duration_ms ? e.duration_ms + 'ms' : '-'}</td>
+      <td style="color: var(--text-dim)">${detailStr}</td>
+    </tr>`;
+  }).join('');
+}
+
+function formatDetails(type, details) {
+  switch(type) {
+    case 'hook_ingest':
+      if (details.bytes_read) return `${details.bytes_read} bytes, content_id: ${details.content_id}`;
+      return details.reason || '';
+    case 'hook_context':
+      if (details.context_length) return `${details.context_length} chars injected`;
+      return details.error || 'no context';
+    case 'hook_sweep':
+      return `${details.elapsed_seconds?.toFixed(2) || '?'}s, budget: ${details.budget_honored}`;
+    case 'recall':
+      return `${details.tool}: "${details.query || '?'}" -> ${details.result_count || 0} results`;
+    case 'store_extraction':
+      return `${details.facts_created || 0} facts, ${details.entities_created || 0} entities`;
+    default:
+      return JSON.stringify(details).slice(0, 80);
+  }
+}
+
+async function loadFacts(params = {}) {
+  const data = await api('facts', params);
+  const tbody = document.getElementById('facts-tbody');
+  const empty = document.getElementById('facts-empty');
+
+  if (!data.facts || data.facts.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = data.facts.map(f => `
+    <tr>
+      <td><code>${f.docid || f.id}</code></td>
+      <td>${esc(f.subject)}</td>
+      <td><span class="badge badge-purple">${esc(f.predicate)}</span></td>
+      <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+          title="${esc(f.object)}">${esc(f.object)}</td>
+      <td>${f.confidence ? (f.confidence * 100).toFixed(0) + '%' : '-'}</td>
+      <td><span class="badge badge-info">${f.scope}</span></td>
+      <td title="${f.created_at}">${f.created_ago || f.created_at || '-'}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadEfficacy() {
+  const data = await api('efficacy');
+  const cards = document.getElementById('efficacy-cards');
+  const tbody = document.getElementById('top-queries-tbody');
+  const empty = document.getElementById('efficacy-empty');
+
+  cards.innerHTML = [
+    efficacyCard(data.hit_rate + '%', 'Hit Rate', 'queries returning results'),
+    efficacyCard(data.recall_events, 'Total Recalls', `${data.successful_recalls} successful, ${data.empty_recalls} empty`),
+    efficacyCard(data.total_results_served, 'Results Served', 'total facts returned'),
+    efficacyCard(data.avg_results_per_query, 'Avg Results', 'per query')
+  ].join('');
+
+  if (!data.top_queries || data.top_queries.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = data.top_queries.map(q => `
+    <tr>
+      <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+          title="${esc(q.query)}">${esc(q.query)}</td>
+      <td><span class="badge badge-info">${q.tool?.replace('memory.', '') || '-'}</span></td>
+      <td>${q.result_count || 0}</td>
+      <td>${q.duration_ms ? q.duration_ms + 'ms' : '-'}</td>
+      <td title="${q.occurred_at}">${q.occurred_ago || '-'}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadTimeline() {
+  const data = await api('timeline');
+  const container = document.getElementById('timeline-chart');
+
+  if (!data.days || data.days.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No timeline data yet.</p></div>';
+    return;
+  }
+
+  const maxVal = Math.max(...data.days.map(d => d.facts_created + d.content_ingested + d.recalls), 1);
+
+  container.innerHTML = data.days.map(d => {
+    const total = d.facts_created + d.content_ingested + d.recalls;
+    const pct = (total / maxVal * 100).toFixed(1);
+    return `<div class="timeline-bar" style="height: ${Math.max(pct, 2)}%">
+      <div class="tooltip">${d.date}<br>${d.facts_created} facts, ${d.content_ingested} ingested, ${d.recalls} recalls</div>
+    </div>`;
+  }).join('');
+}
+
+// Helpers
+function metricCard(title, value, sub) {
+  return `<div class="card">
+    <h3>${title}</h3>
+    <div class="value">${typeof value === 'number' ? value.toLocaleString() : value}</div>
+    <div class="sub">${sub}</div>
+  </div>`;
+}
+
+function efficacyCard(value, title, sub) {
+  return `<div class="card efficacy-card">
+    <div class="big-number">${typeof value === 'number' ? value.toLocaleString() : value}</div>
+    <div class="label">${title}</div>
+    <div class="sub" style="color: var(--text-dim); font-size: 12px; margin-top: 4px;">${sub}</div>
+  </div>`;
+}
+
+function renderBarChart(containerId, data) {
+  const container = document.getElementById(containerId);
+  if (!data.length) {
+    container.innerHTML = '<div style="color: var(--text-dim); font-size: 13px;">No data</div>';
+    return;
+  }
+  const max = Math.max(...data.map(d => d.count), 1);
+  container.innerHTML = data.map(d => `
+    <div class="bar-row">
+      <span class="bar-label" title="${esc(d.label)}">${esc(d.label)}</span>
+      <div class="bar-track"><div class="bar-fill" style="width: ${(d.count / max * 100).toFixed(1)}%"></div></div>
+      <span class="bar-value">${d.count}</span>
+    </div>
+  `).join('');
+}
+
+function statusBadge(status) {
+  switch(status) {
+    case 'success': return 'success';
+    case 'skipped': return 'warning';
+    case 'error': return 'error';
+    default: return 'info';
+  }
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Auto-refresh every 30s
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
