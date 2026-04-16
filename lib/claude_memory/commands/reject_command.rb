@@ -7,6 +7,8 @@ module ClaudeMemory
     # Mark a fact as rejected (e.g. a distiller hallucination).
     # Closes any open conflicts involving the fact.
     class RejectCommand < BaseCommand
+      # @param args [Array<String>] command line arguments (fact_id_or_docid, --scope, --reason)
+      # @return [Integer] exit code (0 for success, 1 for failure)
       def call(args)
         opts = parse_options(args, {scope: "project", reason: nil}) do |o|
           OptionParser.new do |parser|
@@ -46,6 +48,9 @@ module ClaudeMemory
       private
 
       # Accept either a numeric fact id or an 8-char docid hex string.
+      # @param store [Store::SQLiteStore] database to look up the fact in
+      # @param identifier [String] numeric fact id or hex docid
+      # @return [Integer, nil] resolved fact id, or nil if not found
       def resolve_fact_id(store, identifier)
         return identifier.to_i if identifier.match?(/\A\d+\z/)
 

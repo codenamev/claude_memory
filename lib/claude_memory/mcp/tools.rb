@@ -16,6 +16,9 @@ require_relative "handlers/setup_handlers"
 
 module ClaudeMemory
   module MCP
+    # Dispatcher that routes MCP tool calls to handler modules.
+    # Each handler module (QueryHandlers, ShortcutHandlers, etc.) provides
+    # the implementation for a group of related tools.
     class Tools
       include ToolHelpers
       include Handlers::QueryHandlers
@@ -25,6 +28,7 @@ module ClaudeMemory
       include Handlers::StatsHandlers
       include Handlers::SetupHandlers
 
+      # @param store_or_manager [Store::SQLiteStore, Store::StoreManager] database backend
       def initialize(store_or_manager)
         @recall = Recall.new(store_or_manager)
 
@@ -35,10 +39,15 @@ module ClaudeMemory
         end
       end
 
+      # @return [Array<Hash>] MCP tool definition hashes for tools/list
       def definitions
         ToolDefinitions.all
       end
 
+      # Dispatch a tool call to the appropriate handler method.
+      # @param name [String] fully-qualified tool name (e.g. "memory.recall")
+      # @param arguments [Hash] tool arguments from the MCP request
+      # @return [Hash] structured result hash for the tool response
       def call(name, arguments)
         case name
         when "memory.recall" then recall(arguments)

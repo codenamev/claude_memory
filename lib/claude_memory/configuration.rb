@@ -8,35 +8,44 @@ module ClaudeMemory
   class Configuration
     attr_reader :env
 
+    # @param env [Hash] environment variables (default: ENV)
     def initialize(env = ENV)
       @env = env
     end
 
+    # @return [String] user home directory
     def home_dir
       env["HOME"] || File.expand_path("~")
     end
 
+    # @return [String] project root directory (resolves git worktrees)
     def project_dir
       env["CLAUDE_PROJECT_DIR"] || resolve_project_dir
     end
 
+    # @return [String] Claude config directory (default: ~/.claude)
     def claude_config_dir
       env["CLAUDE_CONFIG_DIR"] || File.join(home_dir, ".claude")
     end
 
+    # @return [String] path to global memory database
     def global_db_path
       File.join(claude_config_dir, "memory.sqlite3")
     end
 
+    # @param project_path [String, nil] override project root (defaults to project_dir)
+    # @return [String] path to project memory database
     def project_db_path(project_path = nil)
       path = project_path || project_dir
       File.join(path, ".claude", "memory.sqlite3")
     end
 
+    # @return [String, nil] current Claude session ID from CLAUDE_SESSION_ID
     def session_id
       env["CLAUDE_SESSION_ID"]
     end
 
+    # @return [String, nil] path to current transcript from CLAUDE_TRANSCRIPT_PATH
     def transcript_path
       env["CLAUDE_TRANSCRIPT_PATH"]
     end

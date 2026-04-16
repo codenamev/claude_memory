@@ -2,11 +2,32 @@
 
 module ClaudeMemory
   module Resolve
+    # Truth maintenance engine that processes distilled extractions into stored facts.
+    # Wraps entity resolution, fact insertion, supersession, and conflict detection
+    # in a single database transaction.
+    #
+    # @example
+    #   resolver = Resolver.new(store)
+    #   result = resolver.apply(extraction, content_item_id: 42, scope: "project")
+    #   result[:facts_created]   #=> 3
+    #   result[:facts_superseded] #=> 1
     class Resolver
+      # @param store [Store::SQLiteStore] backing database for reads and writes
       def initialize(store)
         @store = store
       end
 
+      # Apply a distilled extraction, resolving each fact against existing knowledge.
+      # Facts may be inserted, reinforce an existing fact, supersede old facts, or
+      # create a conflict when the resolution is ambiguous.
+      #
+      # @param extraction [#entities, #facts] distilled extraction with entities and facts
+      # @param content_item_id [Integer, nil] source content item for provenance
+      # @param occurred_at [String, nil] ISO 8601 timestamp (defaults to now)
+      # @param project_path [String, nil] project path for scoped facts
+      # @param scope [String] default scope for facts ("project" or "global")
+      # @return [Hash] counts keyed by :entities_created, :facts_created,
+      #   :facts_superseded, :conflicts_created, :provenance_created
       def apply(extraction, content_item_id: nil, occurred_at: nil, project_path: nil, scope: "project")
         occurred_at ||= Time.now.utc.iso8601
 

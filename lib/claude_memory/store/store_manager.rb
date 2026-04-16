@@ -4,9 +4,25 @@ require "fileutils"
 
 module ClaudeMemory
   module Store
+    # Dual-database connection manager for global and project stores.
+    # Lazily opens SQLiteStore connections to the global database
+    # (~/.claude/memory.sqlite3) and the project database
+    # (.claude/memory.sqlite3 under the project root). Commands query
+    # both databases by default, with project facts taking precedence.
     class StoreManager
-      attr_reader :global_store, :project_store, :project_path
+      # @return [SQLiteStore, nil] global store (nil until {#ensure_global!} is called)
+      attr_reader :global_store
 
+      # @return [SQLiteStore, nil] project store (nil until {#ensure_project!} is called)
+      attr_reader :project_store
+
+      # @return [String] project directory path
+      attr_reader :project_path
+
+      # @param global_db_path [String, nil] override path to the global database
+      # @param project_db_path [String, nil] override path to the project database
+      # @param project_path [String, nil] project directory (defaults to Configuration)
+      # @param env [Hash] environment variable hash (default: ENV)
       def initialize(global_db_path: nil, project_db_path: nil, project_path: nil, env: ENV)
         config = Configuration.new(env)
         @project_path = project_path || config.project_dir
@@ -17,14 +33,23 @@ module ClaudeMemory
         @project_store = nil
       end
 
+      # Default global database path from Configuration.
+      # @param env [Hash] environment variable hash
+      # @return [String]
       def self.default_global_db_path(env = ENV)
         Configuration.new(env).global_db_path
       end
 
+      # Default project database path for a given project directory.
+      # @param project_path [String] project directory (default: current working directory)
+      # @return [String]
       def self.default_project_db_path(project_path = Dir.pwd)
         Configuration.new.project_db_path(project_path)
       end
 
+      # Open the global store, creating the directory and database if needed.
+      # No-op if already open.
+      # @return [SQLiteStore] the global store
       def ensure_global!
         return @global_store if @global_store
 
@@ -32,6 +57,9 @@ module ClaudeMemory
         @global_store = SQLiteStore.new(@global_db_path)
       end
 
+      # Open the project store, creating the directory and database if needed.
+      # No-op if already open.
+      # @return [SQLiteStore] the project store
       def ensure_project!
         return @project_store if @project_store
 
@@ -39,23 +67,33 @@ module ClaudeMemory
         @project_store = SQLiteStore.new(@project_db_path)
       end
 
+      # Open both global and project stores.
+      # @return [void]
       def ensure_both!
         ensure_global!
         ensure_project!
       end
 
+      # @return [String] filesystem path to the global database
       attr_reader :global_db_path
 
+      # @return [String] filesystem path to the project database
       attr_reader :project_db_path
 
+      # Check whether the global database file exists on disk.
+      # @return [Boolean]
       def global_exists?
         File.exist?(@global_db_path)
       end
 
+      # Check whether the project database file exists on disk.
+      # @return [Boolean]
       def project_exists?
         File.exist?(@project_db_path)
       end
 
+      # Close both database connections and reset store references.
+      # @return [void]
       def close
         @global_store&.close
         @project_store&.close
@@ -63,6 +101,10 @@ module ClaudeMemory
         @project_store = nil
       end
 
+      # Return the appropriate store for a given scope string.
+      # @param scope [String] "global" or "project"
+      # @return [SQLiteStore]
+      # @raise [ArgumentError] if scope is not "global" or "project"
       def store_for_scope(scope)
         case scope
         when "global"
@@ -76,6 +118,13 @@ module ClaudeMemory
         end
       end
 
+      # Copy a project-scoped fact (with its entities and provenance) into the
+      # global store, making it available across all projects. Runs the global
+      # writes in a single transaction for atomicity.
+      #
+      # @param fact_id [Integer] project fact row id to promote
+      # @return [Integer, nil] the new global fact id, or nil if the fact/subject
+      #   was not found in the project store
       def promote_fact(fact_id)
         ensure_both!
 

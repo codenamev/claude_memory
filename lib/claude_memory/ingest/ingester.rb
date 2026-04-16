@@ -4,7 +4,17 @@ require "digest"
 
 module ClaudeMemory
   module Ingest
+    # Delta-based transcript ingestion with cursor tracking.
+    # Reads new content from transcripts, extracts metadata and tool calls,
+    # sanitizes private tags, and persists to the content_items table with FTS indexing.
     class Ingester
+      # @param store [Store::SQLiteStore] database store for persistence
+      # @param fts [Index::LexicalFTS, nil] full-text search index (default: new from store)
+      # @param env [Hash] environment variables
+      # @param metadata_extractor [MetadataExtractor, nil] extracts git branch, cwd, etc.
+      # @param tool_extractor [ToolExtractor, nil] extracts tool calls from transcript text
+      # @param tool_filter [ToolFilter, nil] filters irrelevant tool calls
+      # @param observation_compressor [ObservationCompressor, nil] compresses tool observations
       def initialize(store, fts: nil, env: ENV, metadata_extractor: nil, tool_extractor: nil, tool_filter: nil, observation_compressor: nil)
         @store = store
         @fts = fts || Index::LexicalFTS.new(store)
@@ -15,6 +25,13 @@ module ClaudeMemory
         @observation_compressor = observation_compressor || ObservationCompressor.new
       end
 
+      # Ingest new content from a transcript file
+      # @param source [String] content source identifier (e.g., "hook", "cli")
+      # @param session_id [String] Claude session ID
+      # @param transcript_path [String] path to the transcript file
+      # @param project_path [String, nil] project root (defaults to detected path)
+      # @return [Hash] result with :status (:ingested, :skipped, or :no_change),
+      #   :content_id, :bytes_read, and optional :reason
       def ingest(source:, session_id:, transcript_path:, project_path: nil)
         unless should_ingest?(transcript_path)
           ClaudeMemory.logger.debug("ingest", message: "Skipped unchanged file", transcript_path: transcript_path)

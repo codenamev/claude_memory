@@ -9,6 +9,8 @@ module ClaudeMemory
     # Sweep::Maintenance#restore_multi_value_supersessions for the algorithm
     # and Jaccard heuristic.
     class RestoreCommand < BaseCommand
+      # @param args [Array<String>] command line arguments (--predicate, --scope, --dry-run)
+      # @return [Integer] exit code (0 for success, 1 for failure)
       def call(args)
         opts = parse_options(args, {predicate: nil, scope: "project", dry_run: false}) do |o|
           OptionParser.new do |parser|
@@ -44,6 +46,10 @@ module ClaudeMemory
 
       private
 
+      # Print a summary of restored and skipped facts.
+      # @param opts [Hash] parsed options including :predicate, :scope, :dry_run
+      # @param result [Hash] result from Sweep::Maintenance#restore_multi_value_supersessions
+      # @return [void]
       def print_result(opts, result)
         mode = opts[:dry_run] ? "DRY RUN" : "RESTORE"
         stdout.puts "#{mode}: predicate=#{opts[:predicate]} scope=#{opts[:scope]}"

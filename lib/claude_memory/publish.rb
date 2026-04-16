@@ -4,15 +4,22 @@ require "digest"
 require "fileutils"
 
 module ClaudeMemory
+  # Generates Markdown snapshots from active facts for use as project memory.
+  # Publishes to .claude/rules/ (shared), a local file, or the home directory.
   class Publish
     RULES_DIR = ".claude/rules"
     GENERATED_FILE = "claude_memory.generated.md"
 
+    # @param store [Store::SQLiteStore] database store for reading facts
+    # @param file_system [Infrastructure::FileSystem] filesystem abstraction for I/O
     def initialize(store, file_system: Infrastructure::FileSystem.new)
       @store = store
       @fs = file_system
     end
 
+    # Generate a complete Markdown snapshot with header and body
+    # @param since [String, nil] ISO 8601 timestamp to include recent supersessions
+    # @return [String] full Markdown document
     def generate_snapshot(since: nil)
       header = <<~HEADER
         <!--
@@ -28,6 +35,12 @@ module ClaudeMemory
       header + generate_body(since: since)
     end
 
+    # Write snapshot to disk if content has changed
+    # @param mode [Symbol] output target (:shared, :local, or :home)
+    # @param granularity [Symbol] snapshot granularity (currently only :repo)
+    # @param since [String, nil] ISO 8601 timestamp for recent supersessions
+    # @param rules_dir [String, nil] override rules directory path
+    # @return [Hash] result with :status (:updated or :unchanged) and :path
     def publish!(mode: :shared, granularity: :repo, since: nil, rules_dir: nil)
       path = output_path(mode, rules_dir: rules_dir)
       body = generate_body(since: since)
@@ -97,6 +110,7 @@ module ClaudeMemory
         .all
     end
 
+    # @return [String] Markdown section for decision facts
     def generate_decisions_section(facts)
       decisions = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :decisions }
       return "" if decisions.empty?
@@ -108,6 +122,7 @@ module ClaudeMemory
       lines.join("\n") + "\n"
     end
 
+    # @return [String] Markdown section for convention facts
     def generate_conventions_section(facts)
       conventions = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :conventions }
       return "" if conventions.empty?
@@ -119,6 +134,7 @@ module ClaudeMemory
       lines.join("\n") + "\n"
     end
 
+    # @return [String] Markdown section for technical constraint facts
     def generate_constraints_section(facts)
       constraints = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :constraints }
       return "" if constraints.empty?
@@ -130,6 +146,7 @@ module ClaudeMemory
       lines.join("\n") + "\n"
     end
 
+    # @return [String] Markdown section for additional knowledge grouped by predicate
     def generate_additional_section(facts)
       additional = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :additional }
       return "" if additional.empty?
@@ -147,6 +164,7 @@ module ClaudeMemory
       lines.join("\n") + "\n"
     end
 
+    # @return [String] Markdown section for open conflicts
     def generate_conflicts_section(conflicts)
       return "" if conflicts.empty?
 
@@ -158,6 +176,7 @@ module ClaudeMemory
       lines.join("\n") + "\n"
     end
 
+    # @return [String] Markdown section for recently superseded facts
     def generate_supersessions_section(supersessions)
       return "" if supersessions.empty?
 

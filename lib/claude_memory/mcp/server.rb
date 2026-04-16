@@ -9,9 +9,15 @@ require_relative "telemetry"
 
 module ClaudeMemory
   module MCP
+    # MCP JSON-RPC server over stdio.
+    # Reads newline-delimited JSON requests from input, dispatches to Tools,
+    # and writes JSON responses to output.
     class Server
       PROTOCOL_VERSION = "2024-11-05"
 
+      # @param store_or_manager [Store::SQLiteStore, Store::StoreManager] database backend
+      # @param input [IO] input stream for JSON-RPC requests (default: $stdin)
+      # @param output [IO] output stream for JSON-RPC responses (default: $stdout)
       def initialize(store_or_manager, input: $stdin, output: $stdout)
         @store_or_manager = store_or_manager
         @tools = Tools.new(store_or_manager)
@@ -21,6 +27,8 @@ module ClaudeMemory
         @running = false
       end
 
+      # Start the read loop, blocking until input is exhausted or stop is called.
+      # @return [void]
       def run
         @running = true
         while @running
@@ -31,12 +39,15 @@ module ClaudeMemory
         end
       end
 
+      # Signal the read loop to exit after the current message.
+      # @return [void]
       def stop
         @running = false
       end
 
       private
 
+      # @return [void]
       def handle_message(line)
         return if line.empty?
 
@@ -53,6 +64,7 @@ module ClaudeMemory
         end
       end
 
+      # @return [Hash, nil] JSON-RPC response hash, or nil for notifications
       def process_request(request)
         id = request["id"]
         method = request["method"]
@@ -76,6 +88,7 @@ module ClaudeMemory
         end
       end
 
+      # @return [Hash] initialize response with capabilities and server info
       def handle_initialize(id, _params)
         {
           jsonrpc: "2.0",
@@ -95,6 +108,7 @@ module ClaudeMemory
         }
       end
 
+      # @return [Hash] list of available tool definitions
       def handle_tools_list(id)
         {
           jsonrpc: "2.0",
@@ -105,6 +119,7 @@ module ClaudeMemory
         }
       end
 
+      # @return [Hash] tool result with dual content/structuredContent
       def handle_tools_call(id, params)
         name = params["name"]
         arguments = params["arguments"] || {}
@@ -132,6 +147,7 @@ module ClaudeMemory
         }
       end
 
+      # @return [Hash] list of available prompt definitions
       def handle_prompts_list(id)
         {
           jsonrpc: "2.0",
@@ -142,6 +158,7 @@ module ClaudeMemory
         }
       end
 
+      # @return [Hash] prompt content or error if unknown
       def handle_prompts_get(id, params)
         name = params&.dig("name")
 

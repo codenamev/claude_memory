@@ -2,10 +2,18 @@
 
 module ClaudeMemory
   module Domain
-    # Domain model representing an entity (database, framework, person, etc.)
+    # Domain model representing an entity (database, framework, person, etc.).
+    # Instances are immutable (frozen).
     class Entity
       attr_reader :id, :type, :canonical_name, :slug, :created_at
 
+      # @param attributes [Hash] entity attributes
+      # @option attributes [Integer] :id database primary key
+      # @option attributes [String] :type entity category (required, e.g. "database", "framework", "person")
+      # @option attributes [String] :canonical_name display name (required)
+      # @option attributes [String] :slug URL-safe identifier (required)
+      # @option attributes [String] :created_at ISO 8601 creation timestamp
+      # @raise [ArgumentError] if type, canonical_name, or slug is blank
       def initialize(attributes)
         @id = attributes[:id]
         @type = attributes[:type]
@@ -17,18 +25,22 @@ module ClaudeMemory
         freeze
       end
 
+      # @return [Boolean] true when type is "database"
       def database?
         type == "database"
       end
 
+      # @return [Boolean] true when type is "framework"
       def framework?
         type == "framework"
       end
 
+      # @return [Boolean] true when type is "person"
       def person?
         type == "person"
       end
 
+      # @return [Hash] all attributes as a plain hash
       def to_h
         {
           id: id,
