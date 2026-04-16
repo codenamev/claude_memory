@@ -143,6 +143,16 @@ Source: QMD v2.0.1+unreleased re-study (2026-03-30)
 - **Effort**: 2-3 days (after #22)
 - **Trade-off**: Adds tree-sitter dependency; graceful fallback to regex-only chunking when grammar unavailable
 
+### 30. Predicate Census Command
+
+Source: predicate retrospective (2026-04-15)
+
+- **Value**: Aggregate predicate usage data across many project databases for informed vocabulary decisions — without exposing content. Enables data-sharing across machines (work/personal) via a privacy-safe JSON report.
+- **Implementation**: `claude-memory census [--root ~/src]`. Finds all `.claude/memory.sqlite3` files under root, opens each read-only, collects per-DB predicate × status counts, entity type counts, schema version, novel predicates, synonym canonicalization candidates. Outputs aggregated JSON with **no object_literal, no entity names, no project paths, no quotes** — only schema-level signal.
+- **Evidence**: The multi-project survey that caught the `uses_framework` cardinality bug (commit `29818c2`) was a manual bash loop. Productizing it means any user can contribute usage data for vocabulary curation without privacy risk.
+- **Effort**: 0.5 days
+- **Trade-off**: None — purely additive, read-only, privacy-safe by design
+
 ### ~~27. Usage Stats / ROI Tracking~~ ✅ Implemented 2026-04-15
 
 Schema migration v13 adds `mcp_tool_calls` telemetry table (tool_name, called_at, duration_ms, result_count, scope, error_class). `MCP::Telemetry` wraps `Server#handle_tools_call` with monotonic-clock timing, captures errors, and records to the project DB; DB errors are swallowed so telemetry never fails a real tool call. `StatsCommand` gains `--tools` and `--since DAYS` flags showing total calls, error rate, and per-tool breakdown (calls, avg ms, p95 ms, error rate). `Sweep::Maintenance#prune_old_mcp_tool_calls` enforces a 90-day retention window, wired into `Sweeper#run!`. Rejected NDJSON in favor of SQLite for schema/query consistency with the rest of the gem. Dropped query-text capture (YAGNI — the dedup insight the hash would enable also needs raw text). Also fixed a latent bug where `StatsCommand` opened the DB via `Sequel.sqlite` (requiring the unlisted `sqlite3` gem); now uses the extralite adapter consistently.
@@ -287,4 +297,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-15 - Implemented #27 MCP tool-call telemetry and #29 Registry-sourced completion descriptions.*
+*Last updated: 2026-04-15 - Predicate retrospective: fixed uses_framework cardinality bug, curated vocabulary to 8 predicates, added synonym canonicalization + novel-predicate warnings. Also: reject/restore commands, #26 CLAUDE_CONFIG_DIR, #27 telemetry, #29 Registry descriptions.*
