@@ -73,6 +73,8 @@ module ClaudeMemory
             facts << build_fact("uses_framework", entity[:name], text, scope_hint)
           when "platform"
             facts << build_fact("deployment_platform", entity[:name], text, scope_hint)
+          when "language"
+            facts << build_fact("uses_language", entity[:name], text, scope_hint)
           end
         end
 

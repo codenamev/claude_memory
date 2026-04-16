@@ -47,6 +47,11 @@ RSpec.describe ClaudeMemory::Distill::NullDistiller do
         expect(result.facts).to include(hash_including(predicate: "deployment_platform", object: "aws"))
       end
 
+      it "creates uses_language fact for language entities" do
+        result = distiller.distill("Written in Ruby")
+        expect(result.facts).to include(hash_including(predicate: "uses_language", object: "ruby"))
+      end
+
       it "includes quote in fact" do
         result = distiller.distill("Using PostgreSQL for the main database")
         expect(result.facts.first[:quote]).to include("PostgreSQL")

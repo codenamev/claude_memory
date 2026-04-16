@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-16
+
+### Added
+
+- `claude-memory reject <id_or_docid>` command + `memory.reject_fact` MCP tool — explicitly mark distiller hallucinations as wrong, closing associated conflicts
+- `claude-memory restore --predicate NAME` command — recover facts that were superseded by obsolete single-value predicate classifications (uses Jaccard-based token overlap to distinguish bug-caused supersession from real corrections)
+- MCP tool-call telemetry: `mcp_tool_calls` table records every tool invocation with timing, result counts, and error classification. `claude-memory stats --tools [--since DAYS]` for usage reporting. 90-day retention via Sweep
+- `CLAUDE_CONFIG_DIR` env var support for non-standard Claude Code config locations
+- Predicate synonym canonicalization at insert time (`has_convention` → `convention`, `primary_language` → `uses_language`). Prevents drift from fragmenting the knowledge graph
+- Novel predicate warnings at insert time — logged when the Resolver encounters a predicate not in PredicatePolicy
+- NullDistiller now emits `uses_language` facts for detected language entities
+- Proactive memory recall guidance in MCP instructions — Claude now checks conventions before code generation, architecture before explanations, decisions before refactoring
+- YARD documentation across 13 core source files (+473 lines)
+
+### Changed
+
+- **`uses_framework` reclassified as multi-value** — real projects use multiple frameworks (Rails + Turbo + Tailwind). The prior single-value classification silently superseded valid facts in production databases. Run `claude-memory restore --predicate uses_framework` to recover affected facts
+- `PredicatePolicy` is now the single source of truth for predicate vocabulary, snapshot section mapping, synonym canonicalization, and LLM guidance. `tool_definitions.rb`, `publish.rb`, and `distill-transcripts.md` all derive from the policy
+- Predicate vocabulary curated from 13 → 8 based on multi-project usage data. Removed predicates (`preference`, `workflow`, `dependency`, `testing_strategy`, `tool_usage`, `ci_platform`, `primary_language`) had zero facts across all surveyed databases. They still work via DEFAULT_POLICY but are no longer advertised to the LLM
+- `Registry::COMMANDS` stores `{class:, description:}` entries with direct class references instead of string class names
+- Plugin and gem descriptions rewritten from mechanism-focused to outcome-focused
+
+### Fixed
+
+- **`StatsCommand` broken in production** — used `Sequel.sqlite` which requires the unlisted `sqlite3` gem. Now uses the extralite adapter consistently
+- Missing `embeddings` command in shell completion output
+
+### Upgrade Notes
+
+**Schema**: v12 → v14 (two automatic migrations). Migration 013 adds `mcp_tool_calls` table. Migration 014 canonicalizes stale predicate names (`has_convention` → `convention`, `primary_language` → `uses_language`) in existing facts.
+
+**Action required for `uses_framework` recovery**: If your project uses multiple frameworks (Rails + Turbo + Tailwind, etc.), past sessions may have superseded valid facts. After upgrading, run:
+
+```bash
+claude-memory restore --predicate uses_framework --dry-run   # preview
+claude-memory restore --predicate uses_framework              # restore
+claude-memory restore --predicate uses_framework --scope global  # if needed for global DB
+```
+
+**Pruned predicates still work**: `preference`, `workflow`, `dependency`, `testing_strategy`, `tool_usage`, `ci_platform` fall through to the default multi-value policy. Existing facts with these predicates are unaffected. They'll appear as "novel" in `memory.stats` but function normally.
+
 ## [0.8.0] - 2026-03-30
 
 ### Added
