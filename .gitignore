@@ -14,5 +14,9 @@ mise.toml
 .rspec_status
 .claude/settings*.json
 
+# SQLite WAL/SHM — ephemeral runtime files, recreated on every DB open
+*.sqlite3-shm
+*.sqlite3-wal
+
 # Pre-compiled gems
 *.gem
