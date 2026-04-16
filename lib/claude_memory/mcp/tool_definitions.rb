@@ -438,6 +438,19 @@ module ClaudeMemory
               properties: {}
             },
             annotations: READ_ONLY
+          },
+          {
+            name: "memory.activity",
+            description: "View recent activity events (hook executions, recalls, context injections). Shows what happened behind the scenes for debugging and observability.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                limit: {type: "integer", default: 50, description: "Maximum events to return"},
+                event_type: {type: "string", enum: %w[hook_ingest hook_context hook_sweep hook_publish recall store_extraction], description: "Filter by event type"},
+                since: {type: "string", description: "ISO 8601 timestamp lower bound"}
+              }
+            },
+            annotations: READ_ONLY
           }
         ]
       end

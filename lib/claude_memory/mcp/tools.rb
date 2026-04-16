@@ -44,11 +44,34 @@ module ClaudeMemory
         ToolDefinitions.all
       end
 
+      # Tools that represent recall/query usage - tracked for efficacy
+      RECALL_TOOLS = %w[
+        memory.recall memory.recall_index memory.recall_semantic
+        memory.search_concepts memory.decisions memory.conventions memory.architecture
+      ].freeze
+
+      # Write tools worth tracking
+      WRITE_TOOLS = %w[memory.store_extraction].freeze
+
+      TRACKED_TOOLS = (RECALL_TOOLS + WRITE_TOOLS).freeze
+
       # Dispatch a tool call to the appropriate handler method.
       # @param name [String] fully-qualified tool name (e.g. "memory.recall")
       # @param arguments [Hash] tool arguments from the MCP request
       # @return [Hash] structured result hash for the tool response
       def call(name, arguments)
+        t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+        result = dispatch(name, arguments)
+
+        log_tool_activity(name, arguments, result, t0) if TRACKED_TOOLS.include?(name)
+
+        result
+      end
+
+      private
+
+      def dispatch(name, arguments)
         case name
         when "memory.recall" then recall(arguments)
         when "memory.recall_index" then recall_index(arguments)
@@ -74,6 +97,7 @@ module ClaudeMemory
         when "memory.mark_distilled" then mark_distilled(arguments)
         when "memory.check_setup" then check_setup
         when "memory.list_projects" then list_projects
+        when "memory.activity" then activity(arguments)
         else {error: "Unknown tool: #{name}"}
         end
       end
@@ -110,6 +134,59 @@ module ClaudeMemory
         else
           @legacy_store
         end
+      end
+
+      def log_tool_activity(name, arguments, result, t0)
+        store = default_store
+        return unless store
+
+        duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round
+        event_type = WRITE_TOOLS.include?(name) ? "store_extraction" : "recall"
+        status = result[:error] ? "error" : "success"
+
+        details = {tool: name}
+        if event_type == "recall"
+          details[:query] = arguments["query"] || arguments["concepts"]&.join(", ")
+          details[:result_count] = result[:fact_count] || result[:count] || 0
+        else
+          details[:facts_created] = result[:facts_created]
+          details[:entities_created] = result[:entities_created]
+        end
+
+        ActivityLog.record(store, event_type: event_type, status: status,
+          duration_ms: duration_ms, details: details.compact)
+      end
+
+      def default_store
+        if @manager
+          if @manager.project_exists?
+            @manager.ensure_project!
+            @manager.project_store
+          end
+        else
+          @legacy_store
+        end
+      end
+
+      def activity(args)
+        store = default_store
+        return {error: "No database available"} unless store
+
+        limit = args["limit"] || 50
+        event_type = args["event_type"]
+        since = args["since"]
+
+        events = ActivityLog.recent(store, limit: limit, event_type: event_type, since: since)
+        summary = ActivityLog.summary(store, since: since)
+
+        {
+          event_count: events.size,
+          summary: summary,
+          events: events.map { |e|
+            e[:occurred_ago] = Core::RelativeTime.format(e[:occurred_at])
+            e
+          }
+        }
       end
     end
   end
