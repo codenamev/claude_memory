@@ -15,6 +15,12 @@ ClaudeMemory is a Ruby gem that provides long-term, self-managed memory for Clau
 
 **Check memory before exploring code.** Use `memory.recall`, `memory.decisions`, `memory.architecture`, or `memory.conventions` to find existing knowledge before reading files.
 
+### Git Usage & Best Practices
+
+- Before each commit, apply the quality-review skill
+- Iteratively commit related changes with their tests
+
+
 ## Development Commands
 
 ### Setup
@@ -157,7 +163,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Each command is a separate class (HelpCommand, DoctorCommand, etc.)
   - All commands inherit from BaseCommand
   - Dependency injection for I/O (stdout, stderr, stdin)
-  - 23 commands total, each focused on single responsibility
+  - 28 commands total, each focused on single responsibility
 
 - **`Configuration`**: Centralized ENV access (`configuration.rb`)
   - Single source of truth for paths and environment variables
@@ -166,7 +172,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
 #### Core Domain Layer
 
 - **`Domain`**: Rich domain models with business logic (`domain/`)
-  - `Fact`: Facts with validation, status checking (active?, superseded?)
+  - `Fact`: Facts with validation, status checking (active?, superseded?, rejected?)
   - `Entity`: Entities with type checking (database?, framework?)
   - `Provenance`: Evidence with strength checking (stated?, inferred?)
   - `Conflict`: Conflicts with status tracking (open?, resolved?)
@@ -182,7 +188,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
 - **`Store`**: SQLite database access via Sequel (`store/`)
   - `SQLiteStore`: Database operations
   - `StoreManager`: Dual-database connection manager
-  - Schema includes: content_items, entities, facts, provenance, fact_links, conflicts
+  - Schema includes: content_items, entities, facts, provenance, fact_links, conflicts, mcp_tool_calls
   - Transaction safety for multi-step operations
 
 - **`Infrastructure`**: I/O abstractions (`infrastructure/`)
@@ -205,7 +211,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
 
 - **`Resolve`**: Truth maintenance and conflict resolution (`resolve/`)
   - Determines equivalence, supersession, or conflicts
-  - PredicatePolicy controls single-value vs multi-value predicates
+  - PredicatePolicy: single source of truth for predicate vocabulary, cardinality, section mapping, and synonym canonicalization
   - Transaction safety for atomic operations
 
 - **`Recall`**: Query interface for facts (`recall.rb`)
@@ -220,7 +226,8 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Modes: shared (repo), local (uncommitted), home (user directory)
 
 - **`MCP`**: Model Context Protocol server and tools (`mcp/`)
-  - Exposes memory tools to Claude Code (23 tools total)
+  - Exposes memory tools to Claude Code (24 tools total)
+  - `Telemetry`: Records tool invocations to `mcp_tool_calls` table for usage stats
   - Dual content/structuredContent responses with compact mode
 
 - **`Hook`**: Hook entrypoint handlers (`hook/`)
@@ -238,6 +245,7 @@ Key tables (defined in `sqlite_store.rb`):
 - `provenance`: Links facts to source content_items
 - `fact_links`: Supersession and conflict relationships
 - `conflicts`: Open contradictions
+- `mcp_tool_calls`: MCP server tool invocation telemetry (schema v13)
 
 Facts include:
 - `scope`: "global" or "project" (determines applicability)
@@ -290,28 +298,34 @@ end
 
 ### Adding a New MCP Tool
 
-1. Add tool definition to `MCP::Tools::TOOLS` hash
-2. Implement handler in `MCP::Server#handle_tool_call`
-3. Ensure tool queries appropriate database(s) via StoreManager
-4. Add tests in `spec/claude_memory/mcp/`
+1. Add tool definition to `ToolDefinitions.all` array in `lib/claude_memory/mcp/tool_definitions.rb`
+2. Add `when` clause in `Tools#call` dispatch in `lib/claude_memory/mcp/tools.rb`
+3. Implement handler method in the appropriate handler module in `mcp/handlers/`
+4. Ensure tool queries appropriate database(s) via StoreManager
+5. Add tests in `spec/claude_memory/mcp/`
 
 ### Modifying Database Schema
 
-1. Increment `SCHEMA_VERSION` in `sqlite_store.rb`
-2. Add migration method (e.g., `migrate_to_v3!`)
-3. Call migration in `run_migrations!`
+1. Increment `SCHEMA_VERSION` in `store/schema_manager.rb`
+2. Create a new Sequel migration file in `db/migrations/` (e.g., `013_add_mcp_tool_calls.rb`)
+3. Sequel::Migrator runs migrations automatically in `ensure_schema!`
 4. Test migration on existing database files
 5. Update documentation if schema changes affect external interfaces
 
-### Adding a New Predicate Policy
+### Adding a New Predicate
 
-Single-value predicates (like "uses_database") supersede old values. Multi-value predicates (like "depends_on") accumulate. Modify `PredicatePolicy.single?` to adjust behavior.
+Edit `PredicatePolicy::POLICIES` in `lib/claude_memory/resolve/predicate_policy.rb` — this is the single source of truth. Choose cardinality:
+
+- **single** (exclusive: true): Facts supersede or conflict (e.g., `uses_database` — one per project)
+- **multi** (exclusive: false): Facts accumulate (e.g., `convention`, `uses_framework`)
+
+Also update `SECTION_MAP` if the predicate should appear in a specific snapshot section (`:decisions`, `:conventions`, `:constraints`). The `ToolDefinitions` predicate list updates automatically via `PredicatePolicy.known_predicates`. Add entries to `SYNONYMS` if the distiller might emit variant names.
 
 ## Important Files
 
 - `lib/claude_memory.rb`: Main module, requires, database path helpers
 - `lib/claude_memory/cli.rb`: Thin command router (41 lines)
-- `lib/claude_memory/commands/`: Individual command classes (23 commands)
+- `lib/claude_memory/commands/`: Individual command classes (28 commands)
 - `lib/claude_memory/configuration.rb`: Centralized configuration and ENV access
 - `lib/claude_memory/domain/`: Domain models (Fact, Entity, Provenance, Conflict)
 - `lib/claude_memory/core/`: Value objects and null objects
@@ -326,12 +340,12 @@ Single-value predicates (like "uses_database") supersede old values. Multi-value
 
 The gem includes an MCP server (`claude-memory serve-mcp`) that exposes memory operations as tools. Configuration should be in `.mcp.json` at project root.
 
-Available MCP tools (23 total):
+Available MCP tools (24 total):
 - **Query & Recall**: `memory.recall`, `memory.recall_index`, `memory.recall_details`, `memory.recall_semantic`, `memory.search_concepts`
 - **Provenance**: `memory.explain`, `memory.fact_graph`
 - **Shortcuts**: `memory.decisions`, `memory.conventions`, `memory.architecture`
 - **Context**: `memory.facts_by_tool`, `memory.facts_by_context`
-- **Management**: `memory.promote`, `memory.store_extraction`
+- **Management**: `memory.promote`, `memory.reject_fact`, `memory.store_extraction`
 - **Distillation**: `memory.undistilled`, `memory.mark_distilled`
 - **Monitoring**: `memory.status`, `memory.stats`, `memory.changes`, `memory.conflicts`
 - **Maintenance**: `memory.sweep_now`

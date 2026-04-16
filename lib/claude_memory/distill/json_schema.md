@@ -66,13 +66,17 @@ This document defines the schema for extracted knowledge from transcripts.
 - **conflict**: `{kind: "conflict", value: true}` - indicates contradictory information detected
 - **time_boundary**: `{kind: "time_boundary", value: "2024-01-15"}` - temporal boundary marker
 
-## Predicate Types (MVP)
+## Predicate Types
+
+Canonical vocabulary defined in `lib/claude_memory/resolve/predicate_policy.rb`.
 
 | Predicate | Cardinality | Exclusive |
 |-----------|-------------|-----------|
 | convention | multi | no |
-| decision | multi (by scope) | no |
-| auth_method | single | yes |
+| decision | multi | no |
+| architecture | multi | no |
+| uses_framework | multi | no |
+| uses_language | multi | no |
 | uses_database | single | yes |
-| uses_framework | single | yes |
 | deployment_platform | single | yes |
+| auth_method | single | yes |
