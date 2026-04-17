@@ -619,6 +619,43 @@ RSpec.describe ClaudeMemory::MCP::Tools do
         expect(other[:entities]).to eq(1)
       end
     end
+
+    describe "activity logging" do
+      it "logs a recall event for memory.decisions and lands a row in activity_events" do
+        manager.project_store.find_or_create_entity(type: "repo", name: "test-repo")
+
+        expect {
+          result = manager_tools.call("memory.decisions", {"limit" => 5})
+          expect(result).not_to have_key(:error)
+        }.to change {
+          manager.project_store.activity_events.where(event_type: "recall").count
+        }.by(1)
+      end
+
+      it "falls back to the global store when the project DB has not been initialized yet" do
+        # Fresh manager with a project_db_path that does not exist on disk.
+        orphan_dir = Dir.mktmpdir("mcp_orphan_#{Process.pid}")
+        orphan_manager = ClaudeMemory::Store::StoreManager.new(
+          global_db_path: global_db,
+          project_db_path: File.join(orphan_dir, "nonexistent", "memory.sqlite3")
+        )
+        orphan_manager.ensure_global!
+        orphan_tools = described_class.new(orphan_manager)
+
+        begin
+          expect(orphan_manager.project_exists?).to be false
+
+          expect {
+            orphan_tools.call("memory.decisions", {})
+          }.to change {
+            orphan_manager.global_store.activity_events.where(event_type: "recall").count
+          }.by(1)
+        ensure
+          orphan_manager.close
+          FileUtils.rm_rf(orphan_dir)
+        end
+      end
+    end
   end
 
   describe "memory.stats outputSchema" do

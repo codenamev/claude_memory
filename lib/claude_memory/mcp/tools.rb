@@ -143,11 +143,14 @@ module ClaudeMemory
         duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round
         event_type = WRITE_TOOLS.include?(name) ? "store_extraction" : "recall"
         status = result[:error] ? "error" : "success"
+        session_id = extract_session_id(arguments)
 
         details = {tool: name}
         if event_type == "recall"
           details[:query] = arguments["query"] || arguments["concepts"]&.join(", ")
-          details[:result_count] = result[:fact_count] || result[:count] || 0
+          details[:scope] = arguments["scope"]
+          details[:result_count] = extract_result_count(result)
+          details[:top_fact_ids] = extract_top_fact_ids(result)
         else
           details[:facts_created] = result[:facts_created]
           details[:entities_created] = result[:entities_created]
@@ -155,17 +158,58 @@ module ClaudeMemory
         end
 
         ActivityLog.record(store, event_type: event_type, status: status,
-          duration_ms: duration_ms, details: details.compact)
+          session_id: session_id, duration_ms: duration_ms, details: details.compact)
       end
 
+      # Probe a recall result for a count of returned items. Falls back to
+      # counting the first array-valued key among the shapes emitted by the
+      # various recall handlers (facts, results, items, concepts).
+      def extract_result_count(result)
+        return 0 unless result.is_a?(Hash)
+        [:fact_count, :count, :results_count].each do |key|
+          val = result[key]
+          return val if val.is_a?(Integer)
+        end
+        [:facts, :results, :items, :concepts, :conflicts].each do |key|
+          val = result[key]
+          return val.size if val.is_a?(Array)
+        end
+        0
+      end
+
+      # Capture up to 5 fact ids from a recall result so the dashboard can
+      # show "what Claude actually got back" when a user drills into an event.
+      def extract_top_fact_ids(result, limit: 5)
+        return nil unless result.is_a?(Hash)
+
+        collection = [:facts, :results, :items].map { |k| result[k] }.find { |v| v.is_a?(Array) }
+        return nil unless collection
+
+        ids = collection.first(limit).map { |row|
+          row.is_a?(Hash) ? (row[:id] || row["id"]) : nil
+        }.compact
+
+        ids.empty? ? nil : ids
+      end
+
+      def extract_session_id(arguments)
+        (arguments.is_a?(Hash) && arguments["session_id"]) || Configuration.new.session_id
+      end
+
+      # Return whichever store is available for activity logging, preferring
+      # the project store when the project DB exists on disk. Falling back to
+      # the global store prevents silent drops of activity events when the
+      # project DB hasn't been initialized yet — otherwise recall/write events
+      # fired before first project setup would vanish without a trace.
       def default_store
-        if @manager
-          if @manager.project_exists?
-            @manager.ensure_project!
-            @manager.project_store
-          end
-        else
-          @legacy_store
+        return @legacy_store unless @manager
+
+        if @manager.project_exists?
+          @manager.ensure_project!
+          @manager.project_store
+        elsif @manager.global_exists?
+          @manager.ensure_global!
+          @manager.global_store
         end
       end
 

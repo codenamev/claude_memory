@@ -27,7 +27,13 @@ module ClaudeMemory
         occurred_at: Time.now.utc.iso8601
       )
     rescue => e
-      ClaudeMemory.logger.warn("activity_log", message: "Failed to record event", error: e.message)
+      ClaudeMemory.logger.warn("activity_log",
+        message: "Failed to record event",
+        event_type: event_type,
+        status: status,
+        error_class: e.class.name,
+        error: e.message,
+        backtrace: e.backtrace&.first(3))
       nil
     end
 

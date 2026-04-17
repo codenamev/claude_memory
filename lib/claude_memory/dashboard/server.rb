@@ -51,8 +51,38 @@ module ClaudeMemory
           end
         }
         @server.mount_proc("/api/facts") { |req, res| json_response(res, api.facts(req.query)) }
-        @server.mount_proc("/api/efficacy") { |_req, res| json_response(res, api.efficacy) }
+        @server.mount_proc("/api/efficacy") { |req, res| json_response(res, api.efficacy(req.query)) }
+        @server.mount_proc("/api/session") { |req, res|
+          session_id = req.query["session_id"]
+          json_response(res, api.session_summary(session_id))
+        }
         @server.mount_proc("/api/timeline") { |_req, res| json_response(res, api.timeline) }
+        @server.mount_proc("/api/conflicts") { |req, res| handle_conflicts(api, req, res) }
+      end
+
+      def handle_conflicts(api, req, res)
+        reject_id = conflict_reject_id_from_path(req.path)
+        detail_id = conflict_id_from_path(req.path)
+
+        if req.request_method == "POST" && reject_id
+          body = parse_json_body(req)
+          side = body["side"]
+          reason = body["reason"]
+          scope = body["scope"] || req.query["scope"] || "project"
+          json_response(res, api.reject_conflict_fact(reject_id, side: side, reason: reason, scope: scope))
+        elsif detail_id
+          scope = req.query["scope"] || "project"
+          json_response(res, api.conflict_detail(detail_id, scope))
+        else
+          json_response(res, api.conflicts(req.query))
+        end
+      end
+
+      def parse_json_body(req)
+        return {} if req.body.nil? || req.body.empty?
+        JSON.parse(req.body)
+      rescue JSON::ParserError
+        {}
       end
 
       def serve_html(res)
@@ -63,6 +93,16 @@ module ClaudeMemory
 
       def activity_id_from_path(path)
         match = path.match(%r{\A/api/activity/(\d+)\z})
+        match && match[1]
+      end
+
+      def conflict_id_from_path(path)
+        match = path.match(%r{\A/api/conflicts/(\d+)\z})
+        match && match[1]
+      end
+
+      def conflict_reject_id_from_path(path)
+        match = path.match(%r{\A/api/conflicts/(\d+)/reject\z})
         match && match[1]
       end
 

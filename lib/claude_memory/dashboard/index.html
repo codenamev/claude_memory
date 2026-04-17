@@ -373,6 +373,115 @@
   tr.row-clickable { cursor: pointer; }
   tr.row-clickable:hover td { background: var(--surface2); }
 
+  .conflict-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .conflict-side {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  .conflict-side h4 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .conflict-fact-object {
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin: 6px 0 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow: auto;
+  }
+  .conflict-prov-list {
+    list-style: none;
+    padding-left: 0;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .conflict-prov-list li {
+    padding: 4px 0;
+    border-top: 1px dashed var(--border);
+  }
+  .conflict-prov-list li:first-child { border-top: none; }
+  .conflict-prov-list .quote {
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    display: block;
+    padding-top: 2px;
+  }
+  .conflict-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .btn-reject {
+    background: transparent;
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .btn-reject:hover { background: rgba(248,81,73,0.08); }
+  .btn-reject:disabled { opacity: 0.5; cursor: not-allowed; }
+  .conflict-reason {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    min-height: 28px;
+    resize: vertical;
+  }
+  .conflict-meta {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 10px 12px;
+    background: var(--surface2);
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--text);
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    z-index: 200;
+    max-width: 420px;
+  }
+  .toast.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .toast.error { border-color: var(--red); }
+
   @media (max-width: 768px) {
     .grid-2 { grid-template-columns: 1fr; }
     .grid-4 { grid-template-columns: repeat(2, 1fr); }
@@ -417,15 +526,32 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="conflict-modal" role="dialog" aria-labelledby="conflict-modal-title" aria-modal="true">
+    <div class="modal modal-wide" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="conflict-modal-title">Conflict</h2>
+        <button class="modal-close" aria-label="Close" onclick="closeConflictModal()">&times;</button>
+      </div>
+      <div id="conflict-modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
   <div class="tabs">
     <div class="tab active" data-tab="overview">Overview</div>
     <div class="tab" data-tab="activity">Activity</div>
     <div class="tab" data-tab="facts">Facts</div>
     <div class="tab" data-tab="efficacy">Efficacy</div>
+    <div class="tab" data-tab="conflicts">Conflicts</div>
   </div>
 
   <!-- Overview Tab -->
   <div class="tab-panel active" id="tab-overview">
+    <div class="card" id="session-card" style="display: none;">
+      <h3>This session</h3>
+      <div id="session-card-body"></div>
+    </div>
     <div class="grid grid-4" id="metric-cards"></div>
     <div class="grid grid-2" style="margin-top: 24px;">
       <div class="card">
@@ -504,24 +630,76 @@
 
   <!-- Efficacy Tab -->
   <div class="tab-panel" id="tab-efficacy">
+    <div class="filter-row">
+      <span style="color: var(--text-dim); font-size: 12px;">Timeframe:</span>
+      <button class="filter-btn active" data-timeframe="session">This session</button>
+      <button class="filter-btn" data-timeframe="7d">Last 7 days</button>
+      <button class="filter-btn" data-timeframe="all">All time</button>
+    </div>
     <div class="grid grid-4" id="efficacy-cards"></div>
+
+    <div class="grid grid-2" style="margin-top: 24px;">
+      <div class="card">
+        <h3>Tool mix</h3>
+        <div class="bar-chart" id="efficacy-tool-mix"></div>
+      </div>
+      <div class="card">
+        <h3>Memory gaps (queries returning 0 results)</h3>
+        <div id="efficacy-gaps"></div>
+      </div>
+    </div>
+
     <div class="card" style="margin-top: 24px;">
-      <h3>Top Queries by Results Returned</h3>
+      <h3>Recall trace</h3>
       <table>
         <thead>
           <tr>
-            <th>Query</th>
-            <th>Tool</th>
-            <th>Results</th>
-            <th>Duration</th>
             <th>When</th>
+            <th>Tool</th>
+            <th>Query</th>
+            <th>Results</th>
+            <th>Latency</th>
+            <th>Session</th>
           </tr>
         </thead>
-        <tbody id="top-queries-tbody"></tbody>
+        <tbody id="efficacy-trace-tbody"></tbody>
       </table>
       <div class="empty-state" id="efficacy-empty" style="display:none;">
-        <p>No recall events recorded yet.</p>
-        <p>As Claude uses memory.recall and related tools, efficacy metrics will appear here.</p>
+        <p>No recall events yet in this timeframe.</p>
+        <p>As Claude calls memory.recall / memory.decisions / memory.conventions, events will show up here.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conflicts Tab -->
+  <div class="tab-panel" id="tab-conflicts">
+    <div class="filter-row">
+      <span style="color: var(--text-dim); font-size: 12px;">Scope:</span>
+      <button class="filter-btn active" data-conflict-scope="all">All</button>
+      <button class="filter-btn" data-conflict-scope="project">Project</button>
+      <button class="filter-btn" data-conflict-scope="global">Global</button>
+      <span style="color: var(--text-dim); font-size: 12px; margin-left: 16px;">Status:</span>
+      <button class="filter-btn active" data-conflict-status="open">Open</button>
+      <button class="filter-btn" data-conflict-status="resolved">Resolved</button>
+      <button class="filter-btn" data-conflict-status="all">All</button>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Detected</th>
+            <th>Fact A</th>
+            <th></th>
+            <th>Fact B</th>
+            <th>Scope</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="conflicts-tbody"></tbody>
+      </table>
+      <div class="empty-state" id="conflicts-empty" style="display:none;">
+        <p>No conflicts in this view.</p>
+        <p>Conflicts are created when two facts about the same subject contradict each other.</p>
       </div>
     </div>
   </div>
@@ -544,6 +722,32 @@ document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
     document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     loadActivity(btn.dataset.filter === 'all' ? null : btn.dataset.filter);
+  });
+});
+
+// Efficacy timeframe buttons
+document.querySelectorAll('.filter-btn[data-timeframe]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn[data-timeframe]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTimeframe = btn.dataset.timeframe;
+    loadEfficacy();
+  });
+});
+
+// Conflicts filter buttons
+document.querySelectorAll('.filter-btn[data-conflict-scope]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn[data-conflict-scope]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadConflicts();
+  });
+});
+document.querySelectorAll('.filter-btn[data-conflict-status]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn[data-conflict-status]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadConflicts();
   });
 });
 
@@ -576,7 +780,53 @@ async function api(path, params = {}) {
 
 // Load all data
 async function loadAll() {
-  await Promise.all([loadHealth(), loadStats(), loadActivity(), loadFacts(), loadEfficacy(), loadTimeline()]);
+  await loadActivity();
+  await Promise.all([loadHealth(), loadStats(), loadFacts(), loadEfficacy(), loadTimeline(), loadSessionCard(), loadConflicts()]);
+}
+
+async function loadSessionCard() {
+  const card = document.getElementById('session-card');
+  const body = document.getElementById('session-card-body');
+  if (!currentSessionId) {
+    card.style.display = 'none';
+    return;
+  }
+
+  const data = await api('session', {session_id: currentSessionId});
+  if (!data.events) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+  body.innerHTML = `
+    <div style="display: flex; gap: 32px; flex-wrap: wrap; align-items: baseline; margin-top: 4px;">
+      <div>
+        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Session</div>
+        <code style="font-size: 13px;">${esc(data.session_id.slice(0, 8))}…</code>
+      </div>
+      <div>
+        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Recalls</div>
+        <div style="font-size: 20px; font-weight: 600;">${data.recalls}</div>
+      </div>
+      <div>
+        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Facts recalled</div>
+        <div style="font-size: 20px; font-weight: 600;">${data.facts_recalled}</div>
+      </div>
+      <div>
+        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Facts stored</div>
+        <div style="font-size: 20px; font-weight: 600;">${data.facts_stored}</div>
+      </div>
+      <div>
+        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Ingests</div>
+        <div style="font-size: 20px; font-weight: 600;">${data.ingests}</div>
+      </div>
+      <div>
+        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Total latency</div>
+        <div style="font-size: 20px; font-weight: 600;">${data.total_latency_ms}ms</div>
+      </div>
+    </div>
+  `;
 }
 
 let lastHealth = null;
@@ -655,7 +905,7 @@ function renderFix(fixText) {
 
 document.getElementById('health-modal').addEventListener('click', closeHealthModal);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeHealthModal(); closeActivityModal(); }
+  if (e.key === 'Escape') { closeHealthModal(); closeActivityModal(); closeConflictModal(); }
 });
 
 async function loadStats() {
@@ -682,7 +932,7 @@ async function loadStats() {
     metricCard('Active Facts', activeFacts, `${totalFacts} total`),
     metricCard('Entities', totalEntities, ''),
     metricCard('Content Items', contentItems, 'ingested transcripts'),
-    metricCard('Open Conflicts', openConflicts, openConflicts > 0 ? 'need resolution' : 'none')
+    metricCard('Open Conflicts', openConflicts, openConflicts > 0 ? 'need resolution' : 'none', openConflicts > 0 ? "switchTab('conflicts')" : null)
   ].join('');
 
   renderBarChart('predicate-chart', mergeAndSort(allPredicates, 'predicate'));
@@ -704,6 +954,13 @@ async function loadActivity(eventType) {
   const data = await api('activity', params);
   const tbody = document.getElementById('activity-tbody');
   const empty = document.getElementById('activity-empty');
+
+  // Seed current session id from the newest event so "this session"
+  // filter in other tabs scopes to the active MCP session.
+  if (!currentSessionId && data.events) {
+    const recent = data.events.find(e => e.session_id);
+    if (recent) currentSessionId = recent.session_id;
+  }
 
   if (!data.events || data.events.length === 0) {
     tbody.innerHTML = '';
@@ -814,6 +1071,166 @@ function renderActivityDetail(data) {
 
 document.getElementById('activity-modal').addEventListener('click', closeActivityModal);
 
+async function loadConflicts() {
+  const scope = document.querySelector('.filter-btn[data-conflict-scope].active')?.dataset.conflictScope || 'all';
+  const status = document.querySelector('.filter-btn[data-conflict-status].active')?.dataset.conflictStatus || 'open';
+  const data = await api('conflicts', {scope, status});
+
+  const tbody = document.getElementById('conflicts-tbody');
+  const empty = document.getElementById('conflicts-empty');
+
+  if (!data.conflicts || data.conflicts.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = data.conflicts.map(c => {
+    const a = c.fact_a_preview || {};
+    const b = c.fact_b_preview || {};
+    return `<tr class="row-clickable" onclick="openConflictModal(${c.id}, '${esc(c.source)}')" title="Click for details">
+      <td title="${c.detected_at}">${c.detected_ago}</td>
+      <td style="max-width: 260px;">
+        <span class="badge badge-purple">${esc(a.predicate || '?')}</span>
+        <div style="margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(a.object || '')}">${esc(a.object || '—')}</div>
+      </td>
+      <td style="text-align: center; color: var(--text-dim); font-size: 11px;">vs</td>
+      <td style="max-width: 260px;">
+        <span class="badge badge-purple">${esc(b.predicate || '?')}</span>
+        <div style="margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(b.object || '')}">${esc(b.object || '—')}</div>
+      </td>
+      <td><span class="badge badge-info">${esc(c.source)}</span></td>
+      <td><span class="badge badge-${c.status === 'open' ? 'warning' : 'success'}">${esc(c.status)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+let currentConflictId = null;
+let currentConflictScope = null;
+
+async function openConflictModal(id, scope) {
+  currentConflictId = id;
+  currentConflictScope = scope;
+  const modal = document.getElementById('conflict-modal');
+  const body = document.getElementById('conflict-modal-body');
+  body.innerHTML = '<p class="modal-empty">Loading…</p>';
+  modal.classList.add('open');
+
+  try {
+    const data = await api('conflicts/' + id, {scope});
+    if (data.error) {
+      body.innerHTML = `<p class="modal-empty">${esc(data.error)}</p>`;
+      return;
+    }
+    body.innerHTML = renderConflictDetail(data);
+  } catch (err) {
+    body.innerHTML = `<p class="modal-empty">Failed to load: ${esc(err.message)}</p>`;
+  }
+}
+
+function closeConflictModal() {
+  document.getElementById('conflict-modal').classList.remove('open');
+  currentConflictId = null;
+  currentConflictScope = null;
+}
+
+function renderConflictDetail(data) {
+  const c = data.conflict;
+  const meta = `
+    <div class="conflict-meta">
+      Conflict #${c.id} — detected ${esc(c.detected_ago || '')}
+      — status <span class="badge badge-${c.status === 'open' ? 'warning' : 'success'}">${esc(c.status)}</span>
+      ${c.notes ? ' — <em>' + esc(c.notes) + '</em>' : ''}
+    </div>
+  `;
+
+  const pair = `
+    <div class="conflict-pair">
+      ${renderConflictSide('A', data.fact_a, c.status === 'open')}
+      ${renderConflictSide('B', data.fact_b, c.status === 'open')}
+    </div>
+  `;
+
+  return meta + pair;
+}
+
+function renderConflictSide(label, fact, canReject) {
+  if (!fact) return `<div class="conflict-side"><h4>Fact ${label}</h4><p class="modal-empty">(missing)</p></div>`;
+
+  const sideKey = label.toLowerCase();
+  const provList = (fact.provenance || []).length
+    ? `<ul class="conflict-prov-list">${fact.provenance.map(p => `
+        <li>
+          <div>${esc(p.strength || 'stated')} — session ${p.session_id ? esc(p.session_id.slice(0, 8)) + '…' : '(unknown)'}${p.occurred_at ? ' on ' + esc(p.occurred_at.slice(0, 10)) : ''}</div>
+          ${p.quote ? '<span class="quote">' + esc(p.quote) + '</span>' : ''}
+        </li>`).join('')}</ul>`
+    : '<p class="modal-empty">No provenance recorded.</p>';
+
+  return `
+    <div class="conflict-side">
+      <h4>Fact ${label} (#${fact.id})</h4>
+      <div><strong>${esc(fact.subject)}</strong> <span class="badge badge-purple">${esc(fact.predicate)}</span></div>
+      <div class="conflict-fact-object">${esc(fact.object)}</div>
+      <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+        ${fact.confidence ? (fact.confidence * 100).toFixed(0) + '% confidence · ' : ''}
+        scope <span class="badge badge-info">${esc(fact.scope)}</span> ·
+        status <span class="badge badge-${fact.status === 'active' ? 'success' : 'warning'}">${esc(fact.status)}</span> ·
+        created ${esc(fact.created_ago || '')}
+      </div>
+      ${provList}
+      ${canReject ? `
+      <div class="conflict-actions">
+        <textarea class="conflict-reason" id="conflict-reason-${sideKey}" placeholder="Reason (optional)" rows="1"></textarea>
+        <button class="btn-reject" onclick="rejectConflictFact('${sideKey}', this)">Reject fact ${label}</button>
+      </div>` : ''}
+    </div>
+  `;
+}
+
+async function rejectConflictFact(side, btn) {
+  if (currentConflictId == null) return;
+  const reasonEl = document.getElementById('conflict-reason-' + side);
+  const reason = reasonEl ? reasonEl.value.trim() : '';
+
+  btn.disabled = true;
+  btn.textContent = 'Rejecting…';
+
+  try {
+    const res = await fetch('/api/conflicts/' + currentConflictId + '/reject', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({side, reason, scope: currentConflictScope || 'project'})
+    });
+    const data = await res.json();
+    if (data.error) {
+      showToast('Error: ' + data.error, true);
+      btn.disabled = false;
+      btn.textContent = 'Reject fact ' + side.toUpperCase();
+      return;
+    }
+    showToast(`Fact #${data.rejected_fact_id} rejected — ${data.conflicts_resolved} conflict(s) resolved`);
+    closeConflictModal();
+    loadConflicts();
+    loadStats();
+  } catch (err) {
+    showToast('Request failed: ' + err.message, true);
+    btn.disabled = false;
+    btn.textContent = 'Reject fact ' + side.toUpperCase();
+  }
+}
+
+function showToast(msg, isError) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.toggle('error', !!isError);
+  toast.classList.add('visible');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => toast.classList.remove('visible'), 4000);
+}
+
+document.getElementById('conflict-modal').addEventListener('click', closeConflictModal);
+
 function formatDetails(type, details) {
   switch(type) {
     case 'hook_ingest':
@@ -859,34 +1276,65 @@ async function loadFacts(params = {}) {
   `).join('');
 }
 
+let currentTimeframe = 'session';
+let currentSessionId = null;
+
+function efficacyParams() {
+  const params = {};
+  if (currentTimeframe === '7d') {
+    params.since = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
+  } else if (currentTimeframe === 'session' && currentSessionId) {
+    params.session_id = currentSessionId;
+  }
+  return params;
+}
+
 async function loadEfficacy() {
-  const data = await api('efficacy');
   const cards = document.getElementById('efficacy-cards');
-  const tbody = document.getElementById('top-queries-tbody');
+  const tbody = document.getElementById('efficacy-trace-tbody');
   const empty = document.getElementById('efficacy-empty');
+  const data = await api('efficacy', efficacyParams());
 
   cards.innerHTML = [
-    efficacyCard(data.hit_rate + '%', 'Hit Rate', 'queries returning results'),
-    efficacyCard(data.recall_events, 'Total Recalls', `${data.successful_recalls} successful, ${data.empty_recalls} empty`),
-    efficacyCard(data.total_results_served, 'Results Served', 'total facts returned'),
-    efficacyCard(data.avg_results_per_query, 'Avg Results', 'per query')
+    efficacyCard(data.hit_rate + '%', 'Hit rate', `${data.successful_recalls} of ${data.recall_events} returned results`),
+    efficacyCard(data.recall_events, 'Recalls', data.timeframe.session_id ? 'this session' : currentTimeframe === '7d' ? 'last 7 days' : 'all time'),
+    efficacyCard(data.median_results_per_query, 'Median results', 'per recall'),
+    efficacyCard((data.median_latency_ms || 0) + 'ms', 'Median latency', 'p50 tool roundtrip')
   ].join('');
 
-  if (!data.top_queries || data.top_queries.length === 0) {
+  renderBarChart('efficacy-tool-mix', (data.tool_mix || []).map(t => ({
+    label: (t.tool || '—').replace('memory.', ''),
+    count: t.count
+  })));
+
+  const gaps = document.getElementById('efficacy-gaps');
+  if (!data.memory_gaps || data.memory_gaps.length === 0) {
+    gaps.innerHTML = '<div style="color: var(--text-dim); font-size: 13px;">No missed queries in this timeframe.</div>';
+  } else {
+    gaps.innerHTML = data.memory_gaps.map(g => `
+      <div style="padding: 6px 0; border-bottom: 1px solid var(--surface2); font-size: 13px;">
+        <span style="color: var(--text-dim); font-size: 11px;" title="${g.occurred_at}">${g.occurred_ago}</span>
+        &nbsp;<span class="badge badge-info">${(g.tool || '').replace('memory.', '')}</span>
+        &nbsp;<code style="color: var(--text);">${esc(g.query || '')}</code>
+      </div>
+    `).join('');
+  }
+
+  if (!data.recall_trace || data.recall_trace.length === 0) {
     tbody.innerHTML = '';
     empty.style.display = 'block';
     return;
   }
   empty.style.display = 'none';
 
-  tbody.innerHTML = data.top_queries.map(q => `
-    <tr>
-      <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-          title="${esc(q.query)}">${esc(q.query)}</td>
-      <td><span class="badge badge-info">${q.tool?.replace('memory.', '') || '-'}</span></td>
-      <td>${q.result_count || 0}</td>
-      <td>${q.duration_ms ? q.duration_ms + 'ms' : '-'}</td>
-      <td title="${q.occurred_at}">${q.occurred_ago || '-'}</td>
+  tbody.innerHTML = data.recall_trace.map(r => `
+    <tr class="row-clickable" onclick="openActivityModal(${r.id})" title="Click for details">
+      <td title="${r.occurred_at}">${r.occurred_ago}</td>
+      <td><span class="badge badge-info">${(r.tool || '').replace('memory.', '')}</span></td>
+      <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(r.query || '')}">${esc(r.query || '—')}</td>
+      <td>${r.result_count}</td>
+      <td>${r.duration_ms != null ? r.duration_ms + 'ms' : '-'}</td>
+      <td style="color: var(--text-dim); font-size: 12px;">${r.session_id ? esc(r.session_id.slice(0, 8)) + '…' : '-'}</td>
     </tr>
   `).join('');
 }
@@ -912,12 +1360,18 @@ async function loadTimeline() {
 }
 
 // Helpers
-function metricCard(title, value, sub) {
-  return `<div class="card">
+function metricCard(title, value, sub, onclick) {
+  const attrs = onclick ? ` style="cursor: pointer;" onclick="${onclick}" title="Click to open"` : '';
+  return `<div class="card"${attrs}>
     <h3>${title}</h3>
     <div class="value">${typeof value === 'number' ? value.toLocaleString() : value}</div>
     <div class="sub">${sub}</div>
   </div>`;
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
 }
 
 function efficacyCard(value, title, sub) {

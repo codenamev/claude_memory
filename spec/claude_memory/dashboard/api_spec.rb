@@ -231,16 +231,18 @@ RSpec.describe ClaudeMemory::Dashboard::API do
 
       expect(result[:recall_events]).to eq(0)
       expect(result[:hit_rate]).to eq(0)
-      expect(result[:top_queries]).to eq([])
+      expect(result[:tool_mix]).to eq([])
+      expect(result[:memory_gaps]).to eq([])
+      expect(result[:recall_trace]).to eq([])
     end
 
     it "calculates hit rate from recall events" do
       store = manager.project_store
       ClaudeMemory::ActivityLog.record(store,
-        event_type: "recall", status: "success",
+        event_type: "recall", status: "success", duration_ms: 20,
         details: {query: "auth", result_count: 3, tool: "memory.recall"})
       ClaudeMemory::ActivityLog.record(store,
-        event_type: "recall", status: "success",
+        event_type: "recall", status: "success", duration_ms: 40,
         details: {query: "nothing", result_count: 0, tool: "memory.recall"})
 
       result = api.efficacy
@@ -249,7 +251,197 @@ RSpec.describe ClaudeMemory::Dashboard::API do
       expect(result[:successful_recalls]).to eq(1)
       expect(result[:empty_recalls]).to eq(1)
       expect(result[:hit_rate]).to eq(50.0)
-      expect(result[:top_queries].first[:query]).to eq("auth")
+    end
+
+    it "returns a tool mix grouped by tool" do
+      store = manager.project_store
+      3.times { |i|
+        ClaudeMemory::ActivityLog.record(store,
+          event_type: "recall", status: "success", duration_ms: 10 + i,
+          details: {tool: "memory.decisions", result_count: 2})
+      }
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success", duration_ms: 25,
+        details: {tool: "memory.recall", query: "auth", result_count: 1})
+
+      result = api.efficacy
+
+      decisions = result[:tool_mix].find { |r| r[:tool] == "memory.decisions" }
+      recall = result[:tool_mix].find { |r| r[:tool] == "memory.recall" }
+      expect(decisions[:count]).to eq(3)
+      expect(decisions[:hit_rate]).to eq(100.0)
+      expect(recall[:count]).to eq(1)
+      # Largest bucket is first
+      expect(result[:tool_mix].first[:tool]).to eq("memory.decisions")
+    end
+
+    it "surfaces memory gaps (zero-result queries)" do
+      store = manager.project_store
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success",
+        details: {query: "unknown topic", result_count: 0, tool: "memory.recall"})
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success",
+        details: {query: "found", result_count: 3, tool: "memory.recall"})
+
+      result = api.efficacy
+      gaps = result[:memory_gaps]
+
+      expect(gaps.size).to eq(1)
+      expect(gaps.first[:query]).to eq("unknown topic")
+      expect(gaps.first[:occurred_ago]).to be_a(String)
+    end
+
+    it "computes median latency and median results per query" do
+      store = manager.project_store
+      [10, 20, 30, 40, 50].each { |ms|
+        ClaudeMemory::ActivityLog.record(store,
+          event_type: "recall", status: "success", duration_ms: ms,
+          details: {tool: "memory.recall", result_count: ms / 10})
+      }
+
+      result = api.efficacy
+      expect(result[:median_latency_ms]).to eq(30)
+      expect(result[:median_results_per_query]).to eq(3)
+    end
+
+    it "filters by session_id when provided" do
+      store = manager.project_store
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success", session_id: "sess-a",
+        details: {tool: "memory.recall", query: "a", result_count: 1})
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success", session_id: "sess-b",
+        details: {tool: "memory.recall", query: "b", result_count: 2})
+
+      result = api.efficacy({"session_id" => "sess-a"})
+      expect(result[:recall_events]).to eq(1)
+      expect(result[:recall_trace].first[:query]).to eq("a")
+    end
+  end
+
+  describe "conflicts endpoints" do
+    let(:project_store) { manager.project_store }
+    let!(:conflict_id) do
+      entity_id = project_store.find_or_create_entity(type: "repo", name: "test-app")
+      fact_a = project_store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "uses_database",
+        object_literal: "PostgreSQL",
+        status: "active",
+        confidence: 0.9,
+        scope: "project"
+      )
+      fact_b = project_store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "uses_database",
+        object_literal: "MySQL",
+        status: "disputed",
+        confidence: 0.7,
+        scope: "project"
+      )
+      ci_a = project_store.upsert_content_item(
+        source: "test",
+        text_hash: Digest::SHA256.hexdigest("a"),
+        byte_len: 1,
+        session_id: "sess-a",
+        raw_text: "claims PostgreSQL"
+      )
+      ci_b = project_store.upsert_content_item(
+        source: "test",
+        text_hash: Digest::SHA256.hexdigest("b"),
+        byte_len: 1,
+        session_id: "sess-b",
+        raw_text: "claims MySQL"
+      )
+      project_store.insert_provenance(fact_id: fact_a, content_item_id: ci_a, quote: "uses PostgreSQL", strength: "stated")
+      project_store.insert_provenance(fact_id: fact_b, content_item_id: ci_b, quote: "uses MySQL", strength: "stated")
+      project_store.insert_conflict(fact_a_id: fact_a, fact_b_id: fact_b, notes: "Contradicting uses_database claims")
+    end
+
+    describe "#conflicts" do
+      it "lists open conflicts with previews" do
+        result = api.conflicts
+
+        expect(result[:total]).to eq(1)
+        expect(result[:conflicts].size).to eq(1)
+        row = result[:conflicts].first
+        expect(row[:status]).to eq("open")
+        expect(row[:source]).to eq("project")
+        expect(row[:fact_a_preview][:object]).to eq("PostgreSQL")
+        expect(row[:fact_b_preview][:object]).to eq("MySQL")
+        expect(row[:detected_ago]).to be_a(String)
+      end
+
+      it "filters by status" do
+        expect(api.conflicts({"status" => "open"})[:total]).to eq(1)
+        expect(api.conflicts({"status" => "resolved"})[:total]).to eq(0)
+      end
+    end
+
+    describe "#conflict_detail" do
+      it "returns both facts with their provenance chain" do
+        detail = api.conflict_detail(conflict_id, "project")
+
+        expect(detail[:conflict][:id]).to eq(conflict_id)
+        expect(detail[:fact_a][:object]).to eq("PostgreSQL")
+        expect(detail[:fact_a][:provenance].first[:quote]).to eq("uses PostgreSQL")
+        expect(detail[:fact_a][:provenance].first[:session_id]).to eq("sess-a")
+        expect(detail[:fact_b][:object]).to eq("MySQL")
+        expect(detail[:fact_b][:provenance].first[:session_id]).to eq("sess-b")
+      end
+
+      it "errors on unknown id" do
+        expect(api.conflict_detail(99999, "project")[:error]).to match(/not found/)
+      end
+    end
+
+    describe "#reject_conflict_fact" do
+      it "rejects fact B and resolves the conflict atomically" do
+        result = api.reject_conflict_fact(conflict_id, side: "b", reason: "legacy DB", scope: "project")
+
+        expect(result[:success]).to be true
+        expect(result[:conflicts_resolved]).to eq(1)
+
+        # Conflict is now resolved
+        updated = project_store.conflicts.where(id: conflict_id).first
+        expect(updated[:status]).to eq("resolved")
+
+        # Fact B is rejected
+        fact = project_store.facts.where(id: result[:rejected_fact_id]).first
+        expect(fact[:status]).to eq("rejected")
+      end
+
+      it "rejects invalid side" do
+        expect(api.reject_conflict_fact(conflict_id, side: "x")[:error]).to match(/Invalid side/)
+      end
+    end
+  end
+
+  describe "#session_summary" do
+    it "rolls up per-session event counts" do
+      store = manager.project_store
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success", session_id: "s1", duration_ms: 10,
+        details: {tool: "memory.recall", result_count: 3})
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "store_extraction", status: "success", session_id: "s1", duration_ms: 20,
+        details: {facts_created: 2, entities_created: 1})
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "hook_ingest", status: "success", session_id: "s1", duration_ms: 5)
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success", session_id: "other",
+        details: {result_count: 99})
+
+      result = api.session_summary("s1")
+
+      expect(result[:session_id]).to eq("s1")
+      expect(result[:events]).to eq(3)
+      expect(result[:recalls]).to eq(1)
+      expect(result[:facts_recalled]).to eq(3)
+      expect(result[:facts_stored]).to eq(2)
+      expect(result[:ingests]).to eq(1)
+      expect(result[:total_latency_ms]).to eq(35)
     end
   end
 
