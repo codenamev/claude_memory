@@ -370,6 +370,18 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
+  .json-key { color: var(--accent); }
+  .json-string { color: var(--green); }
+  .json-number { color: var(--yellow); }
+  .json-bool { color: var(--purple); }
+  .json-null { color: var(--text-dim); font-style: italic; }
+  .json-error {
+    color: var(--red);
+    font-size: 11px;
+    display: block;
+    margin-bottom: 6px;
+    opacity: 0.9;
+  }
   tr.row-clickable { cursor: pointer; }
   tr.row-clickable:hover td { background: var(--surface2); }
 
@@ -1065,7 +1077,7 @@ function renderActivityDetail(data) {
     </div>
     <div class="modal-section">
       <h3>Details (raw)</h3>
-      <pre class="modal-json">${esc(JSON.stringify(e.details || {}, null, 2))}</pre>
+      <pre class="modal-json">${formatJson(e.details || {})}</pre>
     </div>
   `;
 
@@ -1081,7 +1093,7 @@ function renderActivityDetail(data) {
         <dt>ingested_at</dt><dd>${esc(ci.ingested_at || '-')}</dd>
       </dl>
       <h3 style="margin-top: 12px;">Raw text${ci.truncated ? ' (truncated)' : ''}</h3>
-      <pre class="modal-text">${esc(ci.raw_text_preview || '(empty)')}</pre>
+      <pre class="modal-text">${formatJson(ci.raw_text_preview, {fallbackLabel: 'Plain text (not JSON)'})}</pre>
     </div>
   ` : '';
 
@@ -1525,6 +1537,50 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+// Syntax-highlighted JSON. Input can be a pre-parsed object or a raw string.
+// When the string doesn't parse as JSON (prose, truncated quotes), we fall
+// through to escaped plain text with a small "not JSON" hint. Empty input
+// renders a dim placeholder.
+function formatJson(input, {fallbackLabel = null} = {}) {
+  if (input == null || input === '') return '<span class="json-null">(empty)</span>';
+
+  let obj = input;
+  let parseError = null;
+  if (typeof input === 'string') {
+    try {
+      obj = JSON.parse(input);
+    } catch (e) {
+      parseError = e.message;
+    }
+  }
+
+  if (parseError) {
+    const hint = fallbackLabel
+      ? `<span class="json-error">${esc(fallbackLabel)}</span>`
+      : `<span class="json-error">Not valid JSON — showing raw text (${esc(parseError)})</span>`;
+    return hint + esc(String(input));
+  }
+
+  const pretty = JSON.stringify(obj, null, 2);
+  // Escape the JSON string first so spans are injected into safe HTML,
+  // then tokenize keys / strings / numbers / booleans / null.
+  const escaped = pretty.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return escaped.replace(
+    /("(?:\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    (match) => {
+      let cls = 'json-number';
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? 'json-key' : 'json-string';
+      } else if (/true|false/.test(match)) {
+        cls = 'json-bool';
+      } else if (/null/.test(match)) {
+        cls = 'json-null';
+      }
+      return `<span class="${cls}">${match}</span>`;
+    }
+  );
 }
 
 // Auto-refresh every 30s
