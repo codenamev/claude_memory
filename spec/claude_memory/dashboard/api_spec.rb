@@ -416,6 +416,52 @@ RSpec.describe ClaudeMemory::Dashboard::API do
         expect(api.reject_conflict_fact(conflict_id, side: "x")[:error]).to match(/Invalid side/)
       end
     end
+
+    describe "#reject_similar_conflicts" do
+      it "rejects every disputed fact in conflict with the keeper" do
+        # Spawn 3 additional disputed facts all contradicting fact_a (keeper).
+        entity_id = project_store.find_or_create_entity(type: "repo", name: "test-app")
+        keeper_id = project_store.facts.where(object_literal: "PostgreSQL").first[:id]
+
+        losers = %w[MySQL Redis MariaDB].map { |obj|
+          f = project_store.insert_fact(
+            subject_entity_id: entity_id,
+            predicate: "uses_database",
+            object_literal: obj,
+            status: "disputed",
+            scope: "project"
+          )
+          project_store.insert_conflict(fact_a_id: keeper_id, fact_b_id: f, notes: "contradicts #{obj}")
+          f
+        }
+
+        # Precondition: 4 total open conflicts (1 existing + 3 new)
+        expect(project_store.conflicts.where(status: "open").count).to eq(4)
+
+        result = api.reject_similar_conflicts(keeper_id, scope: "project", reason: "bulk reject")
+
+        expect(result[:success]).to be true
+        expect(result[:rejected_fact_ids]).to match_array(losers + [project_store.facts.where(object_literal: "MySQL").first[:id]].uniq - [keeper_id])
+        expect(project_store.conflicts.where(status: "open").count).to eq(0)
+
+        losers.each do |loser_id|
+          expect(project_store.facts.where(id: loser_id).first[:status]).to eq("rejected")
+        end
+      end
+
+      it "is a no-op when the keeper has no open conflicts" do
+        entity_id = project_store.find_or_create_entity(type: "repo", name: "lonely")
+        solo = project_store.insert_fact(
+          subject_entity_id: entity_id, predicate: "uses_database",
+          object_literal: "lonely-sqlite", status: "active", scope: "project"
+        )
+
+        result = api.reject_similar_conflicts(solo, scope: "project")
+        expect(result[:success]).to be true
+        expect(result[:rejected_fact_ids]).to eq([])
+        expect(result[:conflicts_resolved]).to eq(0)
+      end
+    end
   end
 
   describe "#session_summary" do

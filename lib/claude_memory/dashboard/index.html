@@ -1202,14 +1202,31 @@ function renderConflictDetail(data) {
     </div>
   `;
 
+  // Identify the keeper side — the one with status "active". When the same
+  // keeper fact is in conflict with multiple disputed facts (classic
+  // distiller-hallucination pattern), a bulk-reject action clears the
+  // backlog in one click.
+  const canReject = c.status === 'open';
+  const keeper = (data.fact_a && data.fact_a.status === 'active') ? data.fact_a
+    : (data.fact_b && data.fact_b.status === 'active') ? data.fact_b
+    : null;
+
+  const bulk = (canReject && keeper) ? `
+    <div style="margin-bottom: 12px; padding: 10px 12px; background: var(--surface2); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 12px;">
+      Fact #${keeper.id} (${esc(keeper.predicate)} = ${esc(keeper.object)}) may have other open conflicts against it.
+      <button class="btn-reject" style="margin-left: 8px;" onclick="rejectAllSimilar(${keeper.id})">Reject all similar</button>
+      <span style="color: var(--text-dim); margin-left: 6px;">— keeps #${keeper.id}, rejects every contradicting fact currently in open conflict with it.</span>
+    </div>
+  ` : '';
+
   const pair = `
     <div class="conflict-pair">
-      ${renderConflictSide('A', data.fact_a, c.status === 'open')}
-      ${renderConflictSide('B', data.fact_b, c.status === 'open')}
+      ${renderConflictSide('A', data.fact_a, canReject)}
+      ${renderConflictSide('B', data.fact_b, canReject)}
     </div>
   `;
 
-  return meta + pair;
+  return meta + bulk + pair;
 }
 
 function renderConflictSide(label, fact, canReject) {
@@ -1243,6 +1260,33 @@ function renderConflictSide(label, fact, canReject) {
       </div>` : ''}
     </div>
   `;
+}
+
+async function rejectAllSimilar(keeperFactId) {
+  if (!confirm(`Reject every fact currently in open conflict with fact #${keeperFactId}? This cannot be undone.`)) return;
+
+  try {
+    const res = await fetch('/api/conflicts/reject_similar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        keeper_fact_id: keeperFactId,
+        reason: 'bulk reject via dashboard',
+        scope: currentConflictScope || 'project'
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      showToast('Error: ' + data.error, true);
+      return;
+    }
+    showToast(`Kept #${data.keeper_fact_id} · rejected ${data.rejected_fact_ids.length} fact(s) · resolved ${data.conflicts_resolved} conflict(s)`);
+    closeConflictModal();
+    loadConflicts();
+    loadStats();
+  } catch (err) {
+    showToast('Request failed: ' + err.message, true);
+  }
 }
 
 async function rejectConflictFact(side, btn) {

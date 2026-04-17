@@ -255,7 +255,7 @@ Facts include:
 ### Scope System
 
 Facts are scoped to control where they apply:
-- **project**: Current project only (e.g., "this app uses PostgreSQL")
+- **project**: Current project only (e.g., "claude_memory uses SQLite for storage")
 - **global**: All projects (e.g., "I prefer 4-space indentation")
 
 Distiller detects signals like "always", "in all projects", "my preference" and sets `scope_hint: "global"`. Users can manually promote facts via `claude-memory promote <fact_id>` or the `memory.promote` MCP tool.

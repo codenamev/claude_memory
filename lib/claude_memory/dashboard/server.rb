@@ -63,8 +63,15 @@ module ClaudeMemory
       def handle_conflicts(api, req, res)
         reject_id = conflict_reject_id_from_path(req.path)
         detail_id = conflict_id_from_path(req.path)
+        is_reject_similar = req.path == "/api/conflicts/reject_similar"
 
-        if req.request_method == "POST" && reject_id
+        if req.request_method == "POST" && is_reject_similar
+          body = parse_json_body(req)
+          keeper_id = body["keeper_fact_id"]
+          reason = body["reason"]
+          scope = body["scope"] || req.query["scope"] || "project"
+          json_response(res, api.reject_similar_conflicts(keeper_id, reason: reason, scope: scope))
+        elsif req.request_method == "POST" && reject_id
           body = parse_json_body(req)
           side = body["side"]
           reason = body["reason"]

@@ -78,6 +78,10 @@ module ClaudeMemory
         Conflicts.new(@manager).reject(id, side: side, reason: reason, scope: scope)
       end
 
+      def reject_similar_conflicts(keeper_fact_id, reason: nil, scope: "project")
+        Conflicts.new(@manager).reject_similar(keeper_fact_id, reason: reason, scope: scope)
+      end
+
       def session_summary(session_id)
         store = default_store
         return {session_id: session_id, events: 0} unless store && session_id

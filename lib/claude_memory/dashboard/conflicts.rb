@@ -93,6 +93,47 @@ module ClaudeMemory
         }
       end
 
+      # Bulk-reject every disputed fact that's in open conflict against a
+      # single "keeper" fact. Resolves the distiller-hallucination pattern
+      # where one correct fact (e.g. uses_database=sqlite) accumulates many
+      # contradicting candidates (postgresql, mysql, redis, ...). For each
+      # open conflict where keeper_fact_id is on either side, the fact on
+      # the OTHER side is rejected; SQLiteStore#reject_fact cascade-resolves
+      # the conflict inside its own transaction.
+      #
+      # @return [Hash] {rejected_fact_ids:, conflicts_resolved:}
+      def reject_similar(keeper_fact_id, reason: nil, scope: "project")
+        return {error: "Invalid scope"} unless %w[global project].include?(scope)
+        store = @manager.store_if_exists(scope)
+        return {error: "#{scope} store not available"} unless store
+
+        keeper_id = keeper_fact_id.to_i
+        rows = store.conflicts
+          .where(status: "open")
+          .where(Sequel.|({fact_a_id: keeper_id}, {fact_b_id: keeper_id}))
+          .all
+
+        return {success: true, keeper_fact_id: keeper_id, rejected_fact_ids: [], conflicts_resolved: 0} if rows.empty?
+
+        rejected = []
+        total_resolved = 0
+        rows.each do |row|
+          loser_id = (row[:fact_a_id] == keeper_id) ? row[:fact_b_id] : row[:fact_a_id]
+          next if rejected.include?(loser_id)
+          result = store.reject_fact(loser_id, reason: reason)
+          rejected << loser_id
+          total_resolved += result[:conflicts_resolved] || 0
+        end
+
+        {
+          success: true,
+          keeper_fact_id: keeper_id,
+          rejected_fact_ids: rejected,
+          conflicts_resolved: total_resolved,
+          scope: scope
+        }
+      end
+
       private
 
       def stores_for(scope)
