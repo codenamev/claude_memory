@@ -209,7 +209,20 @@ module ClaudeMemory
           facts: facts.map { |f| serialize_recall_fact(f) }
         }
       rescue => e
-        {error: "Recall failed: #{e.message}"}
+        msg = e.message
+        # "disk image is malformed" from an FTS5 ORDER BY rank query almost
+        # always means the FTS5 auxiliary index is out of sync (common
+        # after a sqlite3 .recover restore or an interrupted write) — not
+        # real DB corruption. Suggest the rebuild command inline so a user
+        # looking at the dashboard knows exactly what to do.
+        if msg.include?("disk image is malformed")
+          {
+            error: "Recall failed: #{msg}",
+            hint: "Looks like the FTS5 index is out of sync. Try `claude-memory compact --scope project` (or --scope global) from a terminal to rebuild the search index. This is usually a harmless artifact of a prior DB recovery, not real corruption."
+          }
+        else
+          {error: "Recall failed: #{msg}"}
+        end
       end
 
       # Promote a project-scoped fact into the global store. Delegates to

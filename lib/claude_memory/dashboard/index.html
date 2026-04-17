@@ -1598,7 +1598,8 @@ async function runExplore() {
   try {
     const data = await api('recall', {query, scope, limit});
     if (data.error) {
-      meta.innerHTML = `<span class="json-error">${esc(data.error)}</span>`;
+      const hintHtml = data.hint ? `<div style="margin-top: 6px; color: var(--text-dim); font-size: 12px;">${esc(data.hint)}</div>` : '';
+      meta.innerHTML = `<span class="json-error">${esc(data.error)}</span>${hintHtml}`;
       empty.style.display = 'block';
       return;
     }
