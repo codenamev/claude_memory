@@ -175,10 +175,30 @@ module ClaudeMemory
         store = default_store
         since = params["since"]
         session_id = params["session_id"]
+        session_id = nil if session_id.to_s.empty?
         return Efficacy::Reporter.report([], timeframe: {since: since, session_id: session_id}) unless store
 
-        events = ActivityLog.recent(store, limit: 500, event_type: "recall", since: since)
-        events = events.select { |e| e[:session_id] == session_id } if session_id
+        # Session-scope lookup: most MCP tool calls don't carry session_id
+        # (Claude Code doesn't thread its session id into plugin MCP servers),
+        # so we correlate by time window instead — we find the session's
+        # first-to-most-recent activity from hook events (which do carry
+        # session_id) and pick up recall events that fell inside that window.
+        if session_id
+          window = session_window(store, session_id)
+          events = ActivityLog.recent(store, limit: 500, event_type: "recall", since: window[:since])
+          events = events.select { |e|
+            if e[:session_id].to_s.empty?
+              # MCP tool calls typically arrive without a session_id; fall
+              # back to time-window correlation with the session's hook
+              # events (which do carry session_id).
+              within_window?(e, window)
+            else
+              e[:session_id] == session_id
+            end
+          }
+        else
+          events = ActivityLog.recent(store, limit: 500, event_type: "recall", since: since)
+        end
 
         Efficacy::Reporter.report(events, timeframe: {since: since, session_id: session_id})
       end
@@ -244,6 +264,24 @@ module ClaudeMemory
         Time.parse(value.to_s).to_i
       rescue ArgumentError, TypeError
         0
+      end
+
+      # Return the {since:, until:} ISO timestamps of the first-to-last
+      # activity event we've seen for a given session_id. Used to correlate
+      # MCP recall events (which typically lack session_id) back to the
+      # Claude Code session that fired them via time proximity.
+      def session_window(store, session_id)
+        rows = store.activity_events.where(session_id: session_id).select(:occurred_at).all
+        return {since: nil, until: nil} if rows.empty?
+        timestamps = rows.map { |r| r[:occurred_at] }.compact
+        {since: timestamps.min, until: timestamps.max}
+      end
+
+      def within_window?(event, window)
+        return false unless window[:since] && window[:until]
+        ts = event[:occurred_at]
+        return false unless ts
+        ts.between?(window[:since], window[:until])
       end
 
       def facts_stores_for(scope)

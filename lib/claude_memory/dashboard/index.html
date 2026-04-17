@@ -638,8 +638,8 @@
   <div class="tab-panel" id="tab-efficacy">
     <div class="filter-row">
       <span style="color: var(--text-dim); font-size: 12px;">Timeframe:</span>
-      <button class="filter-btn active" data-timeframe="session">This session</button>
-      <button class="filter-btn" data-timeframe="7d">Last 7 days</button>
+      <button class="filter-btn" data-timeframe="session">This session</button>
+      <button class="filter-btn active" data-timeframe="7d">Last 7 days</button>
       <button class="filter-btn" data-timeframe="all">All time</button>
     </div>
     <div class="grid grid-4" id="efficacy-cards"></div>
@@ -1385,7 +1385,7 @@ async function loadFacts(params = {}) {
   `).join('');
 }
 
-let currentTimeframe = 'session';
+let currentTimeframe = '7d';
 let currentSessionId = null;
 
 function efficacyParams() {

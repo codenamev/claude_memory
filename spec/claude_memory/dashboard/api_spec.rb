@@ -318,6 +318,44 @@ RSpec.describe ClaudeMemory::Dashboard::API do
       expect(result[:recall_events]).to eq(1)
       expect(result[:recall_trace].first[:query]).to eq("a")
     end
+
+    it "ignores empty-string session_id" do
+      store = manager.project_store
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success", session_id: "sess-a",
+        details: {tool: "memory.recall", query: "a", result_count: 1})
+
+      result = api.efficacy({"session_id" => ""})
+      expect(result[:recall_events]).to eq(1)
+    end
+
+    it "correlates session-scoped recall events by time window when recall lacks session_id" do
+      store = manager.project_store
+      # Hook events bracket the session time window.
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "hook_ingest", status: "success", session_id: "sess-window",
+        duration_ms: 5, details: {bytes_read: 100})
+      # Simulate an in-session recall that the MCP server couldn't tag
+      # with a session_id (typical case for plugin-launched MCP).
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success", session_id: nil,
+        details: {tool: "memory.recall", query: "during-session", result_count: 2})
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "hook_ingest", status: "success", session_id: "sess-window",
+        duration_ms: 5, details: {bytes_read: 200})
+
+      # An out-of-window recall from long ago should NOT be included.
+      old = ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success", session_id: nil,
+        details: {tool: "memory.recall", query: "ancient", result_count: 0})
+      store.activity_events.where(id: old).update(occurred_at: "2020-01-01T00:00:00Z")
+
+      result = api.efficacy({"session_id" => "sess-window"})
+
+      queries = result[:recall_trace].map { |r| r[:query] }
+      expect(queries).to include("during-session")
+      expect(queries).not_to include("ancient")
+    end
   end
 
   describe "conflicts endpoints" do
