@@ -47,6 +47,49 @@ module ClaudeMemory
           .update(status: "expired")
       end
 
+      # Collapse duplicate multi-value facts. Before the resolver-level
+      # dedup fix (2026-04-17), multi-value predicates like uses_language
+      # and uses_framework accumulated identical rows every ingest cycle.
+      # For each (subject_entity_id, predicate, object_literal, scope) group
+      # with more than one active fact, keep the oldest row, copy the
+      # duplicates' provenance onto the keeper (so we retain source
+      # signal), and mark the duplicates superseded. Returns the count of
+      # fact rows merged into their keeper.
+      def dedupe_multi_value_facts
+        merged = 0
+        @store.db.transaction do
+          # Pull every active fact with a literal object and group in Ruby.
+          # Facts tables stay small (< 10k typical); Sequel's HAVING COUNT(*)
+          # path hits adapter quoting bugs on some Extralite versions.
+          active = @store.facts
+            .where(status: "active")
+            .exclude(subject_entity_id: nil)
+            .exclude(object_literal: nil)
+            .order(:id)
+            .all
+
+          groups = active.group_by { |f|
+            [f[:subject_entity_id], f[:predicate], f[:object_literal]&.downcase, f[:scope]]
+          }
+
+          groups.each_value do |rows|
+            next if rows.size < 2
+
+            keeper = rows.first
+            rows[1..].each do |loser|
+              @store.provenance.where(fact_id: loser[:id]).update(fact_id: keeper[:id])
+              @store.facts.where(id: loser[:id]).update(
+                status: "superseded",
+                valid_to: Time.now.utc.iso8601
+              )
+              @store.insert_fact_link(from_fact_id: keeper[:id], to_fact_id: loser[:id], link_type: "supersedes")
+              merged += 1
+            end
+          end
+        end
+        merged
+      end
+
       # Delete provenance records referencing non-existent facts.
       # Returns: Integer count of deleted provenance rows
       def prune_orphaned_provenance

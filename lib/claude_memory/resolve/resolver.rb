@@ -106,17 +106,26 @@ module ClaudeMemory
       end
 
       def determine_resolution(existing_facts, fact_data, entity_ids)
-        return :insert unless PredicatePolicy.single?(fact_data[:predicate]) && existing_facts.any?
+        return :insert if existing_facts.empty?
 
+        # Always reinforce on an exact match — works for both single- and
+        # multi-value predicates. Without this check, multi-value predicates
+        # like uses_language and uses_framework accumulated an identical
+        # fact every ingest cycle (one ruby fact per Stop hook), because
+        # the old :insert fast-path for multi-value never looked at the
+        # existing set.
         object_entity_id = entity_ids[fact_data[:object]]
         matching = existing_facts.find { |f| values_match?(f, fact_data[:object], object_entity_id) }
+        return :reinforce if matching
 
-        if matching
-          :reinforce
-        elsif supersession_signal?(fact_data)
-          :supersede
+        # No exact match: for multi-value predicates the new object is
+        # genuinely a new coexisting value. For single-value, either the
+        # user signaled supersession ("now we use X instead") or the new
+        # claim contradicts the current one.
+        if PredicatePolicy.single?(fact_data[:predicate])
+          supersession_signal?(fact_data) ? :supersede : :conflict
         else
-          :conflict
+          :insert
         end
       end
 

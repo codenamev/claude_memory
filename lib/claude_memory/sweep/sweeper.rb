@@ -38,6 +38,7 @@ module ClaudeMemory
 
         run_if_within_budget { @stats[:proposed_facts_expired] = maintenance.expire_proposed_facts }
         run_if_within_budget { @stats[:disputed_facts_expired] = maintenance.expire_disputed_facts }
+        run_if_within_budget { @stats[:multi_value_facts_merged] = maintenance.dedupe_multi_value_facts }
         run_if_within_budget { @stats[:orphaned_provenance_deleted] = maintenance.prune_orphaned_provenance }
         run_if_within_budget { @stats[:old_content_pruned] = maintenance.prune_old_content }
         run_if_within_budget { @stats[:mcp_tool_calls_pruned] = maintenance.prune_old_mcp_tool_calls }

@@ -122,6 +122,38 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
           expect(result[:conflicts_created]).to eq(0)
         end
 
+        it "reinforces an exact duplicate instead of inserting a new row" do
+          # Regression: the distiller emits uses_language=ruby on every
+          # ingest cycle. Before this fix, multi-value predicates took a
+          # straight :insert path regardless of existing identical facts,
+          # so a project DB could accumulate 20+ `uses_language=ruby` rows.
+          extraction = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_language", object: "ruby"}]
+          )
+          resolver.apply(extraction)
+
+          result = resolver.apply(extraction)
+
+          expect(result[:facts_created]).to eq(0)
+          expect(result[:provenance_created]).to eq(1)
+
+          repo_id = store.entities.where(canonical_name: "repo").get(:id)
+          expect(store.facts_for_slot(repo_id, "uses_language").size).to eq(1)
+        end
+
+        it "treats case-insensitively matching objects as duplicates" do
+          resolver.apply(ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_framework", object: "Rails"}]
+          ))
+
+          result = resolver.apply(ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_framework", object: "rails"}]
+          ))
+
+          expect(result[:facts_created]).to eq(0)
+          expect(result[:provenance_created]).to eq(1)
+        end
+
         it "logs a warning when a novel predicate is encountered" do
           logger = instance_double("Logging::Logger")
           allow(logger).to receive(:warn)
