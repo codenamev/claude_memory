@@ -41,6 +41,7 @@ module ClaudeMemory
           {
             success: true,
             scope: scope,
+            content_item_id: content_item_id,
             entities_created: result[:entities_created],
             facts_created: result[:facts_created],
             facts_superseded: result[:facts_superseded],

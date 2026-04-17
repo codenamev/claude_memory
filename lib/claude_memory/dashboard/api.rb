@@ -66,6 +66,31 @@ module ClaudeMemory
         }
       end
 
+      def activity_detail(id)
+        store = default_store
+        return {error: "No database available"} unless store
+
+        row = store.activity_events.where(id: id.to_i).first
+        return {error: "Event #{id} not found"} unless row
+
+        details = row[:detail_json] ? JSON.parse(row[:detail_json], symbolize_names: true) : {}
+        event = row.merge(
+          details: details,
+          occurred_ago: Core::RelativeTime.format(row[:occurred_at])
+        )
+        event.delete(:detail_json)
+
+        content_item_id = details[:content_id] || details[:content_item_id]
+        content_item = content_item_id ? load_content_item(store, content_item_id) : nil
+        linked_facts = content_item_id ? load_linked_facts(store, content_item_id) : []
+
+        {
+          event: event,
+          content_item: content_item,
+          linked_facts: linked_facts
+        }
+      end
+
       def facts(params = {})
         store = default_store
         return {facts: [], total: 0} unless store
@@ -200,6 +225,57 @@ module ClaudeMemory
       end
 
       private
+
+      CONTENT_ITEM_PREVIEW_BYTES = 8000
+
+      def load_content_item(store, id)
+        row = store.content_items.where(id: id.to_i).first
+        return nil unless row
+
+        raw = row[:raw_text].to_s
+        truncated = raw.bytesize > CONTENT_ITEM_PREVIEW_BYTES
+        preview = truncated ? raw.byteslice(0, CONTENT_ITEM_PREVIEW_BYTES) : raw
+
+        {
+          id: row[:id],
+          source: row[:source],
+          session_id: row[:session_id],
+          transcript_path: row[:transcript_path],
+          project_path: row[:project_path],
+          byte_len: row[:byte_len],
+          occurred_at: row[:occurred_at],
+          ingested_at: row[:ingested_at],
+          raw_text_preview: preview,
+          truncated: truncated
+        }
+      end
+
+      def load_linked_facts(store, content_item_id)
+        rows = store.db[:facts]
+          .join(:provenance, fact_id: :id)
+          .where(Sequel[:provenance][:content_item_id] => content_item_id.to_i)
+          .select(Sequel[:facts].*)
+          .all
+
+        entity_ids = rows.flat_map { |r| [r[:subject_entity_id], r[:object_entity_id]] }.compact.uniq
+        entities = store.entities.where(id: entity_ids).as_hash(:id)
+
+        rows.map { |row|
+          subject = entities[row[:subject_entity_id]]
+          object_entity = entities[row[:object_entity_id]]
+          {
+            id: row[:id],
+            docid: row[:docid],
+            subject: subject&.dig(:canonical_name) || "unknown",
+            predicate: row[:predicate],
+            object: row[:object_literal] || object_entity&.dig(:canonical_name) || "unknown",
+            status: row[:status],
+            confidence: row[:confidence],
+            scope: row[:scope],
+            created_at: row[:created_at]
+          }
+        }
+      end
 
       def default_store
         if @manager.project_exists?

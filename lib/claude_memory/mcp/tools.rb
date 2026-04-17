@@ -151,6 +151,7 @@ module ClaudeMemory
         else
           details[:facts_created] = result[:facts_created]
           details[:entities_created] = result[:entities_created]
+          details[:content_item_id] = result[:content_item_id]
         end
 
         ActivityLog.record(store, event_type: event_type, status: status,

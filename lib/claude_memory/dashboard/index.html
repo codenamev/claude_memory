@@ -335,6 +335,43 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .modal-empty { color: var(--text-dim); font-size: 13px; }
+  .modal-wide { max-width: 960px; }
+  .modal-section { margin-top: 16px; }
+  .modal-section:first-of-type { margin-top: 0; }
+  .modal-section h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .modal-kv {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 4px 12px;
+    font-size: 13px;
+  }
+  .modal-kv dt { color: var(--text-dim); }
+  .modal-kv dd {
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+  }
+  pre.modal-json, pre.modal-text {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-top: 4px;
+    max-height: 320px;
+    overflow: auto;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  tr.row-clickable { cursor: pointer; }
+  tr.row-clickable:hover td { background: var(--surface2); }
 
   @media (max-width: 768px) {
     .grid-2 { grid-template-columns: 1fr; }
@@ -367,6 +404,16 @@
         <button class="modal-close" aria-label="Close" onclick="closeHealthModal()">&times;</button>
       </div>
       <div id="health-modal-body"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="activity-modal" role="dialog" aria-labelledby="activity-modal-title" aria-modal="true">
+    <div class="modal modal-wide" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="activity-modal-title">Activity details</h2>
+        <button class="modal-close" aria-label="Close" onclick="closeActivityModal()">&times;</button>
+      </div>
+      <div id="activity-modal-body"></div>
     </div>
   </div>
 
@@ -608,7 +655,7 @@ function renderFix(fixText) {
 
 document.getElementById('health-modal').addEventListener('click', closeHealthModal);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeHealthModal();
+  if (e.key === 'Escape') { closeHealthModal(); closeActivityModal(); }
 });
 
 async function loadStats() {
@@ -668,7 +715,7 @@ async function loadActivity(eventType) {
   tbody.innerHTML = data.events.map(e => {
     const details = e.details || {};
     const detailStr = formatDetails(e.event_type, details);
-    return `<tr>
+    return `<tr class="row-clickable" onclick="openActivityModal(${e.id})" title="Click for details">
       <td title="${e.occurred_at}">${e.occurred_ago || e.occurred_at}</td>
       <td><span class="badge badge-info">${e.event_type}</span></td>
       <td><span class="badge badge-${statusBadge(e.status)}">${e.status}</span></td>
@@ -677,6 +724,95 @@ async function loadActivity(eventType) {
     </tr>`;
   }).join('');
 }
+
+async function openActivityModal(id) {
+  const body = document.getElementById('activity-modal-body');
+  const modal = document.getElementById('activity-modal');
+  body.innerHTML = '<p class="modal-empty">Loading…</p>';
+  modal.classList.add('open');
+
+  try {
+    const data = await api('activity/' + id);
+    if (data.error) {
+      body.innerHTML = `<p class="modal-empty">${esc(data.error)}</p>`;
+      return;
+    }
+    body.innerHTML = renderActivityDetail(data);
+  } catch (err) {
+    body.innerHTML = `<p class="modal-empty">Failed to load: ${esc(err.message)}</p>`;
+  }
+}
+
+function closeActivityModal() {
+  document.getElementById('activity-modal').classList.remove('open');
+}
+
+function renderActivityDetail(data) {
+  const e = data.event || {};
+  const ci = data.content_item;
+  const facts = data.linked_facts || [];
+
+  const header = `
+    <div class="modal-section">
+      <h3>Event</h3>
+      <dl class="modal-kv">
+        <dt>id</dt><dd>${e.id}</dd>
+        <dt>type</dt><dd><span class="badge badge-info">${esc(e.event_type)}</span></dd>
+        <dt>status</dt><dd><span class="badge badge-${statusBadge(e.status)}">${esc(e.status)}</span></dd>
+        <dt>occurred_at</dt><dd>${esc(e.occurred_at)} (${esc(e.occurred_ago || '')})</dd>
+        <dt>duration</dt><dd>${e.duration_ms != null ? e.duration_ms + 'ms' : '-'}</dd>
+        <dt>session_id</dt><dd>${esc(e.session_id || '-')}</dd>
+      </dl>
+    </div>
+    <div class="modal-section">
+      <h3>Details (raw)</h3>
+      <pre class="modal-json">${esc(JSON.stringify(e.details || {}, null, 2))}</pre>
+    </div>
+  `;
+
+  const contentSection = ci ? `
+    <div class="modal-section">
+      <h3>Content item #${ci.id}</h3>
+      <dl class="modal-kv">
+        <dt>source</dt><dd>${esc(ci.source || '-')}</dd>
+        <dt>session_id</dt><dd>${esc(ci.session_id || '-')}</dd>
+        <dt>transcript_path</dt><dd>${esc(ci.transcript_path || '-')}</dd>
+        <dt>project_path</dt><dd>${esc(ci.project_path || '-')}</dd>
+        <dt>byte_len</dt><dd>${ci.byte_len != null ? ci.byte_len.toLocaleString() : '-'}</dd>
+        <dt>ingested_at</dt><dd>${esc(ci.ingested_at || '-')}</dd>
+      </dl>
+      <h3 style="margin-top: 12px;">Raw text${ci.truncated ? ' (truncated)' : ''}</h3>
+      <pre class="modal-text">${esc(ci.raw_text_preview || '(empty)')}</pre>
+    </div>
+  ` : '';
+
+  const factsSection = facts.length > 0 ? `
+    <div class="modal-section">
+      <h3>Linked facts (${facts.length})</h3>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Scope</th></tr>
+        </thead>
+        <tbody>
+          ${facts.map(f => `
+            <tr>
+              <td><code>${f.docid || f.id}</code></td>
+              <td>${esc(f.subject)}</td>
+              <td><span class="badge badge-purple">${esc(f.predicate)}</span></td>
+              <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                  title="${esc(f.object)}">${esc(f.object)}</td>
+              <td><span class="badge badge-info">${esc(f.scope)}</span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
+  return header + contentSection + factsSection;
+}
+
+document.getElementById('activity-modal').addEventListener('click', closeActivityModal);
 
 function formatDetails(type, details) {
   switch(type) {

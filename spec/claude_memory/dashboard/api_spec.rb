@@ -124,6 +124,63 @@ RSpec.describe ClaudeMemory::Dashboard::API do
     end
   end
 
+  describe "#activity_detail" do
+    it "returns error for missing id" do
+      expect(api.activity_detail(999999)[:error]).to match(/not found/)
+    end
+
+    it "returns the event with raw details and no content when absent" do
+      store = manager.project_store
+      event_id = ClaudeMemory::ActivityLog.record(store,
+        event_type: "hook_ingest",
+        status: "success",
+        session_id: "sess-abc",
+        duration_ms: 12,
+        details: {bytes_read: 42, reason: "noop"})
+
+      detail = api.activity_detail(event_id)
+
+      expect(detail[:event][:id]).to eq(event_id)
+      expect(detail[:event][:event_type]).to eq("hook_ingest")
+      expect(detail[:event][:details][:bytes_read]).to eq(42)
+      expect(detail[:content_item]).to be_nil
+      expect(detail[:linked_facts]).to eq([])
+    end
+
+    it "loads the linked content_item and facts when content_item_id is present" do
+      store = manager.project_store
+      ci_id = store.upsert_content_item(
+        source: "test",
+        text_hash: Digest::SHA256.hexdigest("abc"),
+        byte_len: 11,
+        raw_text: "abc content"
+      )
+      entity_id = store.find_or_create_entity(type: "framework", name: "Rails")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "uses_framework",
+        object_literal: "Rails",
+        status: "active",
+        confidence: 1.0,
+        scope: "project"
+      )
+      store.insert_provenance(fact_id: fact_id, content_item_id: ci_id, strength: "stated")
+
+      event_id = ClaudeMemory::ActivityLog.record(store,
+        event_type: "store_extraction",
+        status: "success",
+        details: {content_item_id: ci_id, facts_created: 1, entities_created: 1})
+
+      detail = api.activity_detail(event_id)
+
+      expect(detail[:content_item][:id]).to eq(ci_id)
+      expect(detail[:content_item][:raw_text_preview]).to eq("abc content")
+      expect(detail[:linked_facts].size).to eq(1)
+      expect(detail[:linked_facts].first[:subject]).to eq("Rails")
+      expect(detail[:linked_facts].first[:object]).to eq("Rails")
+    end
+  end
+
   describe "#facts" do
     before do
       store = manager.project_store
