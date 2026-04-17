@@ -1280,6 +1280,13 @@ async function rejectAllSimilar(keeperFactId) {
       showToast('Error: ' + data.error, true);
       return;
     }
+    if (!Array.isArray(data.rejected_fact_ids)) {
+      // The server returned an unexpected shape — usually means the
+      // dashboard process predates the reject_similar route. Surface a
+      // concrete hint instead of a cryptic property-access crash.
+      showToast('Bulk reject unavailable — restart the dashboard and hard-refresh the browser.', true);
+      return;
+    }
     showToast(`Kept #${data.keeper_fact_id} · rejected ${data.rejected_fact_ids.length} fact(s) · resolved ${data.conflicts_resolved} conflict(s)`);
     closeConflictModal();
     loadConflicts();
