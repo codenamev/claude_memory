@@ -1093,7 +1093,7 @@ function renderActivityDetail(data) {
         <dt>ingested_at</dt><dd>${esc(ci.ingested_at || '-')}</dd>
       </dl>
       <h3 style="margin-top: 12px;">Raw text${ci.truncated ? ' (truncated)' : ''}</h3>
-      <pre class="modal-text">${formatJson(ci.raw_text_preview, {fallbackLabel: 'Plain text (not JSON)'})}</pre>
+      <pre class="modal-text">${formatJson(ci.raw_text_preview, {fallbackLabel: 'Plain text (not JSON)', truncated: !!ci.truncated})}</pre>
     </div>
   ` : '';
 
@@ -1539,34 +1539,76 @@ function esc(s) {
   return d.innerHTML;
 }
 
-// Syntax-highlighted JSON. Input can be a pre-parsed object or a raw string.
-// When the string doesn't parse as JSON (prose, truncated quotes), we fall
-// through to escaped plain text with a small "not JSON" hint. Empty input
-// renders a dim placeholder.
-function formatJson(input, {fallbackLabel = null} = {}) {
+// Syntax-highlighted JSON with graceful handling of:
+// - Already-parsed objects (pretty-print + colorize).
+// - Single-document JSON strings (parse + pretty + colorize).
+// - Newline-delimited JSON (JSONL) — transcripts are JSONL, so each line
+//   is parsed independently; a malformed line doesn't poison the others.
+// - Truncated tails — known via the `truncated` opt (from the API's
+//   content_item flag) or inferred when only the last line fails to parse.
+//   Partial lines still get token-regex highlighting even without a
+//   successful parse, so keys/strings/numbers stay readable.
+// - Plain text fallback — when nothing parses, show with error hint.
+function formatJson(input, {fallbackLabel = null, truncated = false} = {}) {
   if (input == null || input === '') return '<span class="json-null">(empty)</span>';
 
-  let obj = input;
-  let parseError = null;
-  if (typeof input === 'string') {
-    try {
-      obj = JSON.parse(input);
-    } catch (e) {
-      parseError = e.message;
+  // Already-parsed object — straightforward.
+  if (typeof input !== 'string') {
+    return colorizeJson(JSON.stringify(input, null, 2));
+  }
+
+  // Attempt 1: the whole string is a single JSON document.
+  try {
+    return colorizeJson(JSON.stringify(JSON.parse(input), null, 2));
+  } catch (_) {}
+
+  // Attempt 2: JSONL — each non-empty line is its own JSON value.
+  const lines = input.split(/\r?\n/);
+  const parseable = [];
+  const pieces = [];
+  let lastLineFailed = false;
+
+  lines.forEach((line, i) => {
+    if (line.trim() === '') {
+      pieces.push('');
+      return;
     }
+    try {
+      const obj = JSON.parse(line);
+      pieces.push(colorizeJson(JSON.stringify(obj, null, 2)));
+      parseable.push(i);
+    } catch (_) {
+      // Tokenize even without a successful parse so partial lines stay
+      // readable (keys/strings/numbers still get highlighted).
+      pieces.push(colorizeJson(line));
+      if (i === lines.length - 1) lastLineFailed = true;
+    }
+  });
+
+  // JSONL path — more than one non-empty line, at least one parsed.
+  if (lines.filter((l) => l.trim()).length > 1 && parseable.length > 0) {
+    const hint = (truncated || lastLineFailed)
+      ? `<span class="json-error">Last record appears truncated — remaining fields may be cut off</span>`
+      : '';
+    return hint + pieces.join('\n');
   }
 
-  if (parseError) {
-    const hint = fallbackLabel
+  // Single unparseable string — probably a truncated mid-document chunk.
+  const hint = truncated
+    ? `<span class="json-error">Content truncated — showing partial tokens</span>`
+    : fallbackLabel
       ? `<span class="json-error">${esc(fallbackLabel)}</span>`
-      : `<span class="json-error">Not valid JSON — showing raw text (${esc(parseError)})</span>`;
-    return hint + esc(String(input));
-  }
+      : `<span class="json-error">Partial or non-JSON content — showing tokenized</span>`;
+  return hint + colorizeJson(input);
+}
 
-  const pretty = JSON.stringify(obj, null, 2);
-  // Escape the JSON string first so spans are injected into safe HTML,
-  // then tokenize keys / strings / numbers / booleans / null.
-  const escaped = pretty.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Pure token colorizer. Accepts any string — doesn't require valid JSON.
+// Escapes HTML entities first, then wraps keys / strings / numbers /
+// booleans / null in span tags. Unmatched prefixes/suffixes (e.g. a
+// truncated half-string with no closing quote) survive uncolored, which
+// is acceptable output for partial content.
+function colorizeJson(text) {
+  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return escaped.replace(
     /("(?:\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
     (match) => {
