@@ -41,24 +41,49 @@ module ClaudeMemory
         api = API.new(@manager)
 
         @server.mount_proc("/") { |_req, res| serve_html(res) }
-        @server.mount_proc("/api/health") { |_req, res| json_response(res, api.health) }
-        @server.mount_proc("/api/stats") { |_req, res| json_response(res, api.stats) }
+        @server.mount_proc("/api/health") { |_req, res| with_fresh_connections { json_response(res, api.health) } }
+        @server.mount_proc("/api/stats") { |_req, res| with_fresh_connections { json_response(res, api.stats) } }
         @server.mount_proc("/api/activity") { |req, res|
-          if (id = activity_id_from_path(req.path))
-            json_response(res, api.activity_detail(id))
-          else
-            json_response(res, api.activity(req.query))
-          end
+          with_fresh_connections {
+            if (id = activity_id_from_path(req.path))
+              json_response(res, api.activity_detail(id))
+            else
+              json_response(res, api.activity(req.query))
+            end
+          }
         }
-        @server.mount_proc("/api/facts") { |req, res| handle_facts(api, req, res) }
-        @server.mount_proc("/api/efficacy") { |req, res| json_response(res, api.efficacy(req.query)) }
+        @server.mount_proc("/api/facts") { |req, res| with_fresh_connections { handle_facts(api, req, res) } }
+        @server.mount_proc("/api/efficacy") { |req, res| with_fresh_connections { json_response(res, api.efficacy(req.query)) } }
         @server.mount_proc("/api/session") { |req, res|
-          session_id = req.query["session_id"]
-          json_response(res, api.session_summary(session_id))
+          with_fresh_connections {
+            session_id = req.query["session_id"]
+            json_response(res, api.session_summary(session_id))
+          }
         }
-        @server.mount_proc("/api/timeline") { |_req, res| json_response(res, api.timeline) }
-        @server.mount_proc("/api/recall") { |req, res| json_response(res, api.recall(req.query)) }
-        @server.mount_proc("/api/conflicts") { |req, res| handle_conflicts(api, req, res) }
+        @server.mount_proc("/api/timeline") { |_req, res| with_fresh_connections { json_response(res, api.timeline) } }
+        @server.mount_proc("/api/recall") { |req, res| with_fresh_connections { json_response(res, api.recall(req.query)) } }
+        @server.mount_proc("/api/conflicts") { |req, res| with_fresh_connections { handle_conflicts(api, req, res) } }
+      end
+
+      # WAL-mode SQLite caches pages on reader connections; when the MCP
+      # server (or hooks, or any other writer) modifies the same DB
+      # concurrently, long-lived dashboard connections can see stale pages
+      # and surface "database disk image is malformed" errors even though
+      # PRAGMA integrity_check reports ok. Releasing connections after each
+      # HTTP request forces a fresh connection on the next read, matching
+      # what MCP::Server#release_connections does per tool call.
+      def with_fresh_connections
+        yield
+      ensure
+        release_connections
+      end
+
+      def release_connections
+        return unless @manager
+        @manager.global_store&.db&.disconnect
+        @manager.project_store&.db&.disconnect
+      rescue Sequel::DatabaseError, Extralite::Error
+        # Best-effort; next call will reopen.
       end
 
       def handle_conflicts(api, req, res)
