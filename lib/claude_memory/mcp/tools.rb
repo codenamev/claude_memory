@@ -151,6 +151,7 @@ module ClaudeMemory
           details[:scope] = arguments["scope"]
           details[:result_count] = extract_result_count(result)
           details[:top_fact_ids] = extract_top_fact_ids(result)
+          details[:results_by_scope] = extract_scope_breakdown(result)
         else
           details[:facts_created] = result[:facts_created]
           details[:entities_created] = result[:entities_created]
@@ -196,21 +197,31 @@ module ClaudeMemory
         (arguments.is_a?(Hash) && arguments["session_id"]) || Configuration.new.session_id
       end
 
-      # Return whichever store is available for activity logging, preferring
-      # the project store when the project DB exists on disk. Falling back to
-      # the global store prevents silent drops of activity events when the
-      # project DB hasn't been initialized yet — otherwise recall/write events
-      # fired before first project setup would vanish without a trace.
+      # Count returned items grouped by their :scope field so the dashboard
+      # can show whether a recall's hits came from global preferences, project
+      # facts, or both. Returns nil when the result shape doesn't carry facts.
+      # @return [Hash{String => Integer}, nil]
+      def extract_scope_breakdown(result)
+        return nil unless result.is_a?(Hash)
+        collection = [:facts, :results, :items].map { |k| result[k] }.find { |v| v.is_a?(Array) }
+        return nil unless collection
+
+        breakdown = Hash.new(0)
+        collection.each { |row|
+          next unless row.is_a?(Hash)
+          scope = row[:scope] || row["scope"] || row[:source] || row["source"] || "unknown"
+          breakdown[scope.to_s] += 1
+        }
+        breakdown.empty? ? nil : breakdown
+      end
+
+      # Return whichever store is available for activity logging. Delegates
+      # to StoreManager#default_store which prefers the project store and
+      # falls back to global — preventing silent drops of activity events
+      # when the project DB hasn't been initialized yet.
       def default_store
         return @legacy_store unless @manager
-
-        if @manager.project_exists?
-          @manager.ensure_project!
-          @manager.project_store
-        elsif @manager.global_exists?
-          @manager.ensure_global!
-          @manager.global_store
-        end
+        @manager.default_store(prefer: :project)
       end
 
       def activity(args)

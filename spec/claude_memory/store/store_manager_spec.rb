@@ -174,4 +174,55 @@ RSpec.describe ClaudeMemory::Store::StoreManager do
       }.to raise_error(ArgumentError, /Invalid scope/)
     end
   end
+
+  describe "#store_if_exists" do
+    it "returns nil when the project DB does not exist" do
+      expect(manager.store_if_exists("project")).to be_nil
+    end
+
+    it "returns the project store when the project DB exists" do
+      manager.ensure_project!
+      expect(manager.store_if_exists("project")).to equal(manager.project_store)
+    end
+
+    it "returns nil when the global DB does not exist" do
+      expect(manager.store_if_exists("global")).to be_nil
+    end
+
+    it "returns the global store when the global DB exists" do
+      manager.ensure_global!
+      expect(manager.store_if_exists("global")).to equal(manager.global_store)
+    end
+
+    it "never creates a new DB file" do
+      manager.store_if_exists("project")
+      expect(File.exist?(project_db_path)).to be false
+    end
+  end
+
+  describe "#default_store" do
+    it "returns nil when neither DB exists" do
+      expect(manager.default_store).to be_nil
+    end
+
+    it "prefers the project store when both exist" do
+      manager.ensure_both!
+      expect(manager.default_store(prefer: :project)).to equal(manager.project_store)
+    end
+
+    it "falls back to global when project does not exist" do
+      manager.ensure_global!
+      expect(manager.default_store(prefer: :project)).to equal(manager.global_store)
+    end
+
+    it "falls back to project when global does not exist" do
+      manager.ensure_project!
+      expect(manager.default_store(prefer: :global)).to equal(manager.project_store)
+    end
+
+    it "returns the preferred scope when both exist and prefer: :global" do
+      manager.ensure_both!
+      expect(manager.default_store(prefer: :global)).to equal(manager.global_store)
+    end
+  end
 end

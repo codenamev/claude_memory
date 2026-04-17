@@ -67,74 +67,15 @@ module ClaudeMemory
       end
 
       def conflicts(params = {})
-        scope = params["scope"] || "all"
-        status_filter = params["status"] || "open"
-        limit = (params["limit"] || 50).to_i
-        offset = (params["offset"] || 0).to_i
-
-        stores = conflict_stores(scope)
-        rows = stores.flat_map { |source, store|
-          dataset = store.conflicts
-          dataset = dataset.where(status: status_filter) unless status_filter == "all"
-          dataset.all.map { |row| row.merge(source: source, store: store) }
-        }
-
-        rows = rows.sort_by { |r| -parse_timestamp(r[:detected_at]) }
-        total = rows.size
-        page = rows[offset, limit] || []
-
-        {
-          total: total,
-          limit: limit,
-          offset: offset,
-          scope: scope,
-          status: status_filter,
-          conflicts: page.map { |row| serialize_conflict_row(row) }
-        }
+        Conflicts.new(@manager).list(params)
       end
 
       def conflict_detail(id, scope = "project")
-        return {error: "Invalid scope"} unless %w[global project].include?(scope)
-        store = scope_store(scope)
-        return {error: "#{scope} store not available"} unless store
-
-        row = store.conflicts.where(id: id.to_i).first
-        return {error: "Conflict #{id} not found"} unless row
-
-        {
-          conflict: {
-            id: row[:id],
-            status: row[:status],
-            detected_at: row[:detected_at],
-            detected_ago: Core::RelativeTime.format(row[:detected_at]),
-            notes: row[:notes],
-            source: scope
-          },
-          fact_a: load_conflict_fact(store, row[:fact_a_id]),
-          fact_b: load_conflict_fact(store, row[:fact_b_id])
-        }
+        Conflicts.new(@manager).detail(id, scope)
       end
 
       def reject_conflict_fact(id, side:, reason: nil, scope: "project")
-        return {error: "Invalid side (must be 'a' or 'b')"} unless %w[a b].include?(side)
-        return {error: "Invalid scope"} unless %w[global project].include?(scope)
-        store = scope_store(scope)
-        return {error: "#{scope} store not available"} unless store
-
-        row = store.conflicts.where(id: id.to_i).first
-        return {error: "Conflict #{id} not found"} unless row
-
-        fact_id = (side == "a") ? row[:fact_a_id] : row[:fact_b_id]
-        result = store.reject_fact(fact_id, reason: reason)
-
-        {
-          success: true,
-          conflict_id: id,
-          rejected_fact_id: fact_id,
-          side: side,
-          scope: scope,
-          conflicts_resolved: result[:conflicts_resolved]
-        }
+        Conflicts.new(@manager).reject(id, side: side, reason: reason, scope: scope)
       end
 
       def session_summary(session_id)
@@ -199,75 +140,43 @@ module ClaudeMemory
       end
 
       def facts(params = {})
-        store = default_store
-        return {facts: [], total: 0} unless store
-
+        scope = params["scope"] || "all"
         limit = (params["limit"] || 50).to_i
         offset = (params["offset"] || 0).to_i
         status_filter = params["status"] || "active"
         search = params["q"]
 
-        dataset = store.facts.where(status: status_filter)
-        dataset = dataset.where(Sequel.like(:predicate, "%#{search}%") | Sequel.like(:object_literal, "%#{search}%")) if search && !search.empty?
+        stores = facts_stores_for(scope)
+        return {facts: [], total: 0, limit: limit, offset: offset, scope: scope} if stores.empty?
 
-        total = dataset.count
-        rows = dataset.order(Sequel.desc(:created_at)).limit(limit).offset(offset).all
-
-        entity_ids = rows.flat_map { |r| [r[:subject_entity_id], r[:object_entity_id]] }.compact.uniq
-        entities = store.entities.where(id: entity_ids).as_hash(:id)
+        collected = stores.flat_map { |source, store|
+          dataset = store.facts.where(status: status_filter)
+          dataset = dataset.where(Sequel.like(:predicate, "%#{search}%") | Sequel.like(:object_literal, "%#{search}%")) if search && !search.empty?
+          rows = dataset.order(Sequel.desc(:created_at)).all
+          presented = FactPresenter.new(store).list_summary(rows)
+          presented.map { |f| f.merge(source: source) }
+        }
+        collected.sort_by! { |f| -parse_timestamp(f[:created_at]) }
 
         {
-          total: total,
+          total: collected.size,
           limit: limit,
           offset: offset,
-          facts: rows.map { |row|
-            subject = entities[row[:subject_entity_id]]
-            object_entity = entities[row[:object_entity_id]]
-            {
-              id: row[:id],
-              docid: row[:docid],
-              subject: subject&.dig(:canonical_name) || "unknown",
-              predicate: row[:predicate],
-              object: row[:object_literal] || object_entity&.dig(:canonical_name) || "unknown",
-              status: row[:status],
-              confidence: row[:confidence],
-              scope: row[:scope],
-              created_at: row[:created_at],
-              created_ago: Core::RelativeTime.format(row[:created_at]),
-              valid_from: row[:valid_from]
-            }
-          }
+          scope: scope,
+          facts: Array(collected[offset, limit])
         }
       end
 
       def efficacy(params = {})
         store = default_store
-        return empty_efficacy unless store
-
         since = params["since"]
         session_id = params["session_id"]
+        return Efficacy::Reporter.report([], timeframe: {since: since, session_id: session_id}) unless store
 
-        recall_events = ActivityLog.recent(store, limit: 500, event_type: "recall", since: since)
-        recall_events = recall_events.select { |e| e[:session_id] == session_id } if session_id
+        events = ActivityLog.recent(store, limit: 500, event_type: "recall", since: since)
+        events = events.select { |e| e[:session_id] == session_id } if session_id
 
-        result_counts = recall_events.map { |e| e.dig(:details, :result_count) || 0 }
-        latencies = recall_events.map { |e| e[:duration_ms] }.compact
-        successful = recall_events.count { |e| e[:status] == "success" && (e.dig(:details, :result_count) || 0) > 0 }
-        empty = recall_events.count { |e| e[:status] == "success" && (e.dig(:details, :result_count) || 0) == 0 }
-
-        {
-          timeframe: {since: since, session_id: session_id},
-          recall_events: recall_events.size,
-          successful_recalls: successful,
-          empty_recalls: empty,
-          hit_rate: percentage(successful, recall_events.size),
-          total_results_served: result_counts.sum,
-          median_results_per_query: median(result_counts),
-          median_latency_ms: median(latencies),
-          tool_mix: tool_mix(recall_events),
-          memory_gaps: memory_gaps(recall_events),
-          recall_trace: recall_trace(recall_events)
-        }
+        Efficacy::Reporter.report(events, timeframe: {since: since, session_id: session_id})
       end
 
       def timeline
@@ -326,84 +235,25 @@ module ClaudeMemory
       private
 
       CONTENT_ITEM_PREVIEW_BYTES = 8000
-      RECALL_TRACE_LIMIT = 50
-      MEMORY_GAPS_LIMIT = 10
 
-      def empty_efficacy
-        {
-          timeframe: {since: nil, session_id: nil},
-          recall_events: 0,
-          successful_recalls: 0,
-          empty_recalls: 0,
-          hit_rate: 0,
-          total_results_served: 0,
-          median_results_per_query: 0,
-          median_latency_ms: 0,
-          tool_mix: [],
-          memory_gaps: [],
-          recall_trace: []
-        }
+      def parse_timestamp(value)
+        Time.parse(value.to_s).to_i
+      rescue ArgumentError, TypeError
+        0
       end
 
-      def percentage(part, whole)
-        return 0 if whole.to_i.zero?
-        (part.to_f / whole * 100).round(1)
-      end
-
-      def median(values)
-        return 0 if values.empty?
-        sorted = values.sort
-        mid = sorted.size / 2
-        if sorted.size.odd?
-          sorted[mid]
+      def facts_stores_for(scope)
+        case scope
+        when "project"
+          {"project" => @manager.store_if_exists("project")}.compact
+        when "global"
+          {"global" => @manager.store_if_exists("global")}.compact
         else
-          ((sorted[mid - 1] + sorted[mid]) / 2.0).round(1)
-        end
-      end
-
-      def tool_mix(events)
-        events
-          .group_by { |e| e.dig(:details, :tool) || "(unknown)" }
-          .map { |tool, rows|
-            hits = rows.count { |r| (r.dig(:details, :result_count) || 0) > 0 }
-            {
-              tool: tool,
-              count: rows.size,
-              hits: hits,
-              hit_rate: percentage(hits, rows.size)
-            }
-          }
-          .sort_by { |row| -row[:count] }
-      end
-
-      def memory_gaps(events)
-        events
-          .select { |e| (e.dig(:details, :result_count) || 0).zero? && e.dig(:details, :query) }
-          .first(MEMORY_GAPS_LIMIT)
-          .map { |e|
-            {
-              tool: e.dig(:details, :tool),
-              query: e.dig(:details, :query),
-              occurred_at: e[:occurred_at],
-              occurred_ago: Core::RelativeTime.format(e[:occurred_at])
-            }
-          }
-      end
-
-      def recall_trace(events)
-        events.first(RECALL_TRACE_LIMIT).map { |e|
           {
-            id: e[:id],
-            tool: e.dig(:details, :tool),
-            query: e.dig(:details, :query),
-            result_count: e.dig(:details, :result_count) || 0,
-            duration_ms: e[:duration_ms],
-            session_id: e[:session_id],
-            status: e[:status],
-            occurred_at: e[:occurred_at],
-            occurred_ago: Core::RelativeTime.format(e[:occurred_at])
-          }
-        }
+            "project" => @manager.store_if_exists("project"),
+            "global" => @manager.store_if_exists("global")
+          }.compact
+        end
       end
 
       def load_content_item(store, id)
@@ -428,157 +278,26 @@ module ClaudeMemory
         }
       end
 
-      FACT_PREVIEW_CHARS = 120
-
-      def parse_timestamp(value)
-        Time.parse(value.to_s).to_i
-      rescue ArgumentError, TypeError
-        0
-      end
-
-      def conflict_stores(scope)
-        result = {}
-        if (scope == "all" || scope == "global") && @manager.global_exists?
-          @manager.ensure_global!
-          result["global"] = @manager.global_store
-        end
-        if (scope == "all" || scope == "project") && @manager.project_exists?
-          @manager.ensure_project!
-          result["project"] = @manager.project_store
-        end
-        result
-      end
-
-      def scope_store(scope)
-        case scope
-        when "project"
-          return nil unless @manager.project_exists?
-          @manager.ensure_project!
-          @manager.project_store
-        when "global"
-          return nil unless @manager.global_exists?
-          @manager.ensure_global!
-          @manager.global_store
-        end
-      end
-
-      def serialize_conflict_row(row)
-        store = row[:store]
-        {
-          id: row[:id],
-          fact_a_id: row[:fact_a_id],
-          fact_b_id: row[:fact_b_id],
-          fact_a_preview: fact_preview(store, row[:fact_a_id]),
-          fact_b_preview: fact_preview(store, row[:fact_b_id]),
-          status: row[:status],
-          detected_at: row[:detected_at],
-          detected_ago: Core::RelativeTime.format(row[:detected_at]),
-          notes: row[:notes],
-          source: row[:source]
-        }
-      end
-
-      def fact_preview(store, fact_id)
-        row = store.facts.where(id: fact_id).first
-        return nil unless row
-
-        subject_entity = row[:subject_entity_id] ? store.entities.where(id: row[:subject_entity_id]).first : nil
-        object_entity = row[:object_entity_id] ? store.entities.where(id: row[:object_entity_id]).first : nil
-        object_text = row[:object_literal] || object_entity&.dig(:canonical_name) || "unknown"
-        truncated = object_text.to_s.size > FACT_PREVIEW_CHARS
-
-        {
-          id: row[:id],
-          docid: row[:docid],
-          subject: subject_entity&.dig(:canonical_name) || "unknown",
-          predicate: row[:predicate],
-          object: truncated ? "#{object_text[0, FACT_PREVIEW_CHARS]}…" : object_text,
-          status: row[:status]
-        }
-      end
-
-      def load_conflict_fact(store, fact_id)
-        row = store.facts.where(id: fact_id).first
-        return nil unless row
-
-        subject_entity = row[:subject_entity_id] ? store.entities.where(id: row[:subject_entity_id]).first : nil
-        object_entity = row[:object_entity_id] ? store.entities.where(id: row[:object_entity_id]).first : nil
-
-        provenance_rows = store.provenance.where(fact_id: fact_id).all
-        content_item_ids = provenance_rows.map { |p| p[:content_item_id] }.compact.uniq
-        content_items = content_item_ids.empty? ? {} : store.content_items.where(id: content_item_ids).as_hash(:id)
-
-        {
-          id: row[:id],
-          docid: row[:docid],
-          subject: subject_entity&.dig(:canonical_name) || "unknown",
-          predicate: row[:predicate],
-          object: row[:object_literal] || object_entity&.dig(:canonical_name) || "unknown",
-          status: row[:status],
-          confidence: row[:confidence],
-          scope: row[:scope],
-          created_at: row[:created_at],
-          created_ago: Core::RelativeTime.format(row[:created_at]),
-          provenance: provenance_rows.map { |prov|
-            ci = prov[:content_item_id] ? content_items[prov[:content_item_id]] : nil
-            {
-              quote: prov[:quote],
-              strength: prov[:strength],
-              content_item_id: prov[:content_item_id],
-              session_id: ci&.dig(:session_id),
-              occurred_at: ci&.dig(:occurred_at)
-            }
-          }
-        }
-      end
-
       def load_linked_facts(store, content_item_id)
         rows = store.db[:facts]
           .join(:provenance, fact_id: :id)
           .where(Sequel[:provenance][:content_item_id] => content_item_id.to_i)
           .select(Sequel[:facts].*)
           .all
-        serialize_facts(store, rows)
+        FactPresenter.new(store).list_summary(rows)
       end
 
       def load_facts_by_ids(store, ids)
         return [] if ids.nil? || ids.empty?
         rows = store.facts.where(id: ids.map(&:to_i)).all
-        # Preserve the order given by the caller (ranking from recall)
+        # Preserve the order given by the caller (ranking from recall).
         index = ids.each_with_index.to_h
         ordered = rows.sort_by { |r| index[r[:id]] || Float::INFINITY }
-        serialize_facts(store, ordered)
-      end
-
-      def serialize_facts(store, rows)
-        entity_ids = rows.flat_map { |r| [r[:subject_entity_id], r[:object_entity_id]] }.compact.uniq
-        entities = entity_ids.empty? ? {} : store.entities.where(id: entity_ids).as_hash(:id)
-
-        rows.map { |row|
-          subject = entities[row[:subject_entity_id]]
-          object_entity = entities[row[:object_entity_id]]
-          {
-            id: row[:id],
-            docid: row[:docid],
-            subject: subject&.dig(:canonical_name) || "unknown",
-            predicate: row[:predicate],
-            object: row[:object_literal] || object_entity&.dig(:canonical_name) || "unknown",
-            status: row[:status],
-            confidence: row[:confidence],
-            scope: row[:scope],
-            created_at: row[:created_at]
-          }
-        }
+        FactPresenter.new(store).list_summary(ordered)
       end
 
       def default_store
-        if @manager.project_exists?
-          @manager.ensure_project!
-          @manager.project_store
-        elsif @manager.global_exists?
-          @manager.ensure_global!
-          @manager.global_store
-        end
+        @manager.default_store(prefer: :project)
       end
 
       def db_stats(store, path)

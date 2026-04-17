@@ -118,6 +118,35 @@ module ClaudeMemory
         end
       end
 
+      # Return the store for an explicit scope only if its database file
+      # already exists on disk. Never creates a new DB. Useful for
+      # read-only surfaces that want to avoid accidental initialization.
+      # @param scope [String] "global" or "project"
+      # @return [SQLiteStore, nil]
+      def store_if_exists(scope)
+        case scope
+        when "project"
+          return nil unless project_exists?
+          ensure_project!
+        when "global"
+          return nil unless global_exists?
+          ensure_global!
+        end
+      end
+
+      # Return whichever store is available, preferring the requested scope.
+      # Falls back to the other scope if the preferred DB doesn't exist on
+      # disk yet. Returns nil only when both DBs are missing. Intended for
+      # "best-effort" surfaces like activity logging and default dashboard
+      # reads where the caller just needs some store to talk to.
+      # @param prefer [Symbol] :project (default) or :global
+      # @return [SQLiteStore, nil]
+      def default_store(prefer: :project)
+        primary = (prefer == :global) ? "global" : "project"
+        fallback = (prefer == :global) ? "project" : "global"
+        store_if_exists(primary) || store_if_exists(fallback)
+      end
+
       # Copy a project-scoped fact (with its entities and provenance) into the
       # global store, making it available across all projects. Runs the global
       # writes in a single transaction for atomicity.
