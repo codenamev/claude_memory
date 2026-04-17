@@ -157,6 +157,13 @@ RSpec.describe ClaudeMemory::Dashboard::API do
       expect(result[:count]).to be > 0
       expect(result[:facts]).to be_an(Array)
       expect(result[:duration_ms]).to be_a(Integer)
+
+      fact = result[:facts].first
+      expect(fact[:subject]).to eq("test-repo")
+      expect(fact[:predicate]).to eq("convention")
+      expect(fact[:object]).to include("explicit returns")
+      expect(fact[:scope]).to eq("project")
+      expect(fact[:receipts_count]).to be >= 1
     end
 
     it "returns an empty array for a query with no matches" do

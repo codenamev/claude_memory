@@ -692,6 +692,7 @@
             <th>Object</th>
             <th>Scope</th>
             <th>Source</th>
+            <th>Receipts</th>
             <th>Score</th>
           </tr>
         </thead>
@@ -1620,6 +1621,7 @@ async function runExplore() {
         <td style="max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(f.object || '')}">${esc(f.object || '')}</td>
         <td><span class="badge badge-info">${esc(f.scope || '')}</span></td>
         <td><span class="badge ${f.source === 'global' ? 'badge-purple' : 'badge-info'}" style="opacity: 0.8;">${esc(f.source || '')}</span></td>
+        <td style="font-size: 11px; color: var(--text-dim);">${f.receipts_count != null ? f.receipts_count : '—'}</td>
         <td style="font-size: 11px; color: var(--text-dim);">${f.score ? f.score.toFixed(3) : '—'}</td>
       </tr>
     `).join('');

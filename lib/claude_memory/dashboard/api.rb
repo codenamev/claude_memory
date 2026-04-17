@@ -356,22 +356,29 @@ module ClaudeMemory
 
       CONTENT_ITEM_PREVIEW_BYTES = 8000
 
-      # Normalize a Recall result hash into the shape the dashboard's
-      # recall tester table renders. Recall already returns shaped facts
-      # (not raw DB rows), but the field names have drifted over versions
-      # so we pull defensively.
-      def serialize_recall_fact(f)
+      # Recall returns results in the shape {fact:, receipts:, source:} —
+      # the fact sub-hash carries the actual fields (subject_name, predicate,
+      # object_literal, scope, ...). Receipts are the provenance chain.
+      # We flatten to the dashboard's expected shape and surface the
+      # receipts count so users can see "this had 27 supporting quotes"
+      # at a glance without drilling in.
+      def serialize_recall_fact(result)
+        fact = result[:fact] || result["fact"] || result
+        receipts = result[:receipts] || result["receipts"] || []
+        source = result[:source] || result["source"]
+
         {
-          id: f[:id] || f["id"],
-          docid: f[:docid] || f["docid"],
-          subject: f[:subject] || f["subject"],
-          predicate: f[:predicate] || f["predicate"],
-          object: f[:object] || f["object"] || f[:object_literal] || f["object_literal"],
-          scope: f[:scope] || f["scope"],
-          source: f[:source] || f["source"],
-          score: f[:score] || f["score"],
-          confidence: f[:confidence] || f["confidence"],
-          created_at: f[:created_at] || f["created_at"]
+          id: fact[:id] || fact["id"],
+          docid: fact[:docid] || fact["docid"],
+          subject: fact[:subject_name] || fact["subject_name"] || fact[:subject] || fact["subject"],
+          predicate: fact[:predicate] || fact["predicate"],
+          object: fact[:object_literal] || fact["object_literal"] || fact[:object] || fact["object"],
+          scope: fact[:scope] || fact["scope"],
+          source: source.to_s,
+          score: fact[:score] || fact["score"],
+          confidence: fact[:confidence] || fact["confidence"],
+          created_at: fact[:created_at] || fact["created_at"],
+          receipts_count: receipts.is_a?(Array) ? receipts.size : nil
         }.compact
       end
 
