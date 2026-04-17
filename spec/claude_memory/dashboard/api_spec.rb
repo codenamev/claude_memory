@@ -124,6 +124,130 @@ RSpec.describe ClaudeMemory::Dashboard::API do
     end
   end
 
+  describe "#recall (query tester)" do
+    before do
+      store = manager.project_store
+      entity_id = store.find_or_create_entity(type: "repo", name: "test-repo")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "convention",
+        object_literal: "explicit returns improve readability",
+        status: "active",
+        confidence: 0.9,
+        scope: "project"
+      )
+      # Index for FTS so Recall can find it
+      ci_id = store.upsert_content_item(
+        source: "test", text_hash: Digest::SHA256.hexdigest("r"), byte_len: 1,
+        raw_text: "explicit returns improve readability"
+      )
+      ClaudeMemory::Index::LexicalFTS.new(store).index_content_item(ci_id, "explicit returns improve readability")
+      store.insert_provenance(fact_id: fact_id, content_item_id: ci_id, strength: "stated")
+    end
+
+    it "errors without query" do
+      expect(api.recall({})[:error]).to match(/query required/)
+    end
+
+    it "returns facts for a matching query" do
+      result = api.recall({"query" => "explicit returns", "scope" => "project", "limit" => 5})
+
+      expect(result[:error]).to be_nil
+      expect(result[:query]).to eq("explicit returns")
+      expect(result[:count]).to be > 0
+      expect(result[:facts]).to be_an(Array)
+      expect(result[:duration_ms]).to be_a(Integer)
+    end
+
+    it "returns an empty array for a query with no matches" do
+      result = api.recall({"query" => "zzzzz-not-a-real-query-token"})
+      expect(result[:count]).to eq(0)
+    end
+  end
+
+  describe "#fact_detail" do
+    it "returns error for invalid scope" do
+      expect(api.fact_detail(1, "bad")[:error]).to match(/Invalid scope/)
+    end
+
+    it "returns error for missing id" do
+      expect(api.fact_detail(999_999, "project")[:error]).to match(/not found/)
+    end
+
+    it "returns a fact with provenance chain" do
+      store = manager.project_store
+      entity_id = store.find_or_create_entity(type: "repo", name: "test-repo")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "convention",
+        object_literal: "prefer explicit returns",
+        status: "active",
+        confidence: 0.9,
+        scope: "project"
+      )
+      ci_id = store.upsert_content_item(
+        source: "test", text_hash: Digest::SHA256.hexdigest("p"), byte_len: 1,
+        session_id: "sess-prov", raw_text: "stated convention"
+      )
+      store.insert_provenance(fact_id: fact_id, content_item_id: ci_id, quote: "prefer explicit returns", strength: "stated")
+
+      result = api.fact_detail(fact_id, "project")
+
+      expect(result[:id]).to eq(fact_id)
+      expect(result[:predicate]).to eq("convention")
+      expect(result[:provenance].size).to eq(1)
+      expect(result[:provenance].first[:session_id]).to eq("sess-prov")
+      expect(result[:source]).to eq("project")
+    end
+  end
+
+  describe "#reject_fact (standalone)" do
+    it "rejects the fact and reports the result" do
+      store = manager.project_store
+      entity_id = store.find_or_create_entity(type: "repo", name: "test-repo")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "convention",
+        object_literal: "bad pattern",
+        status: "active",
+        scope: "project"
+      )
+
+      result = api.reject_fact(fact_id, reason: "distiller noise", scope: "project")
+
+      expect(result[:success]).to be true
+      expect(store.facts.where(id: fact_id).first[:status]).to eq("rejected")
+    end
+
+    it "errors on missing fact" do
+      expect(api.reject_fact(999_999)[:error]).to match(/not found/)
+    end
+  end
+
+  describe "#promote_fact" do
+    it "promotes a project fact into global" do
+      store = manager.project_store
+      entity_id = store.find_or_create_entity(type: "repo", name: "promote-src")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity_id,
+        predicate: "convention",
+        object_literal: "global-worthy convention",
+        status: "active",
+        scope: "project"
+      )
+
+      result = api.promote_fact(fact_id)
+
+      expect(result[:success]).to be true
+      expect(result[:global_fact_id]).to be_a(Integer)
+      expect(manager.global_store.facts.where(id: result[:global_fact_id]).first[:scope]).to eq("global")
+    end
+
+    it "errors on missing fact" do
+      expect(api.promote_fact(999_999)[:error]).to match(/not found/)
+    end
+  end
+
   describe "#activity_detail" do
     it "returns error for missing id" do
       expect(api.activity_detail(999999)[:error]).to match(/not found/)

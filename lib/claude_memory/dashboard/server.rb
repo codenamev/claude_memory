@@ -50,13 +50,14 @@ module ClaudeMemory
             json_response(res, api.activity(req.query))
           end
         }
-        @server.mount_proc("/api/facts") { |req, res| json_response(res, api.facts(req.query)) }
+        @server.mount_proc("/api/facts") { |req, res| handle_facts(api, req, res) }
         @server.mount_proc("/api/efficacy") { |req, res| json_response(res, api.efficacy(req.query)) }
         @server.mount_proc("/api/session") { |req, res|
           session_id = req.query["session_id"]
           json_response(res, api.session_summary(session_id))
         }
         @server.mount_proc("/api/timeline") { |_req, res| json_response(res, api.timeline) }
+        @server.mount_proc("/api/recall") { |req, res| json_response(res, api.recall(req.query)) }
         @server.mount_proc("/api/conflicts") { |req, res| handle_conflicts(api, req, res) }
       end
 
@@ -101,6 +102,38 @@ module ClaudeMemory
       def activity_id_from_path(path)
         match = path.match(%r{\A/api/activity/(\d+)\z})
         match && match[1]
+      end
+
+      def fact_id_from_path(path)
+        match = path.match(%r{\A/api/facts/(\d+)\z})
+        match && match[1]
+      end
+
+      def fact_action_from_path(path)
+        match = path.match(%r{\A/api/facts/(\d+)/(reject|promote)\z})
+        match ? [match[1], match[2]] : nil
+      end
+
+      def handle_facts(api, req, res)
+        action = fact_action_from_path(req.path)
+        detail_id = fact_id_from_path(req.path)
+
+        if req.request_method == "POST" && action
+          fact_id, verb = action
+          body = parse_json_body(req)
+          scope = body["scope"] || req.query["scope"] || "project"
+          case verb
+          when "reject"
+            json_response(res, api.reject_fact(fact_id, reason: body["reason"], scope: scope))
+          when "promote"
+            json_response(res, api.promote_fact(fact_id))
+          end
+        elsif detail_id
+          scope = req.query["scope"] || "project"
+          json_response(res, api.fact_detail(detail_id, scope))
+        else
+          json_response(res, api.facts(req.query))
+        end
       end
 
       def conflict_id_from_path(path)

@@ -143,6 +143,89 @@ module ClaudeMemory
         }
       end
 
+      # Full detail view for a single fact — subject/predicate/object,
+      # confidence, scope, status, full provenance chain (with session_id
+      # and occurred_at from content_items). Supports either scope so
+      # the frontend can drill into both project and global facts.
+      def fact_detail(id, scope)
+        return {error: "Invalid scope"} unless %w[global project].include?(scope)
+        store = @manager.store_if_exists(scope)
+        return {error: "#{scope} store not available"} unless store
+
+        row = store.facts.where(id: id.to_i).first
+        return {error: "Fact #{id} not found in #{scope}"} unless row
+
+        detail = FactPresenter.new(store).with_provenance(row)
+        detail.merge(source: scope, valid_from: row[:valid_from], valid_to: row[:valid_to])
+      end
+
+      # Reject a single fact (not a conflict side). Thin wrapper over
+      # SQLiteStore#reject_fact which cascade-resolves any conflicts the
+      # fact happened to be involved in.
+      def reject_fact(id, reason: nil, scope: "project")
+        return {error: "Invalid scope"} unless %w[global project].include?(scope)
+        store = @manager.store_if_exists(scope)
+        return {error: "#{scope} store not available"} unless store
+
+        row = store.facts.where(id: id.to_i).first
+        return {error: "Fact #{id} not found in #{scope}"} unless row
+
+        result = store.reject_fact(id.to_i, reason: reason)
+        {
+          success: true,
+          fact_id: id.to_i,
+          scope: scope,
+          conflicts_resolved: result[:conflicts_resolved] || 0
+        }
+      end
+
+      # Live query tester. Reuses the production Recall pipeline so the
+      # dashboard shows exactly what Claude would see via memory.recall.
+      # Returns a bounded result set rendered through FactPresenter so
+      # shapes line up with the other surfaces (Facts tab, conflict detail).
+      def recall(params = {})
+        query_text = params["query"].to_s.strip
+        return {error: "query required"} if query_text.empty?
+
+        scope = params["scope"] || "all"
+        limit = (params["limit"] || 10).to_i.clamp(1, 50)
+        intent = params["intent"]
+
+        # Recall#query needs at least one store open. default_store gives
+        # us the best available; the engine takes it from there.
+        default_store
+        recaller = ClaudeMemory::Recall.new(@manager)
+        t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        results = recaller.query(query_text, limit: limit, scope: scope, intent: intent)
+        duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round
+
+        facts = results.is_a?(Array) ? results : (results[:facts] || [])
+        {
+          query: query_text,
+          scope: scope,
+          limit: limit,
+          duration_ms: duration_ms,
+          count: facts.size,
+          facts: facts.map { |f| serialize_recall_fact(f) }
+        }
+      rescue => e
+        {error: "Recall failed: #{e.message}"}
+      end
+
+      # Promote a project-scoped fact into the global store. Delegates to
+      # StoreManager#promote_fact which copies the fact + entities +
+      # provenance atomically inside a global-store transaction.
+      def promote_fact(id)
+        global_id = @manager.promote_fact(id.to_i)
+        return {error: "Fact #{id} not found in project store"} if global_id.nil?
+
+        {
+          success: true,
+          project_fact_id: id.to_i,
+          global_fact_id: global_id
+        }
+      end
+
       def facts(params = {})
         scope = params["scope"] || "all"
         limit = (params["limit"] || 50).to_i
@@ -259,6 +342,25 @@ module ClaudeMemory
       private
 
       CONTENT_ITEM_PREVIEW_BYTES = 8000
+
+      # Normalize a Recall result hash into the shape the dashboard's
+      # recall tester table renders. Recall already returns shaped facts
+      # (not raw DB rows), but the field names have drifted over versions
+      # so we pull defensively.
+      def serialize_recall_fact(f)
+        {
+          id: f[:id] || f["id"],
+          docid: f[:docid] || f["docid"],
+          subject: f[:subject] || f["subject"],
+          predicate: f[:predicate] || f["predicate"],
+          object: f[:object] || f["object"] || f[:object_literal] || f["object_literal"],
+          scope: f[:scope] || f["scope"],
+          source: f[:source] || f["source"],
+          score: f[:score] || f["score"],
+          confidence: f[:confidence] || f["confidence"],
+          created_at: f[:created_at] || f["created_at"]
+        }.compact
+      end
 
       def parse_timestamp(value)
         Time.parse(value.to_s).to_i
@@ -468,8 +570,22 @@ module ClaudeMemory
         vec = store.vector_index
         if vec.available?
           coverage = vec.coverage_stats
-          {name: "vectors", status: "healthy",
-           message: "#{coverage[:vec_indexed]}/#{coverage[:facts_total]} facts indexed"}
+          indexed = coverage[:vec_indexed] || 0
+          total = coverage[:with_embedding] || 0
+          pct = coverage[:coverage_pct] || 0
+          message = (total > 0) ? "#{indexed}/#{total} facts indexed (#{pct}%)" : "0 facts have embeddings yet"
+
+          status = if total.zero? then "healthy"
+          elsif pct < 10 then "error"
+          elsif pct < 50 then "warning"
+          else "healthy"
+          end
+
+          result = {name: "vectors", status: status, message: message}
+          unless status == "healthy"
+            result[:fix] = "Vector coverage is low — run `claude-memory index --vec --rebuild` to regenerate embeddings and reindex all active facts. Semantic recall accuracy degrades as this drops."
+          end
+          result
         else
           {
             name: "vectors",

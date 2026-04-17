@@ -548,12 +548,23 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="fact-modal" role="dialog" aria-labelledby="fact-modal-title" aria-modal="true">
+    <div class="modal modal-wide" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="fact-modal-title">Fact detail</h2>
+        <button class="modal-close" aria-label="Close" onclick="closeFactModal()">&times;</button>
+      </div>
+      <div id="fact-modal-body"></div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <div class="tabs">
     <div class="tab active" data-tab="overview">Overview</div>
     <div class="tab" data-tab="activity">Activity</div>
     <div class="tab" data-tab="facts">Facts</div>
+    <div class="tab" data-tab="explore">Explore</div>
     <div class="tab" data-tab="efficacy">Efficacy</div>
     <div class="tab" data-tab="conflicts">Conflicts</div>
   </div>
@@ -642,6 +653,52 @@
       </table>
       <div class="empty-state" id="facts-empty" style="display:none;">
         <p>No facts found.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Explore Tab -->
+  <div class="tab-panel" id="tab-explore">
+    <div class="card">
+      <h3>Try a recall</h3>
+      <p style="color: var(--text-dim); font-size: 12px; margin-bottom: 12px;">
+        Run a query through the same pipeline Claude uses via <code>memory.recall</code>.
+        Useful for verifying that memory actually has what you'd expect to find.
+      </p>
+      <div style="display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;">
+        <input type="text" id="explore-query" placeholder="e.g., dashboard architecture" class="search-box" style="flex: 1; min-width: 260px;">
+        <select id="explore-scope" class="search-box" style="max-width: 140px;">
+          <option value="all">All scopes</option>
+          <option value="project">Project only</option>
+          <option value="global">Global only</option>
+        </select>
+        <select id="explore-limit" class="search-box" style="max-width: 120px;">
+          <option value="5">5 results</option>
+          <option value="10" selected>10 results</option>
+          <option value="20">20 results</option>
+          <option value="50">50 results</option>
+        </select>
+        <button id="explore-btn" class="filter-btn" style="padding: 8px 16px;">Recall</button>
+      </div>
+      <div id="explore-meta" style="margin-top: 12px; font-size: 12px; color: var(--text-dim);"></div>
+    </div>
+    <div class="card" style="margin-top: 16px;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Subject</th>
+            <th>Predicate</th>
+            <th>Object</th>
+            <th>Scope</th>
+            <th>Source</th>
+            <th>Score</th>
+          </tr>
+        </thead>
+        <tbody id="explore-tbody"></tbody>
+      </table>
+      <div class="empty-state" id="explore-empty">
+        <p>Enter a query above to see what memory would return.</p>
       </div>
     </div>
   </div>
@@ -939,7 +996,7 @@ function renderFix(fixText) {
 
 document.getElementById('health-modal').addEventListener('click', closeHealthModal);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeHealthModal(); closeActivityModal(); closeConflictModal(); }
+  if (e.key === 'Escape') { closeHealthModal(); closeActivityModal(); closeConflictModal(); closeFactModal(); }
 });
 
 async function loadStats() {
@@ -1383,7 +1440,7 @@ async function loadFacts(params = {}) {
   empty.style.display = 'none';
 
   tbody.innerHTML = data.facts.map(f => `
-    <tr>
+    <tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.source)}')" title="Click for details">
       <td><code>${f.docid || f.id}</code></td>
       <td>${esc(f.subject)}</td>
       <td><span class="badge badge-purple">${esc(f.predicate)}</span></td>
@@ -1396,6 +1453,185 @@ async function loadFacts(params = {}) {
     </tr>
   `).join('');
 }
+
+let currentFactId = null;
+let currentFactScope = null;
+
+async function openFactModal(id, scope) {
+  currentFactId = id;
+  currentFactScope = scope;
+  const modal = document.getElementById('fact-modal');
+  const body = document.getElementById('fact-modal-body');
+  body.innerHTML = '<p class="modal-empty">Loading…</p>';
+  modal.classList.add('open');
+
+  try {
+    const data = await api('facts/' + id, {scope});
+    if (data.error) {
+      body.innerHTML = `<p class="modal-empty">${esc(data.error)}</p>`;
+      return;
+    }
+    body.innerHTML = renderFactDetail(data);
+  } catch (err) {
+    body.innerHTML = `<p class="modal-empty">Failed to load: ${esc(err.message)}</p>`;
+  }
+}
+
+function closeFactModal() {
+  document.getElementById('fact-modal').classList.remove('open');
+  currentFactId = null;
+  currentFactScope = null;
+}
+
+function renderFactDetail(f) {
+  const provList = (f.provenance || []).length
+    ? `<ul class="conflict-prov-list">${f.provenance.map(p => `
+        <li>
+          <div>${esc(p.strength || 'stated')} — session ${p.session_id ? esc(p.session_id.slice(0, 8)) + '…' : '(unknown)'}${p.occurred_at ? ' on ' + esc(p.occurred_at.slice(0, 10)) : ''}</div>
+          ${p.quote ? '<span class="quote">' + esc(p.quote) + '</span>' : ''}
+        </li>`).join('')}</ul>`
+    : '<p class="modal-empty">No provenance recorded.</p>';
+
+  const canReject = f.status === 'active' || f.status === 'disputed';
+  const canPromote = f.source === 'project' && f.status === 'active';
+
+  const actions = canReject ? `
+    <div class="conflict-actions" style="margin-top: 16px;">
+      <textarea class="conflict-reason" id="fact-reason" placeholder="Reason (optional)" rows="1"></textarea>
+      <button class="btn-reject" onclick="rejectFactFromModal(this)">Reject fact</button>
+      ${canPromote ? '<button class="btn-reject" style="border-color: var(--accent); color: var(--accent);" onclick="promoteFactFromModal(this)">Promote to global</button>' : ''}
+    </div>
+  ` : '';
+
+  return `
+    <div class="conflict-side" style="margin-bottom: 16px;">
+      <h4>Fact #${f.id} · <code>${esc(f.docid || '')}</code></h4>
+      <div><strong>${esc(f.subject)}</strong> <span class="badge badge-purple">${esc(f.predicate)}</span></div>
+      <div class="conflict-fact-object">${esc(f.object)}</div>
+      <dl class="modal-kv">
+        <dt>status</dt><dd><span class="badge badge-${f.status === 'active' ? 'success' : 'warning'}">${esc(f.status)}</span></dd>
+        <dt>scope</dt><dd><span class="badge badge-info">${esc(f.scope)}</span> (${esc(f.source)})</dd>
+        <dt>confidence</dt><dd>${f.confidence ? (f.confidence * 100).toFixed(0) + '%' : '-'}</dd>
+        <dt>created</dt><dd>${esc(f.created_at || '')} (${esc(f.created_ago || '')})</dd>
+        <dt>valid_from</dt><dd>${esc(f.valid_from || '—')}</dd>
+        <dt>valid_to</dt><dd>${esc(f.valid_to || '—')}</dd>
+      </dl>
+      <div class="modal-section">
+        <h3>Provenance</h3>
+        ${provList}
+      </div>
+      ${actions}
+    </div>
+  `;
+}
+
+async function rejectFactFromModal(btn) {
+  if (currentFactId == null) return;
+  const reasonEl = document.getElementById('fact-reason');
+  const reason = reasonEl ? reasonEl.value.trim() : '';
+
+  btn.disabled = true;
+  btn.textContent = 'Rejecting…';
+  try {
+    const res = await fetch('/api/facts/' + currentFactId + '/reject', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({reason, scope: currentFactScope || 'project'})
+    });
+    const data = await res.json();
+    if (data.error) { showToast('Error: ' + data.error, true); btn.disabled = false; btn.textContent = 'Reject fact'; return; }
+    showToast(`Fact #${data.fact_id} rejected${data.conflicts_resolved ? ' · ' + data.conflicts_resolved + ' conflict(s) resolved' : ''}`);
+    closeFactModal();
+    loadFacts(currentFactParams());
+    loadStats();
+    loadConflicts();
+  } catch (err) {
+    showToast('Request failed: ' + err.message, true);
+    btn.disabled = false;
+    btn.textContent = 'Reject fact';
+  }
+}
+
+async function promoteFactFromModal(btn) {
+  if (currentFactId == null) return;
+  if (!confirm(`Promote fact #${currentFactId} from project to global memory?`)) return;
+  btn.disabled = true;
+  btn.textContent = 'Promoting…';
+  try {
+    const res = await fetch('/api/facts/' + currentFactId + '/promote', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (data.error) { showToast('Error: ' + data.error, true); btn.disabled = false; btn.textContent = 'Promote to global'; return; }
+    showToast(`Fact #${data.project_fact_id} promoted → global #${data.global_fact_id}`);
+    closeFactModal();
+    loadFacts(currentFactParams());
+    loadStats();
+  } catch (err) {
+    showToast('Request failed: ' + err.message, true);
+    btn.disabled = false;
+    btn.textContent = 'Promote to global';
+  }
+}
+
+document.getElementById('fact-modal').addEventListener('click', closeFactModal);
+
+async function runExplore() {
+  const query = document.getElementById('explore-query').value.trim();
+  const scope = document.getElementById('explore-scope').value;
+  const limit = document.getElementById('explore-limit').value;
+  const meta = document.getElementById('explore-meta');
+  const tbody = document.getElementById('explore-tbody');
+  const empty = document.getElementById('explore-empty');
+
+  if (!query) {
+    meta.textContent = 'Enter a query.';
+    return;
+  }
+
+  meta.textContent = 'Querying…';
+  tbody.innerHTML = '';
+  empty.style.display = 'none';
+
+  try {
+    const data = await api('recall', {query, scope, limit});
+    if (data.error) {
+      meta.innerHTML = `<span class="json-error">${esc(data.error)}</span>`;
+      empty.style.display = 'block';
+      return;
+    }
+
+    meta.textContent = `${data.count} result(s) in ${data.duration_ms}ms · scope=${data.scope} · limit=${data.limit}`;
+
+    if (!data.facts || data.facts.length === 0) {
+      empty.innerHTML = '<p>No facts matched this query.</p><p>This is a "memory gap" — consider whether the knowledge exists in another form (different phrasing, different scope), or whether it needs to be added.</p>';
+      empty.style.display = 'block';
+      return;
+    }
+
+    tbody.innerHTML = data.facts.map((f, i) => `
+      <tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.source || f.scope)}')" title="Click for detail">
+        <td style="color: var(--text-dim); font-size: 12px;">${i + 1}</td>
+        <td>${esc(f.subject || '—')}</td>
+        <td><span class="badge badge-purple">${esc(f.predicate || '')}</span></td>
+        <td style="max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(f.object || '')}">${esc(f.object || '')}</td>
+        <td><span class="badge badge-info">${esc(f.scope || '')}</span></td>
+        <td><span class="badge ${f.source === 'global' ? 'badge-purple' : 'badge-info'}" style="opacity: 0.8;">${esc(f.source || '')}</span></td>
+        <td style="font-size: 11px; color: var(--text-dim);">${f.score ? f.score.toFixed(3) : '—'}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    meta.innerHTML = `<span class="json-error">Request failed: ${esc(err.message)}</span>`;
+    empty.style.display = 'block';
+  }
+}
+
+document.getElementById('explore-btn').addEventListener('click', runExplore);
+document.getElementById('explore-query').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') runExplore();
+});
 
 let currentTimeframe = '7d';
 let currentSessionId = null;
