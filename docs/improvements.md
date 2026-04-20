@@ -143,15 +143,9 @@ Source: QMD v2.0.1+unreleased re-study (2026-03-30)
 - **Effort**: 2-3 days (after #22)
 - **Trade-off**: Adds tree-sitter dependency; graceful fallback to regex-only chunking when grammar unavailable
 
-### 30. Predicate Census Command
+### ~~30. Predicate Census Command~~ ✅ Implemented 2026-04-20
 
-Source: predicate retrospective (2026-04-15)
-
-- **Value**: Aggregate predicate usage data across many project databases for informed vocabulary decisions — without exposing content. Enables data-sharing across machines (work/personal) via a privacy-safe JSON report.
-- **Implementation**: `claude-memory census [--root ~/src]`. Finds all `.claude/memory.sqlite3` files under root, opens each read-only, collects per-DB predicate × status counts, entity type counts, schema version, novel predicates, synonym canonicalization candidates. Outputs aggregated JSON with **no object_literal, no entity names, no project paths, no quotes** — only schema-level signal.
-- **Evidence**: The multi-project survey that caught the `uses_framework` cardinality bug (commit `29818c2`) was a manual bash loop. Productizing it means any user can contribute usage data for vocabulary curation without privacy risk.
-- **Effort**: 0.5 days
-- **Trade-off**: None — purely additive, read-only, privacy-safe by design
+`claude-memory census [--root DIR]` scans every `.claude/memory.sqlite3` under the root (plus the global DB unless `--no-global`), aggregates per-DB predicate × status counts, entity type counts, schema versions, novel predicates, and synonym candidates (Jaccard token overlap ≥ 0.4 against `PredicatePolicy.known_predicates`). Emits privacy-safe JSON — no object_literal, no entity names, no paths, no quotes; per-DB entries carry an SHA256-prefixed id rather than a path. Supports `--output FILE`, `--pretty`.
 
 ### 31. Relevance Ratio Metric for Eval Suite
 
