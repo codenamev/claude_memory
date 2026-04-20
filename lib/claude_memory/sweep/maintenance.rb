@@ -90,6 +90,31 @@ module ClaudeMemory
         merged
       end
 
+      # Fix scope leakage: facts whose `scope` column disagrees with the
+      # store they live in. Pre-2026-04-20, the resolver treated
+      # scope_hint from the distiller as a scope override — so when the
+      # NullDistiller detected global-scope language ("always", "my
+      # preference"), it stamped scope: "global" on facts that still
+      # ended up written to the project DB. The result was invisible
+      # orphaned rows: not in the global DB so global recall never saw
+      # them, but labeled global inside the project DB.
+      #
+      # This pass detects those rows by comparing `scope` to the
+      # expected value derived from which DB this Maintenance instance
+      # is running against, and rewrites scope + project_path to match.
+      # Does not move facts between DBs — users can `claude-memory
+      # promote <id>` to do a proper cross-store copy.
+      # Returns: Integer count of facts whose scope was corrected.
+      def fix_scope_leakage
+        expected = expected_scope_for_store
+        return 0 unless expected
+
+        project_path_for_scope = (expected == "global") ? nil : detect_project_path
+        @store.facts
+          .exclude(scope: expected)
+          .update(scope: expected, project_path: project_path_for_scope)
+      end
+
       # Delete provenance records referencing non-existent facts.
       # Returns: Integer count of deleted provenance rows
       def prune_orphaned_provenance
@@ -271,6 +296,32 @@ module ClaudeMemory
 
       def cutoff_time(days)
         (Time.now - days * 86400).utc.iso8601
+      end
+
+      # Infer the scope each store is supposed to carry by comparing its
+      # DB path to the canonical Configuration paths. Returns "global" for
+      # the user-wide DB, "project" for the per-project DB, or nil when
+      # the path doesn't match either (custom test paths, etc. — in which
+      # case fix_scope_leakage is a no-op).
+      def expected_scope_for_store
+        path = @store.db.opts[:database].to_s
+        return nil if path.empty?
+        config = ClaudeMemory::Configuration.new
+        return "global" if File.expand_path(path) == File.expand_path(config.global_db_path)
+
+        # Project DB lives at <project>/.claude/memory.sqlite3 — we can
+        # always check whether the DB path sits under a .claude directory
+        # to classify it as project-scoped regardless of which project.
+        File.dirname(File.expand_path(path)).end_with?("/.claude") ? "project" : nil
+      end
+
+      def detect_project_path
+        path = @store.db.opts[:database].to_s
+        return nil if path.empty?
+        # The canonical project DB lives at <project>/.claude/memory.sqlite3
+        # so the project path is two levels up.
+        project = File.dirname(File.expand_path(path), 2)
+        Dir.exist?(project) ? project : nil
       end
 
       def with_vec_index

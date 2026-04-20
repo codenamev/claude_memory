@@ -154,6 +154,21 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
           expect(result[:provenance_created]).to eq(1)
         end
 
+        it "writes fact.scope to match the call's scope argument, ignoring scope_hint override" do
+          # Regression: distiller emits scope_hint: "global" when text
+          # matches patterns like "always"; resolver used to treat that
+          # as a scope override and wrote scope=global rows into the
+          # project DB — orphaned facts invisible to global recall.
+          extraction = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_language", object: "ruby", scope_hint: "global"}]
+          )
+
+          resolver.apply(extraction, scope: "project")
+
+          fact = store.facts.where(predicate: "uses_language", object_literal: "ruby").first
+          expect(fact[:scope]).to eq("project")
+        end
+
         it "logs a warning when a novel predicate is encountered" do
           logger = instance_double("Logging::Logger")
           allow(logger).to receive(:warn)

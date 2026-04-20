@@ -171,8 +171,15 @@ module ClaudeMemory
       end
 
       def insert_new_fact(fact_data, subject_id, entity_ids, occurred_at, project_path:, scope:)
-        fact_scope = fact_data[:scope_hint] || scope
-        fact_project = (fact_scope == "global") ? nil : project_path
+        # The fact's scope MUST match the store it's being written to.
+        # The distiller may emit scope_hint: "global" when text matches
+        # patterns like "always" / "my preference", but scope_hint is
+        # advisory — it doesn't route the write. Honoring it as a scope
+        # override produced "scope=global" rows inside the project DB
+        # (orphaned facts that were never visible to global recall). Users
+        # who want a project fact in global memory use `claude-memory
+        # promote`, which does the proper cross-store copy.
+        fact_project = (scope == "global") ? nil : project_path
 
         @store.insert_fact(
           subject_entity_id: subject_id,
@@ -182,7 +189,7 @@ module ClaudeMemory
           polarity: fact_data[:polarity] || "positive",
           confidence: fact_data[:confidence] || 1.0,
           valid_from: occurred_at,
-          scope: fact_scope,
+          scope: scope,
           project_path: fact_project
         )
       end
