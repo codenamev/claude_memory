@@ -35,11 +35,22 @@ For each content item, carefully read the raw_text and extract:
   architecture, uses_framework, uses_language, uses_database,
   deployment_platform, auth_method). Other snake_case predicates are
   accepted but fall through to the default multi-value policy.
-- object: The value
+- object: The value. For **decision** and **convention** predicates, the object
+  MUST embed the reason — append a compact "— because ..." / "so that ..." /
+  "to avoid ..." clause, or include the trigger ("caused by X", "breaks when Y").
+  Bare conclusions without rationale are dead weight once they become stale:
+  a fact with a reason is recoverable, a fact without one is not. Architecture
+  facts should note the design *trade-off* if non-obvious.
 - confidence: 0.0-1.0
 - quote: Source excerpt (max 200 chars)
 - strength: "stated" (explicitly said) or "inferred" (implied)
 - scope_hint: "project" (this project only) or "global" (all projects)
+
+Examples of the reasoning requirement:
+- ❌ Bare: "Configuration class has instance methods only"
+- ✅ With why: "Configuration class has instance methods only — stub with instance_double + allow(Configuration).to receive(:new) because class-level stubbing breaks isolation"
+- ❌ Bare: "MCP tools return dual content + structuredContent"
+- ✅ With why: "MCP tools return dual content + structuredContent so human-readable summaries and machine-parseable JSON ship in the same response; compact mode omits receipts for ~60% smaller payloads"
 
 **Decisions** — Choices made:
 - title: Short summary (max 100 chars)
@@ -100,3 +111,4 @@ Return a summary:
 - Prefer "stated" strength over "inferred" unless clearly implied
 - Do NOT fabricate facts — only extract what's actually in the text
 - If text is mostly code/tool output with no conversational knowledge, mark as distilled with 0 facts
+- Prefer one fact-with-reason over two facts-without. Length cost is worth it — stale facts with reasoning are recoverable, stale facts without are dead weight

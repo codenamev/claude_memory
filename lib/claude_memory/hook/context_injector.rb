@@ -104,7 +104,13 @@ module ClaudeMemory
           "followed by `memory.mark_distilled` for each item.",
           "",
           "**What to extract:** technology decisions, conventions, preferences, architecture",
-          "**What to skip:** debugging steps, code output, transient errors"
+          "**What to skip:** debugging steps, code output, transient errors",
+          "",
+          "**Reasoning requirement:** decisions and conventions MUST embed a reason",
+          "in the object (e.g., \"… because …\", \"… so that …\", \"caused by …\",",
+          "\"breaks when …\"). A fact with a reason is recoverable once stale; a",
+          "bare conclusion is dead weight. Prefer one fact-with-reason over two",
+          "facts-without."
         ]
 
         items.each do |item|

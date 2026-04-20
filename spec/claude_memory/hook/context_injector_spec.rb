@@ -85,6 +85,13 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector do
         expect(context).to include("Pending Knowledge Extraction")
       end
 
+      it "requires a reason clause in the extraction prompt" do
+        inj = described_class.new(manager, source: "startup")
+        context = inj.generate_context
+        expect(context).to include("Reasoning requirement")
+        expect(context).to match(/because|so that/)
+      end
+
       it "includes distillation prompt when source is 'startup'" do
         inj = described_class.new(manager, source: "startup")
         context = inj.generate_context
