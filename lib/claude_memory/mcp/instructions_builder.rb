@@ -119,8 +119,6 @@ module ClaudeMemory
       # file paths instead of consulting memory for the correct structure.
       def proactive_recall_guidance
         <<~GUIDANCE.strip
-          Principle: V = R/C. Memory's value per interaction rises with R (judgment retained from prior sessions) and falls with C (context rebuilt from scratch). Raise R and lower C — check memory whenever the same context recurs, skip it only when nothing can accumulate (throwaway work).
-
           IMPORTANT — check memory proactively in these situations:
           - Before writing code: call memory.conventions to verify project patterns and avoid known gotchas
           - Before explaining architecture: call memory.architecture for structural knowledge without file traversal

@@ -173,15 +173,19 @@ Source: Reflection 2026-04-17 (`docs/reflection_memory_as_accumulating_judgment.
 - **Effort**: 1 day (one scenario); 2–3 days (5–10 scenario set)
 - **Trade-off**: Requires real-mode Claude runs (~cost); run nightly or on release, not per commit.
 
-### 33. Conflict Cluster Audit — Fact 21 / 45 / 48
+### ~~33. Conflict Cluster Audit — Fact 21 / 45 / 48~~ ✅ Implemented 2026-04-19/20
 
-Source: Reflection 2026-04-17; current DB state (17 open conflicts)
+Audit completed inline during the dashboard Conflicts-tab work on 2026-04-19 and the cluster was eliminated via the resolver fixes shipped on 2026-04-20.
 
-- **Value**: Three facts anchor most open conflicts. That's either a genuine contested-judgment hotspot (signal: where memory is forming), or a hallucination seed like the CLAUDE.md example-text problem (noise: needs prevention, not resolution). The answer shapes whether we need better resolver, better rejection UX, or better prevention.
-- **Implementation**: One-time audit — dump Fact 21/45/48 and their conflict counterparts with provenance via `memory.explain`. Classify each as (a) genuine supersession needing manual resolution, (b) distiller hallucination needing rejection + source fix, or (c) predicate-cardinality mismatch (like the earlier `uses_framework` bug). Write findings to `docs/conflict_audit_2026-04.md`.
-- **Evidence**: Conflict distribution from this branch's generated rules file shows Fact 21 in 17 conflicts, Fact 45 in 10, Fact 48 in 11.
-- **Effort**: 0.5 days
-- **Trade-off**: None — pure investigation; outcome informs future work.
+**Classification of the three anchor facts (all three were (b) distiller hallucination):**
+
+- **Fact 21** (`repo uses_database sqlite`) — correct keeper. Contradictions came from CLAUDE.md example text ("this app uses PostgreSQL") being extracted as a literal claim. Fixed by rewriting the example in CLAUDE.md line 258 to self-describe the real stack ("claude_memory uses SQLite for storage") — commit `61666bc`.
+- **Fact 45** (`repo uses_framework rails`) — correct keeper. Contradictions were artifacts of the `uses_framework` single→multi reclassification in 0.9.0; `claude-memory restore --predicate uses_framework` already exists for this case (0.9.0 CHANGELOG).
+- **Fact 48** (`repo deployment_platform aws`) — correct keeper. Contradictions from platform-mention hallucinations; no further resolution machinery needed beyond rejecting contradicting rows.
+
+**Delivered cleanup**: bulk-reject-similar UI in the Conflicts modal (commit `61666bc`), resolver dedup (commit `f571ba4`), scope-leakage fix (commit `50cf02e`). Project DB conflict count dropped from 31 → 15 during the session via bulk-reject, with further shrinkage from the dedup + scope passes. Going forward, the resolver's dedup and the CLAUDE.md rewrite prevent the same cluster from regenerating.
+
+No separate `docs/conflict_audit_2026-04.md` file written — the classification and resolution are preserved in the relevant commit messages and memory entries.
 
 ### 34. "Why" Preservation Audit
 
@@ -193,15 +197,16 @@ Source: Reflection 2026-04-17
 - **Effort**: 0.5 days audit; 0.5–1 day prompt tuning if gap confirmed
 - **Trade-off**: Longer facts cost more tokens per recall. Likely net win — one fact with a reason often replaces two without.
 
-### 35. Access-Based Staleness Scoring
+### 35. Access-Based Staleness Scoring — **Deferred, pending concrete signal**
 
 Source: Reflection 2026-04-17 (Theory 2: decisions have half-lives)
 
-- **Value**: Today `valid_from`/`valid_to` gate facts binarily; nothing tracks whether a fact is *used*. Access-based decay turns staleness from passive (wait for supersession) into measurable (facts untouched in N sessions become sweep candidates).
-- **Implementation**: Add `last_recalled_at` column to facts (or derive from `mcp_tool_calls` telemetry joined on result IDs). Sweep adds a `stale_candidate` pass that flags facts with `last_recalled_at` older than a threshold AND no recent provenance. Flags surface via `memory.stats --stale`; no auto-deletion.
-- **Evidence**: `mcp_tool_calls` telemetry (v13) already records result counts; the missing link is per-fact access attribution.
-- **Effort**: 2 days
-- **Trade-off**: Adds a write to the fact row on every recall — batch via an update buffer to avoid contention under WAL.
+**Prior context that makes this a harder call than it looks:** the 0.9.0 telemetry design deliberately dropped `query_text` / `query_hash` from `mcp_tool_calls` (CHANGELOG 0.9.0; memory `decisions`: *"deliberately no query_text or query_hash. YAGNI — hashes are write-only without the raw text, and raw text adds privacy concerns without clear value beyond existing shortcut tools"*). Adding per-fact access timestamps reopens the same privacy/value tension — we'd be recording "this user looked at this fact at this time," which is telemetry shaped roughly like what we already rejected.
+
+- **Value (if the signal materializes)**: Today `valid_from`/`valid_to` gate facts binarily; nothing tracks whether a fact is *used*. Access-based decay would turn staleness from passive (wait for supersession) into measurable (facts untouched in N sessions flagged as sweep candidates).
+- **Trigger to revisit**: a `memory.stats --stale` or similar report that *without* access data shows facts nobody is touching but nobody has superseded either — i.e. concrete dead weight we can't diagnose with current telemetry. If stats show the problem, the trade-off shifts.
+- **If built**: `last_recalled_at` column on `facts`, updated via an update-buffer (not per-recall writes — WAL contention on a 100-writes-per-session pattern is real, not hand-wavy). Flags surface via `memory.stats`; no auto-deletion. Effort ~3 days with the write-buffer honestly scoped.
+- **For now**: deferred. The gap this would close (stale-but-not-superseded facts) is not yet a documented pain — we have plenty of hallucination-driven conflict pain which a separate, already-listed improvement addresses. Revisit after #32 (repeat-correction benchmark) produces data on whether stale facts are actually hurting.
 
 ### ~~27. Usage Stats / ROI Tracking~~ ✅ Implemented 2026-04-15
 
