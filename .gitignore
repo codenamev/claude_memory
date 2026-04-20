@@ -18,5 +18,9 @@ mise.toml
 *.sqlite3-shm
 *.sqlite3-wal
 
+# Pre-recovery snapshots left behind by `sqlite3 .recover` — disposable
+# once the live DB has been validated.
+*.sqlite3.corrupt
+
 # Pre-compiled gems
 *.gem
