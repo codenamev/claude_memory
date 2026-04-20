@@ -181,15 +181,14 @@ Audit completed inline during the dashboard Conflicts-tab work on 2026-04-19 and
 
 No separate `docs/conflict_audit_2026-04.md` file written — the classification and resolution are preserved in the relevant commit messages and memory entries.
 
-### 34. "Why" Preservation Audit
+### ~~34. "Why" Preservation Audit~~ ✅ Implemented 2026-04-20
 
-Source: Reflection 2026-04-17
+Audit of 20 random project facts showed ~25% embed reasoning, ~75% are bare conclusions — a material gap. Updated two extraction surfaces to require a reason clause for `decision` and `convention` predicates:
 
-- **Value**: User auto-memory files carry `**Why:**` / `**How to apply:**` structure; project DB facts don't necessarily. Remembering the *reason* behind a decision outvalues the decision itself — stale facts with reasoning are recoverable, stale facts without are dead weight.
-- **Implementation**: Sample ~20 recalled project facts at random; measure what fraction embed reasoning vs. bare conclusions. If the gap is material, adjust the distiller prompt in `/distill-transcripts` (and the SessionStart context-injection prompt) to require a reason clause when extracting decisions and conventions. No schema change needed — reasoning fits in `object_literal`.
-- **Evidence**: Memory file convention (`user/feedback/project` types) already mandates this structure — the distiller prompt lags behind.
-- **Effort**: 0.5 days audit; 0.5–1 day prompt tuning if gap confirmed
-- **Trade-off**: Longer facts cost more tokens per recall. Likely net win — one fact with a reason often replaces two without.
+- `lib/claude_memory/commands/skills/distill-transcripts.md` — added reasoning requirement to the Facts section, with contrasting ❌ bare / ✅ with-why examples drawn from the audit sample, plus a prefer-one-fact-with-reason-over-two-without guideline.
+- `lib/claude_memory/hook/context_injector.rb#format_distillation_prompt` — added a **Reasoning requirement** block to the SessionStart extraction prompt that ships with every fresh session; locked in by a new spec assertion so the contract can't silently regress.
+
+No schema change. Reasoning rides in `object_literal`. The plugin-copy mirror (`.claude-plugin/commands/distill-transcripts.md`) was left alone — it's already out of sync with the source skill on the predicate list and is manually maintained; a separate improvement should reconcile it.
 
 ### 36. Auto-Mirror Auto-Memory Observations into claude_memory on SessionStart
 
