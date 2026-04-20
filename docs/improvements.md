@@ -153,6 +153,56 @@ Source: predicate retrospective (2026-04-15)
 - **Effort**: 0.5 days
 - **Trade-off**: None — purely additive, read-only, privacy-safe by design
 
+### 31. Relevance Ratio Metric for Eval Suite
+
+Source: Reflection 2026-04-17 (`docs/reflection_memory_as_accumulating_judgment.md`)
+
+- **Value**: Measure whether memory is actually *working* per session, not just that it exists. Concrete form of the `V = R/C` principle — treats low relevance ratio as a failure signal even when recall succeeds.
+- **Implementation**: Add metric to DevMemBench: for each eval scenario, compute `facts_referenced_in_response / facts_injected`. Instrument SessionStart context injection to log the fact IDs emitted; parse Claude's response for those IDs or their subjects. Emit ratio alongside existing Recall@k / MRR / nDCG metrics.
+- **Evidence**: Today, `spec/benchmarks/` measures retrieval quality; nothing measures application quality. Low ratios would point at over-injection and inform a future pruning pass.
+- **Effort**: 1–2 days
+- **Trade-off**: Response-side matching is approximate (substring / entity overlap). Acceptable — we care about trend direction, not absolute precision.
+
+### 32. Repeat-Correction Benchmark
+
+Source: Reflection 2026-04-17 (`docs/reflection_memory_as_accumulating_judgment.md`)
+
+- **Value**: Cleanest memory-failure signal available. If the same correction is given twice across sessions, memory failed to propagate judgment — no retrieval metric captures this directly.
+- **Implementation**: Add a multi-session scenario to `spec/benchmarks/e2e/`: session 1 applies a correction (e.g., "don't use Sequel.sqlite"), session 2 asks Claude to do something that would trigger the bad pattern and fails if it reappears. Track pass rate over time as a durable memory-health KPI.
+- **Evidence**: The `feedback_hooks_run_installed_gem.md` and `gotcha_sequel_adapter.md` memories exist precisely because those corrections had to be made repeatedly. A benchmark formalizes that signal.
+- **Effort**: 1 day (one scenario); 2–3 days (5–10 scenario set)
+- **Trade-off**: Requires real-mode Claude runs (~cost); run nightly or on release, not per commit.
+
+### 33. Conflict Cluster Audit — Fact 21 / 45 / 48
+
+Source: Reflection 2026-04-17; current DB state (17 open conflicts)
+
+- **Value**: Three facts anchor most open conflicts. That's either a genuine contested-judgment hotspot (signal: where memory is forming), or a hallucination seed like the CLAUDE.md example-text problem (noise: needs prevention, not resolution). The answer shapes whether we need better resolver, better rejection UX, or better prevention.
+- **Implementation**: One-time audit — dump Fact 21/45/48 and their conflict counterparts with provenance via `memory.explain`. Classify each as (a) genuine supersession needing manual resolution, (b) distiller hallucination needing rejection + source fix, or (c) predicate-cardinality mismatch (like the earlier `uses_framework` bug). Write findings to `docs/conflict_audit_2026-04.md`.
+- **Evidence**: Conflict distribution from this branch's generated rules file shows Fact 21 in 17 conflicts, Fact 45 in 10, Fact 48 in 11.
+- **Effort**: 0.5 days
+- **Trade-off**: None — pure investigation; outcome informs future work.
+
+### 34. "Why" Preservation Audit
+
+Source: Reflection 2026-04-17
+
+- **Value**: User auto-memory files carry `**Why:**` / `**How to apply:**` structure; project DB facts don't necessarily. Remembering the *reason* behind a decision outvalues the decision itself — stale facts with reasoning are recoverable, stale facts without are dead weight.
+- **Implementation**: Sample ~20 recalled project facts at random; measure what fraction embed reasoning vs. bare conclusions. If the gap is material, adjust the distiller prompt in `/distill-transcripts` (and the SessionStart context-injection prompt) to require a reason clause when extracting decisions and conventions. No schema change needed — reasoning fits in `object_literal`.
+- **Evidence**: Memory file convention (`user/feedback/project` types) already mandates this structure — the distiller prompt lags behind.
+- **Effort**: 0.5 days audit; 0.5–1 day prompt tuning if gap confirmed
+- **Trade-off**: Longer facts cost more tokens per recall. Likely net win — one fact with a reason often replaces two without.
+
+### 35. Access-Based Staleness Scoring
+
+Source: Reflection 2026-04-17 (Theory 2: decisions have half-lives)
+
+- **Value**: Today `valid_from`/`valid_to` gate facts binarily; nothing tracks whether a fact is *used*. Access-based decay turns staleness from passive (wait for supersession) into measurable (facts untouched in N sessions become sweep candidates).
+- **Implementation**: Add `last_recalled_at` column to facts (or derive from `mcp_tool_calls` telemetry joined on result IDs). Sweep adds a `stale_candidate` pass that flags facts with `last_recalled_at` older than a threshold AND no recent provenance. Flags surface via `memory.stats --stale`; no auto-deletion.
+- **Evidence**: `mcp_tool_calls` telemetry (v13) already records result counts; the missing link is per-fact access attribution.
+- **Effort**: 2 days
+- **Trade-off**: Adds a write to the fact row on every recall — batch via an update buffer to avoid contention under WAL.
+
 ### ~~27. Usage Stats / ROI Tracking~~ ✅ Implemented 2026-04-15
 
 Schema migration v13 adds `mcp_tool_calls` telemetry table (tool_name, called_at, duration_ms, result_count, scope, error_class). `MCP::Telemetry` wraps `Server#handle_tools_call` with monotonic-clock timing, captures errors, and records to the project DB; DB errors are swallowed so telemetry never fails a real tool call. `StatsCommand` gains `--tools` and `--since DAYS` flags showing total calls, error rate, and per-tool breakdown (calls, avg ms, p95 ms, error rate). `Sweep::Maintenance#prune_old_mcp_tool_calls` enforces a 90-day retention window, wired into `Sweeper#run!`. Rejected NDJSON in favor of SQLite for schema/query consistency with the rest of the gem. Dropped query-text capture (YAGNI — the dedup insight the hash would enable also needs raw text). Also fixed a latent bug where `StatsCommand` opened the DB via `Sequel.sqlite` (requiring the unlisted `sqlite3` gem); now uses the extralite adapter consistently.

@@ -11,6 +11,17 @@ module ClaudeMemory
       PROMPT_TEXT = <<~GUIDE
         # ClaudeMemory Search Strategy Guide
 
+        ## Mental Model — V = R/C
+
+        Memory's value per interaction is governed by one relation:
+
+        - **R** — judgment retained from prior interactions (decisions, corrections, reasons, why-lines)
+        - **C** — context that must be rebuilt from scratch each session
+
+        **Goal**: raise R, lower C. Recall relevant facts (↑R) using the cheapest tool that answers the question (↓C). Repeat-corrections and re-derivations are the clearest failure signals — both mean R didn't propagate.
+
+        Every tool below is an instrument for one of those two levers. Pick accordingly.
+
         ## Tool Escalation — Cheap to Expensive
 
         Start with fast, cheap tools. Escalate only when you need more detail.
