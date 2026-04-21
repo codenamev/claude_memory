@@ -147,15 +147,15 @@ Source: QMD v2.0.1+unreleased re-study (2026-03-30)
 
 `claude-memory census [--root DIR]` scans every `.claude/memory.sqlite3` under the root (plus the global DB unless `--no-global`), aggregates per-DB predicate × status counts, entity type counts, schema versions, novel predicates, and synonym candidates (Jaccard token overlap ≥ 0.4 against `PredicatePolicy.known_predicates`). Emits privacy-safe JSON — no object_literal, no entity names, no paths, no quotes; per-DB entries carry an SHA256-prefixed id rather than a path. Supports `--output FILE`, `--pretty`.
 
-### 31. Relevance Ratio Metric for Eval Suite
+### ~~31. Relevance Ratio Metric for Eval Suite~~ ✅ Implemented 2026-04-20
 
-Source: Reflection 2026-04-17 (`docs/reflection_memory_as_accumulating_judgment.md`)
+Offline plumbing landed; the real-mode measurement will materialize the first time someone runs `EVAL_MODE=real` against the e2e suite.
 
-- **Value**: Measure whether memory is actually *working* per session, not just that it exists. Concrete form of the `V = R/C` principle — treats low relevance ratio as a failure signal even when recall succeeds.
-- **Implementation**: Add metric to DevMemBench: for each eval scenario, compute `facts_referenced_in_response / facts_injected`. Instrument SessionStart context injection to log the fact IDs emitted; parse Claude's response for those IDs or their subjects. Emit ratio alongside existing Recall@k / MRR / nDCG metrics.
-- **Evidence**: Today, `spec/benchmarks/` measures retrieval quality; nothing measures application quality. Low ratios would point at over-injection and inform a future pruning pass.
-- **Effort**: 1–2 days
-- **Trade-off**: Response-side matching is approximate (substring / entity overlap). Acceptable — we care about trend direction, not absolute precision.
+- `Hook::ContextInjector` now exposes `emitted_fact_ids` / `emitted_subjects` reader accessors populated during `generate_context`. Existing callers unaffected — the context string return value is unchanged, tracking is a side channel.
+- `BenchmarkHelpers::RelevanceMetrics` module in `spec/benchmarks/benchmark_helper.rb` adds `relevance_ratio(subjects, response)` — case-insensitive subject-substring match, deduped, returns 1.0 for empty-injection (keeps the metric monotone with recall semantics so it doesn't penalize abstention scenarios).
+- `spec/benchmarks/e2e/devmemeval_spec.rb` captures injected subjects via a local `ContextInjector` against the scenario DB (same state in → same injection out — avoids having to scrape the running Claude process), computes the ratio against `result[:result]`, prints per-scenario `relevance=X.XX` alongside the existing score, and reports `avg relevance ratio` per ability group.
+
+Response-side matching stays deliberately approximate — subject substring overlap. The metric is a trend signal (is memory being *applied*, not just retrieved), not a precision tool. Benchmark owner should sanity-check the first real-mode run and tighten the matcher if the ratios look implausibly high or low.
 
 ### 32. Repeat-Correction Benchmark
 
