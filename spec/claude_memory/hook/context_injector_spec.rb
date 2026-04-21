@@ -201,4 +201,49 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector do
       end
     end
   end
+
+  describe "emitted fact tracking" do
+    let(:decision_fact_id) do
+      create_fact_with_content(
+        manager.project_store,
+        "decision",
+        "Use JWT for authentication",
+        "decision constraint Use JWT for authentication"
+      )
+    end
+
+    let(:convention_fact_id) do
+      create_fact_with_content(
+        manager.global_store,
+        "convention",
+        "Prefer explicit returns",
+        "convention style format Prefer explicit returns",
+        scope: "global"
+      )
+    end
+
+    it "starts with empty tracking state" do
+      expect(injector.emitted_fact_ids).to eq([])
+      expect(injector.emitted_subjects).to eq([])
+    end
+
+    it "records fact IDs and subjects after generate_context" do
+      decision_fact_id
+      convention_fact_id
+      injector.generate_context
+
+      expect(injector.emitted_fact_ids).to include(decision_fact_id, convention_fact_id)
+      expect(injector.emitted_subjects).to include("test-repo")
+    end
+
+    it "resets tracking on each generate_context call" do
+      decision_fact_id
+      injector.generate_context
+      first_ids = injector.emitted_fact_ids.dup
+      expect(first_ids).not_to be_empty
+
+      injector.generate_context
+      expect(injector.emitted_fact_ids.size).to eq(first_ids.size)
+    end
+  end
 end

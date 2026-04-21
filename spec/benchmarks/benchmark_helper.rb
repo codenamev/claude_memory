@@ -98,6 +98,32 @@ module BenchmarkHelpers
     end
   end
 
+  # Relevance-ratio metrics — measure whether injected memory is actually
+  # referenced in the response, not just retrieved. Concrete form of V = R/C:
+  # high recall with low reference rate means over-injection, not memory win.
+  #
+  # Matching is approximate (subject substring, case-insensitive). We care
+  # about trend direction across sessions, not absolute precision — a subject
+  # like "Embeddings::DimensionCheck" appearing anywhere in the response is
+  # evidence Claude drew on that fact.
+  module RelevanceMetrics
+    # Compute fraction of injected fact subjects referenced in the response.
+    #
+    # @param injected_subjects [Array<String>] subjects of facts emitted into
+    #   the SessionStart context (from ContextInjector#emitted_subjects)
+    # @param response_text [String] Claude's response text to scan
+    # @return [Float] ratio in [0.0, 1.0]; 1.0 when nothing was injected
+    #   (no signal either way — keep the metric monotone with recall semantics)
+    def relevance_ratio(injected_subjects, response_text)
+      subjects = injected_subjects.compact.map(&:to_s).reject(&:empty?).uniq
+      return 1.0 if subjects.empty?
+
+      text = response_text.to_s.downcase
+      hits = subjects.count { |s| text.include?(s.downcase) }
+      hits.to_f / subjects.size
+    end
+  end
+
   # Extraction quality metrics for distillation benchmarks
   module ExtractionMetrics
     # Precision: fraction of extracted items that match an expected item

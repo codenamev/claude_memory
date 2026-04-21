@@ -4,6 +4,7 @@ require_relative "../benchmark_helper"
 
 RSpec.describe "DevMemEval", :benchmark, :eval_real, :slow do
   include BenchmarkHelpers::BenchmarkSetup
+  include BenchmarkHelpers::RelevanceMetrics
   include EvalHelpers::ScoringHelpers
 
   let(:e2e_scenarios) { BenchmarkHelpers::DatasetLoader.load_e2e_scenarios }
@@ -31,6 +32,7 @@ RSpec.describe "DevMemEval", :benchmark, :eval_real, :slow do
 
           passed = 0
           total = scenarios.size
+          ratios = []
 
           scenarios.each do |scenario|
             scenario_tmpdir = Dir.mktmpdir("devmemeval_#{scenario["id"]}")
@@ -47,6 +49,12 @@ RSpec.describe "DevMemEval", :benchmark, :eval_real, :slow do
               end
               builder.close
 
+              # Reconstruct what the SessionStart hook would have injected
+              # against this scenario's DB. We re-run ContextInjector locally
+              # (same DB state → same injection) instead of scraping the
+              # running Claude process — close enough for a trend metric.
+              injected_subjects = capture_injected_subjects(scenario_db_path, scenario_tmpdir)
+
               # Run prompt through real Claude with memory
               runner = EvalHelpers::ClaudeCliRunner.new(
                 working_dir: scenario_tmpdir,
@@ -56,6 +64,8 @@ RSpec.describe "DevMemEval", :benchmark, :eval_real, :slow do
               result = runner.run(prompt: scenario["prompt"])
 
               if result[:success]
+                ratio = relevance_ratio(injected_subjects, result[:result])
+                ratios << ratio
                 # Evaluate response
                 criteria = EvalHelpers::SimpleAcceptanceCriteria.new(
                   required_keywords: scenario["acceptance_keywords"],
@@ -74,10 +84,10 @@ RSpec.describe "DevMemEval", :benchmark, :eval_real, :slow do
 
                 if evaluation.passed? && rejection_clean
                   passed += 1
-                  puts "    PASS #{scenario["id"]}: #{scenario["name"]} (score=#{evaluation.score.round(2)})"
+                  puts "    PASS #{scenario["id"]}: #{scenario["name"]} (score=#{evaluation.score.round(2)}, relevance=#{ratio.round(2)})"
                 else
                   puts "    FAIL #{scenario["id"]}: #{scenario["name"]}"
-                  puts "      Score: #{evaluation.score.round(2)} (threshold: #{scenario["threshold"]})"
+                  puts "      Score: #{evaluation.score.round(2)} (threshold: #{scenario["threshold"]}, relevance=#{ratio.round(2)})"
                   puts "      Missing: #{evaluation.missing.join(", ")}" if evaluation.missing.any?
                   puts "      Rejection violation" unless rejection_clean
                 end
@@ -90,6 +100,10 @@ RSpec.describe "DevMemEval", :benchmark, :eval_real, :slow do
           end
 
           puts "  #{ability}: #{passed}/#{total} (#{(passed.to_f / total * 100).round(0)}%)"
+          if ratios.any?
+            avg_ratio = ratios.sum / ratios.size
+            puts "    avg relevance ratio: #{avg_ratio.round(3)} (facts_referenced / facts_injected across #{ratios.size} scenarios)"
+          end
 
           # Expect at least 50% pass rate per ability
           expect(passed).to be >= (total * 0.5).ceil,
@@ -218,6 +232,23 @@ RSpec.describe "DevMemEval", :benchmark, :eval_real, :slow do
   end
 
   private
+
+  # Reconstruct the subjects ContextInjector would emit for a given scenario.
+  # We can't introspect the running Claude process, so we re-run the injector
+  # locally against the same DB — same state in, same subjects out.
+  def capture_injected_subjects(db_path, project_path)
+    manager = ClaudeMemory::Store::StoreManager.new(
+      global_db_path: db_path, # scenarios load into one DB; point global at it too
+      project_db_path: db_path,
+      project_path: project_path
+    )
+    manager.ensure_both!
+    injector = ClaudeMemory::Hook::ContextInjector.new(manager, source: "startup")
+    injector.generate_context
+    injector.emitted_subjects.dup
+  ensure
+    manager&.close
+  end
 
   # Normalize fact data from e2e scenario format to builder format
   def normalize_fact_data(fact_data)

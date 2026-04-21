@@ -20,13 +20,23 @@ module ClaudeMemory
         architecture: {query: "uses framework implements architecture pattern", scope: "all"}
       }.freeze
 
+      # Fact IDs and subjects that `generate_context` injected on the most recent
+      # call. Both are empty until `generate_context` has been invoked. Populated
+      # in call order (decisions → conventions → architecture) so benchmark
+      # harnesses can attribute sections if they care.
+      attr_reader :emitted_fact_ids, :emitted_subjects
+
       def initialize(manager, source: nil)
         @manager = manager
         @source = source
         @recall = Recall.new(manager)
+        @emitted_fact_ids = []
+        @emitted_subjects = []
       end
 
       def generate_context
+        @emitted_fact_ids = []
+        @emitted_subjects = []
         sections = []
 
         decisions = fetch(:decisions, MAX_DECISIONS)
@@ -57,7 +67,16 @@ module ClaudeMemory
       def fetch(category, limit)
         config = QUERIES.fetch(category)
         results = @recall.query(config[:query], limit: limit, scope: config[:scope])
-        results.map { |r| format_fact(r[:fact]) }
+        results.filter_map do |r|
+          fact = r[:fact]
+          next unless fact
+          formatted = format_fact(fact)
+          next unless formatted
+          @emitted_fact_ids << fact[:id] if fact[:id]
+          subject = fact[:subject_name] || fact[:subject_entity_id]
+          @emitted_subjects << subject.to_s if subject
+          formatted
+        end
       rescue => e
         ClaudeMemory.logger.debug("ContextInjector#fetch(#{category}) failed: #{e.message}")
         []
