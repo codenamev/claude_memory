@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Repeat-correction benchmark harness (improvements.md #32). `spec/benchmarks/e2e/repeat_correction_spec.rb` loads each scenario's correction as a pre-existing memory fact, runs the prompt through real Claude under `EVAL_MODE=real`, and reports the pass rate — failures are corrections that had to be repeated. Starter set of 2 scenarios drawn from the project's own recurring gotchas (`Sequel.sqlite` adapter, `rake install` vs `git ls-files`). Metric is a trend signal, not a gate — no hard threshold until baseline data exists.
+
 ## [0.9.1] - 2026-04-16
 
 ### Fixed

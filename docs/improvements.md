@@ -157,15 +157,15 @@ Offline plumbing landed; the real-mode measurement will materialize the first ti
 
 Response-side matching stays deliberately approximate — subject substring overlap. The metric is a trend signal (is memory being *applied*, not just retrieved), not a precision tool. Benchmark owner should sanity-check the first real-mode run and tighten the matcher if the ratios look implausibly high or low.
 
-### 32. Repeat-Correction Benchmark
+### ~~32. Repeat-Correction Benchmark~~ ⭐ Partially Implemented 2026-04-21
 
-Source: Reflection 2026-04-17 (`docs/reflection_memory_as_accumulating_judgment.md`)
+Harness landed with a 2-scenario starter set drawn from real, repeated corrections in the project's auto-memory (Sequel.sqlite adapter, rake-install/git-ls-files). Path to the 5–10 scenario set left for incremental growth.
 
-- **Value**: Cleanest memory-failure signal available. If the same correction is given twice across sessions, memory failed to propagate judgment — no retrieval metric captures this directly.
-- **Implementation**: Add a multi-session scenario to `spec/benchmarks/e2e/`: session 1 applies a correction (e.g., "don't use Sequel.sqlite"), session 2 asks Claude to do something that would trigger the bad pattern and fails if it reappears. Track pass rate over time as a durable memory-health KPI.
-- **Evidence**: The `feedback_hooks_run_installed_gem.md` and `gotcha_sequel_adapter.md` memories exist precisely because those corrections had to be made repeatedly. A benchmark formalizes that signal.
-- **Effort**: 1 day (one scenario); 2–3 days (5–10 scenario set)
-- **Trade-off**: Requires real-mode Claude runs (~cost); run nightly or on release, not per commit.
+- `spec/benchmarks/dataset/repeat_correction_scenarios.yml` — each scenario carries `memory_facts` (pre-loaded as a past session's correction), `prompt` (would re-trigger the bad pattern), and `violation_patterns` (regexes; any match = correction was repeated). Optional `expected_mentions` for diagnostic "correction aware" signal.
+- `spec/benchmarks/e2e/repeat_correction_spec.rb` — stub mode validates schema + regex compile + fact loadability; real mode (`EVAL_MODE=real`) runs each prompt through Claude and reports pass rate. No hard assertion on pass rate yet — the metric is a trend signal; tighten once baseline data exists. Tagged `:benchmark :eval_real :slow` matching `devmemeval_spec.rb`.
+- `BenchmarkHelpers::DatasetLoader.load_repeat_correction_scenarios` added for consistency with existing dataset loaders.
+
+Deliberately no `acceptance_keywords`-style pass gate — the point is *absence* of the bad pattern, not positive proof of the good one. Per the improvements note, this runs nightly or on release, not per commit.
 
 ### ~~33. Conflict Cluster Audit — Fact 21 / 45 / 48~~ ✅ Implemented 2026-04-19/20
 

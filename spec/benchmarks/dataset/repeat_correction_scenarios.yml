@@ -1,0 +1,74 @@
+# Repeat-Correction Scenarios
+#
+# Each scenario encodes a correction that was given in a past session, and
+# tests whether memory prevents the bad pattern from reappearing. Two-session
+# model collapsed into one run: session 1's correction is pre-loaded as a
+# memory fact; session 2 is a prompt that would trigger the bad pattern if
+# memory failed to propagate judgment.
+#
+# Pass criterion: none of the violation_patterns match the response.
+# Pass rate over time is the memory-health KPI — see improvements.md #32.
+#
+# Scenarios are drawn from real, repeated corrections in this project's
+# memory (~/.claude/projects/.../memory/gotcha_*.md). A scenario earns its
+# place here only if the same correction has actually been given twice.
+
+- id: rc_sequel_sqlite
+  name: "Sequel adapter choice — Sequel.sqlite is unusable"
+  description: >
+    The gem only depends on extralite; Sequel.sqlite routes through an
+    unlisted sqlite3 adapter and raises at runtime. Correction has been
+    delivered repeatedly (stats_command regression, multiple ad-hoc scripts).
+  memory_facts:
+    - predicate: convention
+      object: >
+        Never use Sequel.sqlite for DB reads; this gem only depends on extralite.
+        Use Sequel.connect("extralite://#{db_path}") or SQLiteStore.new(db_path).
+        Sequel.sqlite requires the ungem'd sqlite3 adapter and fails at runtime
+        with Sequel::AdapterNotFound: LoadError: cannot load such file -- sqlite3.
+      text: >
+        StatsCommand shipped broken in production because its print_database_stats
+        used Sequel.sqlite. The gem only depends on extralite. Always open ad-hoc
+        DB connections via Sequel.connect("extralite://#{path}") or SQLiteStore.new.
+      fts_keywords: "sequel sqlite adapter extralite database connection"
+      scope: project
+  prompt: >
+    Write a short Ruby snippet that opens the claude_memory project DB at
+    .claude/memory.sqlite3 read-only and prints the count of active facts.
+    Just the snippet — no need to wrap it in a class.
+  violation_patterns:
+    - 'Sequel\.sqlite\b'
+  expected_mentions:
+    - "extralite"
+
+- id: rc_rake_install_git_ls_files
+  name: "rake install needs staged files — git ls-files trap"
+  description: >
+    The gemspec builds its file list via `git ls-files`. Running rake install
+    before staging a newly added file silently bakes a gem missing that file.
+    Correction has been delivered multiple times after hook LoadErrors.
+  memory_facts:
+    - predicate: convention
+      object: >
+        When adding new source files, run `git add` BEFORE `bundle exec rake install`.
+        The gemspec uses `git ls-files` (claude_memory.gemspec:24) so untracked
+        files are invisible to the installed gem even though they exist on disk.
+        Hooks and MCP server resolve via PATH to the installed gem and will raise
+        LoadError on unstaged files.
+      text: >
+        rake install uses git ls-files to build the gem file list. Adding new
+        files without git add first means the installed gem is missing them.
+        Hooks and MCP server then fail with LoadError. Stage files before installing.
+      fts_keywords: "rake install git ls-files gemspec untracked files loaderror"
+      scope: project
+  prompt: >
+    I just added a new Ruby file at lib/claude_memory/dashboard/new_widget.rb.
+    What's the fastest way to get the installed gem to pick up this new file so
+    that the hooks and MCP server see it?
+  violation_patterns:
+    # Suggests rake install without any form of staging. We require that any
+    # mention of `rake install` is accompanied by `git add` (or `stage`/staging)
+    # for the answer to count as correction-aware.
+    - '(?i)rake install(?!(?:.|\n)*\b(?:git add|stage|staging)\b)'
+  expected_mentions:
+    - "git add"

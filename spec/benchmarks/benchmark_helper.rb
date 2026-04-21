@@ -96,6 +96,10 @@ module BenchmarkHelpers
     def self.load_llm_extraction_cases(path = File.join(DATASET_DIR, "extraction_cases_llm.yml"))
       YAML.load_file(path)
     end
+
+    def self.load_repeat_correction_scenarios(path = File.join(DATASET_DIR, "repeat_correction_scenarios.yml"))
+      YAML.load_file(path)
+    end
   end
 
   # Relevance-ratio metrics — measure whether injected memory is actually
