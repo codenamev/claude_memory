@@ -190,16 +190,18 @@ Audit of 20 random project facts showed ~25% embed reasoning, ~75% are bare conc
 
 No schema change. Reasoning rides in `object_literal`. The plugin-copy mirror (`.claude-plugin/commands/distill-transcripts.md`) was left alone — it's already out of sync with the source skill on the predicate list and is manually maintained; a separate improvement should reconcile it.
 
-### 36. Auto-Mirror Auto-Memory Observations into claude_memory on SessionStart
+### ~~36. Auto-Mirror Auto-Memory Observations into claude_memory on SessionStart~~ ⭐ Partially Implemented 2026-04-21
 
-Source: Session 2026-04-20 retrospective
+Core diff + emission landed. Dashboard indicator (pending mirror count) deferred until real-session usage data suggests the UI is needed.
 
-- **Value**: Close the loop between the two memory systems. Today, auto-memory files (`~/.claude/projects/.../memory/*.md`) are the authoritative, prose-shaped home for gotchas and feedback, but they don't flow into the gem's fact DB unless someone explicitly calls `memory.store_extraction`. Claude (the model) can't reach auto-memory observations via `memory.conventions` / `memory.recall` / semantic recall until they're mirrored. Proactive guidance in the MCP instructions tells Claude to "check memory before writing code" — but it only checks claude_memory, not auto-memory. The gap means high-signal observations (WAL stale-cache, FTS5 rank rot, scope_hint not routing, four-surface staleness) sit unsearchable in auto-memory until a session happens to touch the same code path and I remember to mirror them.
-- **Implementation**: Extend `Hook::ContextInjector` (the SessionStart hook that's already doing three-layer distillation). Today Layer 2 injects undistilled transcript content with an extraction prompt. Add a companion pass: diff `~/.claude/projects/.../memory/MEMORY.md` + the linked files against the last run's snapshot, emit new/changed entries as a targeted `memory.store_extraction` candidate list (subject + predicate + compact-object + scope_hint). Claude then confirms/declines via the normal extraction flow — same review discipline applies, no blind mirror. State file: `.claude/auto_memory_mirror.json` with the last-seen mtime + md5 per file. Idempotent — unchanged files are skipped. Runs once per session.
-- **Evidence**: This session mirrored 6 high-signal gotchas manually (`memory.store_extraction` call in commit window after the retrospective). Before the mirror, `memory.conventions` didn't surface the WAL-stale-cache or FTS5-rank findings — future sessions would re-encounter the same "malformed" errors with no memory hit. After the mirror, they surface alongside the other conventions.
-- **Effort**: 1 day (diff + state file + extraction-candidate emitter); 0.5 day test coverage (fixture auto-memory file, assert extraction suggested once, not on re-run). 0.5 day for a dashboard indicator showing "N auto-memory entries awaiting mirror" so the user knows when there's pending catch-up to review.
-- **Trade-off**: (1) Mirror requires LLM extraction per new entry — real session cost, though bounded to new/changed files. (2) Two sources of truth risk: claude_memory mirror drifts from auto-memory authoritative. Mitigation: mirror is one-way (auto-memory → claude_memory), never the reverse; auto-memory stays canonical for human-readable prose with full `**Why:**` / `**How to apply:**` structure. (3) Confirmation prompt cost — extraction candidates should be high-quality so the user isn't burned by false positives. Bias conservative (suggest fewer, higher-signal) rather than aggressive.
-- **Prior context**: improvement #34 ("Why" preservation audit) and this improvement are related — both about making sure the reasoning structure survives extraction. If #34 lands first, the extraction candidates emitted here should inherit its require-a-reason-clause discipline.
+- `Hook::AutoMemoryMirror` scans `~/.claude/projects/<slug>/memory/*.md` (slug = `project_path.tr("/", "-")`) and diffs each file's md5 against `.claude/auto_memory_mirror.json`. `pending_candidates(limit:)` returns only new/changed entries, sorted by mtime descending. Bounded at 5 per session, 1500 chars per entry.
+- `Hook::ContextInjector#generate_context` appends an "Auto-Memory Mirror Candidates" section on fresh sessions (startup/resume/clear/nil source) when candidates exist, then `commit`s them as the new baseline so subsequent sessions won't re-emit unchanged files. Section explains the mirror is advisory — Claude reviews and calls `memory.store_extraction` only for high-signal entries, preserving the `**Why:**` / `**How to apply:**` reasoning (inherits #34 discipline via the sibling distillation prompt).
+- Graceful fallbacks: missing auto-memory dir returns `[]`, malformed state JSON treated as empty baseline, file read errors skipped. Manager must expose `project_path` or the mirror is silently skipped — so non-project managers (plain global-only) never break.
+- Test coverage: `spec/claude_memory/hook/auto_memory_mirror_spec.rb` covers slug derivation, initial scan, commit idempotence, changed-file re-emission, malformed state tolerance, and limit enforcement. `context_injector_spec.rb` adds integration tests for the mirror section, non-fresh-source suppression, and no-re-emission across sessions.
+
+Still deferred:
+- Dashboard "N auto-memory entries awaiting mirror" indicator — not wired until it's clear from real usage whether a visible backlog adds value beyond the SessionStart nudge.
+- Scope-hint inference per file. The current emission is the raw file content; Claude decides subject/predicate/scope in the normal extraction review. A future upgrade could parse filename prefixes (`feedback_*`, `gotcha_*`, `reference_*`) into predicate hints.
 
 ### 35. Access-Based Staleness Scoring — **Deferred, pending concrete signal**
 
@@ -356,4 +358,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-15 - Predicate retrospective: fixed uses_framework cardinality bug, curated vocabulary to 8 predicates, added synonym canonicalization + novel-predicate warnings. Also: reject/restore commands, #26 CLAUDE_CONFIG_DIR, #27 telemetry, #29 Registry descriptions.*
+*Last updated: 2026-04-21 - #36 Auto-Memory Mirror partial landing (core + ContextInjector integration; dashboard indicator deferred).*
