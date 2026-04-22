@@ -2,6 +2,7 @@
 
 **Review Date:** 2026-04-22
 **Previous Review:** 2026-03-19
+**Last Quality Update:** 2026-04-22 (4 items completed — #27 LLMCache extraction, #27 MetricsAggregator extraction, #18/#26 publish section DRY, #29 dashboard specs)
 **Codebase Growth:** 12,239 → 17,014 LOC (+4,775, +39%)
 
 ---
@@ -21,6 +22,11 @@ No new correctness bugs. No hot-path N+1 patterns. All bare rescues are defensiv
 **Resolved since last review:** None of the 12 carried-forward items were addressed. All are still non-critical (thin CLI wrappers, DRY tweaks, test ergonomics).
 
 **New this review:** 5 medium-priority items tied to the dashboard and SQLiteStore regrowth. 3 low-priority items for test coverage gaps.
+
+**Resolved in 2026-04-22 quality-update session:** 4 items
+- **#27** SQLiteStore regrowth — extracted `LLMCache` module (-55 LOC) and `MetricsAggregator` module (-84 LOC). sqlite_store.rb: 683 → 544 LOC (back under 550 LOC watch-line)
+- **#18/#26** Publish section generator repetition — extracted shared `generate_section` helper; three methods collapsed from ~30 LOC to ~9 LOC
+- **#29** Dashboard test coverage — added `fact_presenter_spec.rb` (14 examples) and `conflicts_spec.rb` (15 examples). Suite: 1756 → 1785 examples. Only `server.rb` remains uncovered (HTTP glue, lower priority)
 
 ### Current Strengths
 
@@ -52,33 +58,16 @@ None remaining.
 
 ### High Priority Issues
 
-#### A. SQLiteStore regrew from 386 → 683 LOC (+77%)
+#### A. SQLiteStore regrew from 386 → 683 LOC (+77%) — ✅ RESOLVED 2026-04-22
 
-`lib/claude_memory/store/sqlite_store.rb` was the headline refactor of Mar 19 (from 547 down to 386). It has since regrown past its original pre-refactor size.
+`lib/claude_memory/store/sqlite_store.rb` was the headline refactor of Mar 19 (from 547 down to 386). It had regrown past its original pre-refactor size but has since been decomposed again using the successful module-inclusion pattern:
 
-**Contributing additions:**
-- Table accessor methods re-added (`content_items`, `entities`, `facts`, `provenance`, etc., L99-106) — probably worth keeping for clarity
-- LLM cache support (`llm_cache_store`, `llm_cache_lookup`, L606-626) — new feature
-- Ingestion metrics aggregation (`aggregate_ingestion_metrics`, L532-562, 30 lines) — new feature
-- Backfill distillation metrics (`backfill_distillation_metrics!`, L567, 20 lines) — new feature
-- `reject_fact` (L366, 24 lines) — was CLI, moved into store
+- **`Store::LLMCache`** — extracted 4 methods (`llm_cache_lookup`, `llm_cache_store`, `llm_cache_key`, `llm_cache_prune`), -55 LOC
+- **`Store::MetricsAggregator`** — extracted 4 methods (`count_undistilled`, `record_ingestion_metrics`, `aggregate_ingestion_metrics`, `backfill_distillation_metrics!`), -84 LOC
 
-**Method sizes >15 lines:**
+**Result:** sqlite_store.rb 683 → **544 LOC**. No file in lib/ exceeds 627 lines.
 
-| Method | L | Size | Notes |
-|---|---|---|---|
-| `aggregate_ingestion_metrics` | 532 | 30 | Multiple sub-queries + merge |
-| `upsert_content_item` | 149 | 26 | 11 keyword params (carried-forward #8) |
-| `reject_fact` | 366 | 24 | Conflict resolution in transaction |
-| `insert_fact` | 288 | 21 | Many optional fields |
-| `llm_cache_store` | 606 | 20 | Insert + read-back |
-| `backfill_distillation_metrics!` | 567 | 20 | Aggregation orchestration |
-| `update_fact` | 329 | 18 | Generic update via allowed-keys |
-
-**Proposed fix:** Extract a `MetricsAggregator` or `LLMCache` module to be included, mirroring the successful `RetryHandler` + `SchemaManager` pattern. This is the project's own convention for breaking up this class without breaking its API.
-
-**File:** `lib/claude_memory/store/sqlite_store.rb` (683 lines)
-**Effort:** 1–1.5 hours
+**Remaining method-size issue:** `upsert_content_item` still has 11 keyword parameters and 26 lines (carried-forward #8). Not critical.
 
 #### B. Dashboard::API at 627 lines with multiple 20+ line methods
 
@@ -107,17 +96,9 @@ None remaining.
 | # | Issue | File:Line | Effort |
 |---|---|---|---|
 | 8 | `upsert_content_item` has 11 keyword params (carried) | `store/sqlite_store.rb:149-174` | 1 hour |
-| 26 | `publish.rb` section generators still repeat structure | `publish.rb:114-165` | 30 min |
+| 26 | ~~`publish.rb` section generators repeat structure~~ — ✅ RESOLVED 2026-04-22 | `publish.rb:114-139` | done |
 
-Convention: `generate_decisions_section`, `generate_conventions_section`, `generate_constraints_section`, `generate_additional_section` all share: `select predicate`, `return "" if empty`, `build header`, `append lines`, `join`. Could be:
-
-```ruby
-def generate_section(facts, section:, title:, formatter:)
-  rows = facts.select { |f| PredicatePolicy.section_for(f[:predicate]) == section }
-  return "" if rows.empty?
-  (["## #{title}\n"] + rows.map(&formatter)).join("\n") + "\n"
-end
-```
+Extracted shared `generate_section(facts, section:, title:, &formatter)` helper. Three methods (decisions/conventions/constraints) collapsed from ~30 LOC to ~9 LOC. publish.rb: 256 → 248 LOC.
 
 ---
 
@@ -174,26 +155,24 @@ New dashboard code checked:
 
 - `similarity.rb`, `metadata_extractor.rb`, `tool_extractor.rb`, `recover_command.rb`, `schema_validator.rb` specs added in March session — still green
 - `dashboard/api_spec.rb` (new) tests the API surface and exercises the delegate helpers transitively
+- **`dashboard/fact_presenter_spec.rb`** added 2026-04-22 — 14 examples covering summary/preview/with_provenance/list_summary shapes, batched entity resolution, nil handling
+- **`dashboard/conflicts_spec.rb`** added 2026-04-22 — 15 examples covering list pagination, cross-scope counts, detail resolution, reject/reject_similar cascades
 
 ### High Priority Issues
 
 #### C. Dashboard test coverage gaps (new subsystem)
 
-Three of five dashboard modules ship without direct spec files:
+Four of five dashboard modules now have direct spec files. Only `server.rb` remains uncovered:
 
-| File | LOC | Direct Spec? | Transitive Coverage |
+| File | LOC | Direct Spec? | Notes |
 |---|---|---|---|
-| `dashboard/api.rb` | 627 | ✅ `api_spec.rb` | N/A |
-| `dashboard/efficacy.rb` | 127 | ✅ `efficacy_spec.rb` | N/A |
-| `dashboard/conflicts.rb` | 195 | ❌ | Partial via `api_spec.rb` |
-| `dashboard/fact_presenter.rb` | 109 | ❌ | Partial via `api_spec.rb` |
-| `dashboard/server.rb` | 189 | ❌ | None (HTTP glue) |
+| `dashboard/api.rb` | 627 | ✅ `api_spec.rb` | — |
+| `dashboard/efficacy.rb` | 127 | ✅ `efficacy_spec.rb` | — |
+| `dashboard/conflicts.rb` | 195 | ✅ `conflicts_spec.rb` (new) | — |
+| `dashboard/fact_presenter.rb` | 109 | ✅ `fact_presenter_spec.rb` (new) | — |
+| `dashboard/server.rb` | 189 | ❌ | HTTP glue — lower priority |
 
-`Conflicts` and `FactPresenter` have non-trivial shape logic (provenance loading, entity batching, merge conflict handling) that deserves direct unit tests. `Server` is harder to test (WEBrick mounting), but at minimum routing configuration could be tested.
-
-**Effort:**
-- `fact_presenter_spec.rb` — 45 min
-- `conflicts_spec.rb` — 1 hour
+**Remaining effort:**
 - `server_spec.rb` — 1–1.5 hours
 
 ### Medium Issues 🟡
@@ -287,10 +266,10 @@ Reviewed: `ResponseFormatter` has been split into ~12 focused static methods; fu
 
 | # | Issue | File:Line | Severity | Effort |
 |---|---|---|---|---|
-| 27 | SQLiteStore regrowth past 500 LOC | `store/sqlite_store.rb` | 🟡 Medium | 1–1.5 hour |
+| 27 | ~~SQLiteStore regrowth past 500 LOC~~ — ✅ RESOLVED (544 LOC) | `store/sqlite_store.rb` | — | done |
 | 28 | Dashboard::API recall/timeline/db_stats methods >20 lines | `dashboard/api.rb:186,302,467` | 🟡 Medium | 2–3 hours |
-| 29 | Dashboard untested modules (conflicts, fact_presenter, server) | `spec/claude_memory/dashboard/` | 🟡 Medium | 3 hours |
-| 30 | Bare rescue style (prefer explicit StandardError) | 5 locations | 🟢 Low | 10 min |
+| 29 | ~~Dashboard untested modules~~ — ✅ RESOLVED for conflicts + fact_presenter; server.rb remains | `spec/claude_memory/dashboard/` | 🟢 Low | 1.5 hours |
+| 30 | ~~Bare rescue style~~ — ❌ WITHDRAWN: Standard Ruby's `Style/RescueStandardError` actively prefers bare `rescue`. Current code is correct per project style. | — | n/a |
 
 ---
 
@@ -309,10 +288,10 @@ Reviewed: `ResponseFormatter` has been split into ~12 focused static methods; fu
 
 ### High Priority (Next Week)
 
-| # | Item | File:Line | Effort | Impact |
-|---|---|---|---|---|
-| 27 | Extract `LLMCache` / `MetricsAggregator` module from SQLiteStore | `store/sqlite_store.rb` | 1–1.5 hours | Regrowth control |
-| 29 | Add `fact_presenter_spec.rb` and `conflicts_spec.rb` | `spec/claude_memory/dashboard/` | 2 hours | Coverage |
+| # | Item | File:Line | Effort | Impact | Status |
+|---|---|---|---|---|---|
+| 27 | Extract `LLMCache` / `MetricsAggregator` from SQLiteStore | `store/sqlite_store.rb` | 1–1.5 hours | Regrowth control | ✅ DONE 2026-04-22 |
+| 29 | Add `fact_presenter_spec.rb` and `conflicts_spec.rb` | `spec/claude_memory/dashboard/` | 2 hours | Coverage | ✅ DONE 2026-04-22 |
 
 ### Medium Priority (Next Sprint)
 
@@ -327,13 +306,13 @@ Reviewed: `ResponseFormatter` has been split into ~12 focused static methods; fu
 
 ### Low Priority (Later)
 
-| # | Item | Effort |
-|---|---|---|
-| 13 | Payload validator for hooks (carried) | 30 min |
-| 15 | Sweeper mutable state (carried) | 20 min |
-| 16 | `Dir.chdir` in tests (carried) | 15 min |
-| 26/18 | Publish section builder helper (carried) | 30 min |
-| 30 | Explicit `rescue StandardError` in 5 defensive rescues | 10 min |
+| # | Item | Effort | Status |
+|---|---|---|---|
+| 13 | Payload validator for hooks (carried) | 30 min | — |
+| 15 | Sweeper mutable state (carried) | 20 min | — |
+| 16 | `Dir.chdir` in tests (carried) | 15 min | — |
+| 26/18 | Publish section builder helper (carried) | 30 min | ✅ DONE 2026-04-22 |
+| 30 | Explicit `rescue StandardError` in 5 defensive rescues | 10 min | ❌ WITHDRAWN — violates `Style/RescueStandardError` |
 
 ### Carried Forward (Low Priority from Earlier Reviews)
 
@@ -351,65 +330,67 @@ Reviewed: `ResponseFormatter` has been split into ~12 focused static methods; fu
 
 The codebase absorbed 39% LOC growth (+4,775 LOC) over five weeks without introducing any correctness bugs, N+1 patterns, or god-object regressions in new code. The dashboard subsystem is particularly well-structured — it would have been easy to put all 1,247 LOC in `api.rb`, but the author correctly split it into five collaborators.
 
-**Two watch items emerged:**
+**Original two watch items — both resolved in the 2026-04-22 quality-update session:**
 
-1. `SQLiteStore` regrew past its pre-March-refactor size (386 → 683). The successful pattern from March (`RetryHandler`, `SchemaManager` module inclusion) should be reapplied to extract the new aggregation/cache concerns.
-2. `Dashboard::API` is under 700 lines but has 8 methods over 15 lines. Extracting per-endpoint query objects would drop it to ~300 LOC.
+1. ✅ `SQLiteStore` regrew past its pre-March-refactor size (386 → 683). The successful pattern from March (`RetryHandler`, `SchemaManager` module inclusion) was reapplied — extracted `LLMCache` and `MetricsAggregator` modules. sqlite_store.rb now 544 LOC (-139).
+2. `Dashboard::API` is under 700 lines but has 8 methods over 15 lines. Extracting per-endpoint query objects would drop it to ~300 LOC. **Still open** — downgraded to medium priority.
 
-**Test ratio regression** (1.84 → 1.65) is concerning mostly because of three untested dashboard modules. Not urgent — `api_spec.rb` covers them transitively — but direct coverage is warranted given the dashboard's growing surface area.
+**Test coverage gaps** for dashboard modules were partially addressed: `fact_presenter.rb` and `conflicts.rb` now have direct specs (29 new examples). Only `server.rb` remains uncovered, and that's WEBrick HTTP glue with the lowest test ROI.
 
-All 12 carried-forward items from March remain low-priority and non-blocking.
+The remaining 12 carried-forward items from March are all low-priority and non-blocking. Item #30 (explicit `rescue StandardError`) was withdrawn after the project's own Standard Ruby linter rejected the change — the existing bare `rescue` style is correct per project convention.
 
 ---
 
 ## Appendix A: Metrics Comparison
 
-| Metric | Jan 29 | Feb 4 | Mar 9 | Mar 19 | **Apr 22** |
-|---|---|---|---|---|---|
-| Ruby files (lib) | ~85 | 104 | 112 | 117 | **148** |
-| LOC (lib) | ~8,000 | 9,982 | 11,392 | 12,239 | **17,014** |
-| LOC (spec) | — | 17,693 | 21,632 | 22,563 | **28,074** |
-| Pure logic classes | 17+ | 20+ | 20+ | 22+ | **25+** |
-| Test files | 74+ | 98 | 128 | 122 | **154** |
-| Test-to-code ratio | ~1.5:1 | 1.77:1 | 1.90:1 | 1.84:1 | **1.65:1** ⬇️ |
-| Files >500 lines | 0 | 2 | 3 | **0** | **2** ⬆️ |
-| Files >300 lines | — | — | 9 | 9 | **10** |
-| Bare rescues (unsafe) | 0 | 0 | 1 | 0 | **0** ✅ |
-| Bare rescues (defensive, justified) | — | — | — | — | **5** |
-| N+1 patterns (hot paths) | 0 | 0 | 0 | 0 | **0** ✅ |
-| Untested dashboard modules | — | — | — | — | **3 of 5** ⚠️ |
-| Known correctness bugs | — | — | — | 0 | **0** ✅ |
+| Metric | Jan 29 | Feb 4 | Mar 9 | Mar 19 | Apr 22 (review) | **Apr 22 (after update)** |
+|---|---|---|---|---|---|---|
+| Ruby files (lib) | ~85 | 104 | 112 | 117 | 148 | **150** (+2 extracted modules) |
+| LOC (lib) | ~8,000 | 9,982 | 11,392 | 12,239 | 17,014 | **17,031** (+17 from module headers) |
+| LOC (spec) | — | 17,693 | 21,632 | 22,563 | 28,074 | **28,490** (+416 dashboard specs) |
+| Pure logic classes | 17+ | 20+ | 20+ | 22+ | 25+ | **27+** (+LLMCache, +MetricsAggregator) |
+| Test files | 74+ | 98 | 128 | 122 | 154 | **156** |
+| Test-to-code ratio | ~1.5:1 | 1.77:1 | 1.90:1 | 1.84:1 | 1.65:1 | **1.67:1** ⬆️ |
+| Files >500 lines | 0 | 2 | 3 | **0** | 2 | **1** ⬇️ (only `dashboard/api.rb`) |
+| Files >300 lines | — | — | 9 | 9 | 10 | **8** ⬇️ |
+| Bare rescues (unsafe) | 0 | 0 | 1 | 0 | 0 | **0** ✅ |
+| Bare rescues (defensive, justified) | — | — | — | — | 5 | **5** |
+| N+1 patterns (hot paths) | 0 | 0 | 0 | 0 | 0 | **0** ✅ |
+| Untested dashboard modules | — | — | — | — | 3 of 5 | **1 of 5** ⬇️ |
+| Known correctness bugs | — | — | — | 0 | 0 | **0** ✅ |
 
 ## Appendix B: File Size Report
 
-| File | Mar 19 | **Apr 22** | Trend |
+| File | Mar 19 | Apr 22 (review) | **Apr 22 (after update)** | Trend |
 |---|---|---|---|
-| `store/sqlite_store.rb` | 386 | **683** | ⬆️ +297 (regrowth — needs extraction) |
-| `dashboard/api.rb` | — | **627** | 🆕 new subsystem |
-| `mcp/tool_definitions.rb` | 334 | **459** | ⬆️ +125 (new tool schemas) |
-| `mcp/response_formatter.rb` | 396 | **397** | — |
-| `recall/query_core.rb` | 357 | **371** | ⬆️ +14 |
-| `commands/stats_command.rb` | 250 | **346** | ⬆️ +96 |
-| `sweep/maintenance.rb` | — | **334** | 🆕 to watch list |
-| `mcp/text_summary.rb` | 258 | **313** | ⬆️ +55 |
-| `commands/index_command.rb` | 272 | **259** | ⬇️ -13 |
-| `publish.rb` | 221 | **256** | ⬆️ +35 |
-| `resolve/resolver.rb` | 195 | **254** | ⬆️ +59 |
-| `mcp/tools.rb` | 104 | **249** | ⬆️ +145 (handler dispatch growth) |
-| `commands/uninstall_command.rb` | 226 | **226** | — |
-| `store/store_manager.rb` | — | **215** | 🆕 to watch list |
-| `infrastructure/schema_validator.rb` | 215 | **215** | — |
-| `commands/hook_command.rb` | 214 | **215** | ⬆️ +1 |
-| `hook/context_injector.rb` | — | **214** | 🆕 to watch list |
-| `mcp/handlers/setup_handlers.rb` | 211 | **211** | — |
-| `mcp/server.rb` | — | **206** | 🆕 |
-| `mcp/handlers/stats_handlers.rb` | — | **205** | 🆕 |
-| `dashboard/conflicts.rb` | — | **195** | 🆕 (untested) |
-| `dashboard/server.rb` | — | **189** | 🆕 (untested) |
-| `index/vector_index.rb` | 184 | **184** | — |
-| `recall.rb` | 94 | **175** | ⬆️ +81 |
-| `dashboard/efficacy.rb` | — | **127** | 🆕 |
-| `dashboard/fact_presenter.rb` | — | **109** | 🆕 (untested) |
+| `store/sqlite_store.rb` | 386 | 683 | **544** | ⬇️ -139 (LLMCache + MetricsAggregator extracted) |
+| `dashboard/api.rb` | — | **627** | **627** | 🆕 new subsystem (still on watch list for per-endpoint extraction) |
+| `mcp/tool_definitions.rb` | 334 | **459** | **459** | ⬆️ +125 (new tool schemas) |
+| `mcp/response_formatter.rb` | 396 | **397** | **397** | — |
+| `recall/query_core.rb` | 357 | **371** | **371** | ⬆️ +14 |
+| `commands/stats_command.rb` | 250 | **346** | **346** | ⬆️ +96 |
+| `sweep/maintenance.rb` | — | **334** | **334** | 🆕 to watch list |
+| `mcp/text_summary.rb` | 258 | **313** | **313** | ⬆️ +55 |
+| `commands/index_command.rb` | 272 | **259** | **259** | ⬇️ -13 |
+| `publish.rb` | 221 | 256 | **248** | ⬇️ -8 (shared generate_section helper) |
+| `resolve/resolver.rb` | 195 | **254** | **254** | ⬆️ +59 |
+| `mcp/tools.rb` | 104 | **249** | **249** | ⬆️ +145 (handler dispatch growth) |
+| `commands/uninstall_command.rb` | 226 | **226** | **226** | — |
+| `store/store_manager.rb` | — | **215** | **215** | 🆕 to watch list |
+| `infrastructure/schema_validator.rb` | 215 | **215** | **215** | — |
+| `commands/hook_command.rb` | 214 | **215** | **215** | ⬆️ +1 |
+| `hook/context_injector.rb` | — | **214** | **214** | 🆕 to watch list |
+| `mcp/handlers/setup_handlers.rb` | 211 | **211** | **211** | — |
+| `mcp/server.rb` | — | **206** | **206** | 🆕 |
+| `mcp/handlers/stats_handlers.rb` | — | **205** | **205** | 🆕 |
+| `dashboard/conflicts.rb` | — | **195** | **195** | 🆕 ✅ now covered by `conflicts_spec.rb` |
+| `dashboard/server.rb` | — | **189** | **189** | 🆕 (still untested) |
+| `index/vector_index.rb` | 184 | **184** | **184** | — |
+| `recall.rb` | 94 | **175** | **175** | ⬆️ +81 |
+| `dashboard/efficacy.rb` | — | **127** | **127** | 🆕 |
+| `dashboard/fact_presenter.rb` | — | **109** | **109** | 🆕 ✅ now covered by `fact_presenter_spec.rb` |
+| `store/metrics_aggregator.rb` (new) | — | — | **96** | 🆕 extracted 2026-04-22 |
+| `store/llm_cache.rb` (new) | — | — | **68** | 🆕 extracted 2026-04-22 |
 
 ## Appendix C: Methods > 15 Lines in Watch-List Files
 
@@ -429,18 +410,17 @@ All 12 carried-forward items from March remain low-priority and non-blocking.
 | `serialize_recall_fact` | 365 | 18 |
 | `collect_configured_hook_types` | 559 | 18 |
 
-### `store/sqlite_store.rb`
+### `store/sqlite_store.rb` (after LLMCache + MetricsAggregator extraction)
 
-| Method | Line | Size |
-|---|---|---|
-| `aggregate_ingestion_metrics` | 532 | 30 |
-| `upsert_content_item` | 149 | 26 |
-| `reject_fact` | 366 | 24 |
-| `insert_fact` | 288 | 21 |
-| `llm_cache_store` | 606 | 20 |
-| `backfill_distillation_metrics!` | 567 | 20 |
-| `update_fact` | 329 | 18 |
+| Method | Line | Size | Notes |
+|---|---|---|---|
+| `upsert_content_item` | 149 | 26 | 11 keyword params (carried #8) |
+| `reject_fact` | 366 | 24 | Conflict resolution in transaction |
+| `insert_fact` | 288 | 21 | Many optional fields |
+| `update_fact` | 329 | 18 | Generic update via allowed-keys |
+
+`aggregate_ingestion_metrics`, `backfill_distillation_metrics!`, and `llm_cache_store` moved into their respective modules.
 
 ---
 
-**Next review:** After `SQLiteStore` module extraction or `Dashboard::API` query-object refactor.
+**Next review:** After `Dashboard::API` query-object refactor (#28) or `upsert_content_item` value object (#8).
