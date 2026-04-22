@@ -112,38 +112,30 @@ module ClaudeMemory
 
     # @return [String] Markdown section for decision facts
     def generate_decisions_section(facts)
-      decisions = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :decisions }
-      return "" if decisions.empty?
-
-      lines = ["## Current Decisions\n"]
-      decisions.each do |d|
-        lines << "- #{d[:object_literal]}"
+      generate_section(facts, section: :decisions, title: "Current Decisions") do |d|
+        "- #{d[:object_literal]}"
       end
-      lines.join("\n") + "\n"
     end
 
     # @return [String] Markdown section for convention facts
     def generate_conventions_section(facts)
-      conventions = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :conventions }
-      return "" if conventions.empty?
-
-      lines = ["## Conventions\n"]
-      conventions.each do |c|
-        lines << "- #{c[:object_literal]}"
+      generate_section(facts, section: :conventions, title: "Conventions") do |c|
+        "- #{c[:object_literal]}"
       end
-      lines.join("\n") + "\n"
     end
 
     # @return [String] Markdown section for technical constraint facts
     def generate_constraints_section(facts)
-      constraints = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == :constraints }
-      return "" if constraints.empty?
-
-      lines = ["## Technical Constraints\n"]
-      constraints.each do |c|
-        lines << "- **#{humanize(c[:predicate])}**: #{c[:object_literal]}"
+      generate_section(facts, section: :constraints, title: "Technical Constraints") do |c|
+        "- **#{humanize(c[:predicate])}**: #{c[:object_literal]}"
       end
-      lines.join("\n") + "\n"
+    end
+
+    def generate_section(facts, section:, title:, &row_formatter)
+      rows = facts.select { |f| Resolve::PredicatePolicy.section_for(f[:predicate]) == section }
+      return "" if rows.empty?
+
+      (["## #{title}\n"] + rows.map(&row_formatter)).join("\n") + "\n"
     end
 
     # @return [String] Markdown section for additional knowledge grouped by predicate
