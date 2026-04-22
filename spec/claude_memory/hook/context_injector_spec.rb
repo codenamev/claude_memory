@@ -202,6 +202,46 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector do
     end
   end
 
+  describe "auto-memory mirror integration" do
+    let(:auto_memory_dir) { File.join(tmpdir, "auto_memory") }
+    let(:state_file) { File.join(tmpdir, ".claude", "auto_memory_mirror.json") }
+    let(:mirror) do
+      ClaudeMemory::Hook::AutoMemoryMirror.new(
+        auto_memory_dir: auto_memory_dir,
+        state_file: state_file
+      )
+    end
+
+    before do
+      FileUtils.mkdir_p(auto_memory_dir)
+      File.write(File.join(auto_memory_dir, "gotcha_example.md"), "# Gotcha\nHigh-signal rule to mirror")
+    end
+
+    it "emits a mirror section on fresh sessions when new entries exist" do
+      inj = described_class.new(manager, source: "startup", auto_memory_mirror: mirror)
+      context = inj.generate_context
+      expect(context).to include("Auto-Memory Mirror Candidates")
+      expect(context).to include("gotcha_example.md")
+      expect(context).to include("High-signal rule to mirror")
+    end
+
+    it "does not re-emit the same entry on the next session" do
+      described_class.new(manager, source: "startup", auto_memory_mirror: mirror).generate_context
+
+      fresh_mirror = ClaudeMemory::Hook::AutoMemoryMirror.new(
+        auto_memory_dir: auto_memory_dir,
+        state_file: state_file
+      )
+      context = described_class.new(manager, source: "startup", auto_memory_mirror: fresh_mirror).generate_context
+      expect(context.to_s).not_to include("Auto-Memory Mirror Candidates")
+    end
+
+    it "skips the mirror section on non-fresh sources" do
+      inj = described_class.new(manager, source: "compact", auto_memory_mirror: mirror)
+      expect(inj.generate_context).to be_nil
+    end
+  end
+
   describe "emitted fact tracking" do
     let(:decision_fact_id) do
       create_fact_with_content(

@@ -195,7 +195,13 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
 
         # Isolate from real global database
         empty_global = File.join(tmpdir, "empty_global.sqlite3")
-        config = instance_double(ClaudeMemory::Configuration, global_db_path: empty_global, project_db_path: db_path, project_dir: tmpdir)
+        config = instance_double(
+          ClaudeMemory::Configuration,
+          global_db_path: empty_global,
+          project_db_path: db_path,
+          project_dir: tmpdir,
+          claude_config_dir: File.join(tmpdir, "claude_config")
+        )
         allow(ClaudeMemory::Configuration).to receive(:new).and_return(config)
 
         exit_code = command.call(["context", "--db", db_path])

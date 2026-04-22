@@ -11,6 +11,7 @@ module ClaudeMemory
       MAX_ARCHITECTURE = 5
       MAX_UNDISTILLED = 3
       MAX_TEXT_PER_ITEM = 1500
+      MAX_MIRROR_CANDIDATES = 5
 
       FRESH_SESSION_SOURCES = %w[startup resume clear].freeze
 
@@ -26,10 +27,11 @@ module ClaudeMemory
       # harnesses can attribute sections if they care.
       attr_reader :emitted_fact_ids, :emitted_subjects
 
-      def initialize(manager, source: nil)
+      def initialize(manager, source: nil, auto_memory_mirror: nil)
         @manager = manager
         @source = source
         @recall = Recall.new(manager)
+        @auto_memory_mirror = auto_memory_mirror
         @emitted_fact_ids = []
         @emitted_subjects = []
       end
@@ -51,6 +53,12 @@ module ClaudeMemory
         if fresh_session?
           undistilled = fetch_undistilled(MAX_UNDISTILLED)
           sections << format_distillation_prompt(undistilled) if undistilled.any?
+
+          mirror_candidates = fetch_mirror_candidates(MAX_MIRROR_CANDIDATES)
+          if mirror_candidates.any?
+            sections << format_auto_memory_mirror(mirror_candidates)
+            auto_memory_mirror.commit(mirror_candidates)
+          end
         end
 
         return nil if sections.empty?
@@ -149,6 +157,56 @@ module ClaudeMemory
 
         lines = ["## #{title}"]
         items.each { |item| lines << "- #{item}" }
+        lines.join("\n")
+      end
+
+      def fetch_mirror_candidates(limit)
+        mirror = auto_memory_mirror
+        return [] unless mirror
+        mirror.pending_candidates(limit: limit)
+      rescue => e
+        ClaudeMemory.logger.warn("ContextInjector#fetch_mirror_candidates failed: #{e.message}")
+        []
+      end
+
+      def auto_memory_mirror
+        @auto_memory_mirror ||= build_default_mirror
+      end
+
+      def build_default_mirror
+        project_path = @manager.respond_to?(:project_path) ? @manager.project_path : nil
+        return nil unless project_path
+
+        config = Configuration.new
+        AutoMemoryMirror.new(
+          auto_memory_dir: AutoMemoryMirror.default_dir(project_path, config.claude_config_dir),
+          state_file: AutoMemoryMirror.default_state_file(project_path)
+        )
+      rescue => e
+        ClaudeMemory.logger.debug("ContextInjector#build_default_mirror failed: #{e.message}")
+        nil
+      end
+
+      def format_auto_memory_mirror(candidates)
+        lines = [
+          "## Auto-Memory Mirror Candidates",
+          "",
+          "The following auto-memory entries (from `~/.claude/projects/<slug>/memory/`)",
+          "are new or changed since the last mirror. Consider extracting them into",
+          "claude_memory via `memory.store_extraction` so future sessions can recall",
+          "them via `memory.conventions` / `memory.recall_semantic`.",
+          "",
+          "**Review discipline applies:** only extract high-signal entries (gotchas,",
+          "feedback, references). Skip transient project state. Preserve the `**Why:**`",
+          "and `**How to apply:**` reasoning when present."
+        ]
+
+        candidates.each do |candidate|
+          lines << ""
+          lines << "### #{candidate[:name]}"
+          lines << candidate[:content]
+        end
+
         lines.join("\n")
       end
     end
