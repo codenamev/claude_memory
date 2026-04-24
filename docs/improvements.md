@@ -267,29 +267,22 @@ Source: QMD study (2026-03-02)
 
 Source: 2026-04-24 dashboard data audit. Root cause traced to `facts_for_slot` defaulting to `status="active"`, which made the existing disputed fact invisible to the re-extraction path. Fixed in `Resolver#apply_conflict`: before creating a new disputed fact + conflict row, look up disputed facts in the same (subject, predicate) slot and reinforce the matching one with provenance instead of duplicating. New spec `resolver_spec.rb` "does not duplicate a conflict when the same contradiction is re-extracted" locks in the behavior. Historical DB rows (e.g. 11× sqlite vs postgresql) stay until an optional cleanup pass runs.
 
-### 40. Cleanup: Prune historical rails-vs-react conflicts (data only — code already correct)
+### ~~40. Cleanup: Prune historical rails-vs-react conflicts (data only — code already correct)~~ ✅ Implemented 2026-04-24
 
-Source: 2026-04-24 dashboard data audit
+Shipped in commit `22eeaf1` as `claude-memory dedupe-conflicts` and `claude-memory reclassify-references`. `Sweep::Maintenance` gains two one-off maintenance methods:
 
-- **Problem**: DB has 4 open conflict rows for `uses_framework: rails vs react`. The resolver code already routes multi-value predicates straight to `:insert` (verified by `resolver_spec.rb:239` "accumulates multiple uses_framework facts without supersession"), so these are historical stragglers from before `uses_framework` was reclassified as multi-value in policy v14.
-- **Value**: Cleans the `Needs review` count. A one-time cleanup — no code change needed since the issue can't recur under current code.
-- **Implementation**: SQL migration or a `claude-memory prune-multi-value-conflicts` one-shot command: `DELETE FROM conflicts WHERE predicate IN (SELECT predicate FROM …) AND predicate's policy is multi-value`. Needs a join; or easier, a Ruby script that iterates `conflicts`, loads both facts, checks `PredicatePolicy.exclusive?`, and resolves the conflict as obsolete when the predicate is multi-value.
-- **Effort**: Half a day (one-off CLI command + spec)
-- **Recommendation**: **LOW PRIORITY** — Cosmetic; only matters when the user opens the dashboard and sees the inflated count. Current code prevents new occurrences.
+- `dedupe_conflicts` groups open conflicts by `(subject_entity_id, predicate, normalized(object_a, object_b))`, keeps the earliest, rejects the duplicate disputed facts, and migrates their provenance onto the keeper.
+- `reclassify_references` walks active convention facts through `ReferenceMaterialDetector` and retags matches to `predicate=reference`.
+
+Both CLI commands accept `--dry-run` and `--scope`. Tightened `ReferenceMaterialDetector` so the `by Firstname Lastname` pattern is now a weak signal (fires only alongside a strong pattern). Covered by 9 new maintenance specs and 1 detector spec.
 
 ### ~~41. Distiller: Guard against reference material mislabeled as convention~~ ✅ Implemented 2026-04-24
 
 Source: 2026-04-24 dashboard data audit. `Distill::ReferenceMaterialDetector` reclassifies convention facts whose object text matches any of: LOC counts (`~?\d+[,.]?\d*\s*(LOC|lines of code)`), star counts, `by Firstname Lastname` author attribution, or "is a (plugin|library|tool|gem|service|framework|extension|cli|mcp server)" templates. New predicate `reference` registered in `PredicatePolicy::POLICIES` (multi, non-exclusive) with its own section in `SECTION_MAP` → `:references`. Detector is applied in `ManagementHandlers#store_extraction` before the resolver runs, so mislabeling can't persist. New `References` section in `Dashboard::Knowledge`. 8 new specs lock in behavior. Historical mislabeled facts (project facts #1, #3) remain until manual reject or cleanup pass.
 
-### 42. Dashboard: ROI diagnostic — extracted vs recalled
+### ~~42. Dashboard: ROI diagnostic — extracted vs recalled~~ ✅ Implemented 2026-04-24
 
-Source: 2026-04-24 dashboard data audit
-
-- **Problem**: Project DB shows 46 active project facts + 8 global but only 2 recalls in 30 days — most extracted knowledge sits unused. Users can't tell this at a glance.
-- **Value**: A single diagnostic line — "Extracted 37 facts this month, Claude has used 2 of them" — makes the ROI honest. If it's low, we can guide users toward MCP-tool adoption or smaller recall queries.
-- **Implementation**: `Dashboard::Trust#snapshot` already counts both; surface as a new `utilization_ratio` in the response and render as a sidebar line.
-- **Effort**: Half a day
-- **Recommendation**: **MEDIUM PRIORITY** — Adds an honest ROI number to the sidebar.
+Shipped in commit `3906c23`. `Dashboard::Trust#snapshot` now returns a `utilization` section with `extracted` (active facts created in the last 30 days across both stores), `used` ((scope, id) pairs Claude has recalled or injected over the window), `used_from_extracted` (intersection), and `ratio_pct`. Rendered as a stat on the Most-used-this-week panel, color-coded (green ≥40%, yellow ≥15%, red below). Panel hides itself on fresh installs where there's no extraction or use yet. Covered by new `dashboard/trust_spec.rb` assertions.
 
 ### 43. Dashboard: 👍/👎 feedback on moments
 
@@ -426,4 +419,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-24 - #38 (display-layer conflict dedupe) landed in this session on top of #39/#41 from the earlier 2026-04-24 round.*
+*Last updated: 2026-04-24 - Marked #40 (historical cleanup CLI, shipped in 22eeaf1) and #42 (utilization ratio, shipped in 3906c23) as implemented. #38 display-layer conflict dedupe also landed today.*
