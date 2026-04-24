@@ -19,18 +19,28 @@ module ClaudeMemory
     # the patterns target telltale numeric/attribution phrases that rarely
     # appear in real conventions.
     class ReferenceMaterialDetector
-      # Recognizes descriptive prose about external software artifacts.
-      PATTERNS = [
+      # Strong signals — any one of these on its own justifies reclassification.
+      # Kept tight to avoid false positives on real conventions that happen
+      # to quote external project names.
+      STRONG_PATTERNS = [
         # Line-of-code counts: "~1,195 LOC", "1200 lines of code"
         /~?\d+[,.]?\d*\s*(?:LOC|lines of code)/i,
         # Star counts: "5,700+ stars", "3.2k stars"
         /\d[\d,.]*\+?\s*(?:k\s+)?stars?\b/i,
-        # Author attribution: "by Jane Doe", "by Tobi Lütke"
-        /\bby\s+[[:upper:]][[:alpha:]'-]+\s+[[:upper:]][[:alpha:]'-]+/,
         # "X is a (plugin|library|tool|gem|service|framework|extension) …"
         /\b(?:is\s+an?|are)\s+(?:cloud-backed\s+)?(?:plugin|library|tool|gem|service|framework|extension|cli|mcp\s+server)\b/i,
         # Leading descriptor: "Plugin that…", "Library for…"
         /\A(?:cloud-backed\s+)?(?:plugin|library|tool|gem|service|framework|extension|cli|mcp\s+server)(?:\s+(?:with|using|for|that))/i
+      ].freeze
+
+      # Weak signals — only fire in combination with a strong signal.
+      # Author attribution ("by Jane Doe") was originally a standalone
+      # trigger, but production text like "MCP launched by Claude Code run
+      # from PATH" contains the same surface pattern inside a legitimate
+      # convention. Requiring a co-occurring strong signal keeps the guard
+      # conservative.
+      WEAK_PATTERNS = [
+        /\bby\s+[[:upper:]][[:alpha:]'-]+\s+[[:upper:]][[:alpha:]'-]+/
       ].freeze
 
       # Predicates we inspect. Decisions stay decisions even when they cite
@@ -61,7 +71,7 @@ module ClaudeMemory
         return false unless GUARDED_PREDICATES.include?(fact[:predicate].to_s)
         object = fact[:object].to_s
         return false if object.empty?
-        PATTERNS.any? { |re| object.match?(re) }
+        STRONG_PATTERNS.any? { |re| object.match?(re) }
       end
     end
   end

@@ -125,6 +125,135 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
     end
   end
 
+  describe "#dedupe_open_conflicts" do
+    let!(:repo_id) { store.find_or_create_entity(type: "repo", name: "test-repo") }
+
+    def make_fact(object:, status: "active", predicate: "uses_database")
+      store.insert_fact(subject_entity_id: repo_id, predicate: predicate,
+        object_literal: object, status: status, confidence: 0.9, scope: "project")
+    end
+
+    it "keeps the earliest conflict and resolves subsequent duplicates referencing the same pair" do
+      keeper_a = make_fact(object: "postgresql")
+      # Simulate the pre-2026-04-24 bug: three separate disputed facts
+      # plus three separate conflict rows for the same contradiction.
+      dup1_b = make_fact(object: "sqlite", status: "disputed")
+      dup2_b = make_fact(object: "sqlite", status: "disputed")
+      dup3_b = make_fact(object: "sqlite", status: "disputed")
+      keeper_conflict = store.insert_conflict(fact_a_id: keeper_a, fact_b_id: dup1_b)
+      _dup_conflict_2 = store.insert_conflict(fact_a_id: keeper_a, fact_b_id: dup2_b)
+      _dup_conflict_3 = store.insert_conflict(fact_a_id: keeper_a, fact_b_id: dup3_b)
+
+      result = maintenance.dedupe_open_conflicts
+      expect(result[:inspected]).to eq(3)
+      expect(result[:resolved]).to eq(2)
+
+      # Exactly the first (keeper) remains open
+      expect(store.conflicts.where(status: "open").map(:id)).to eq([keeper_conflict])
+      expect(store.conflicts.where(status: "resolved").count).to eq(2)
+    end
+
+    it "treats A-vs-B and B-vs-A as the same pair" do
+      keeper_a = make_fact(object: "sqlite")
+      dup_b = make_fact(object: "postgresql", status: "disputed")
+      keeper_conflict = store.insert_conflict(fact_a_id: keeper_a, fact_b_id: dup_b)
+
+      # Second detection with the objects swapped
+      swapped_a = make_fact(object: "postgresql", status: "disputed")
+      swapped_b = make_fact(object: "sqlite", status: "disputed")
+      _swapped_conflict = store.insert_conflict(fact_a_id: swapped_a, fact_b_id: swapped_b)
+
+      result = maintenance.dedupe_open_conflicts
+      expect(result[:resolved]).to eq(1)
+      expect(store.conflicts.where(status: "open").map(:id)).to eq([keeper_conflict])
+    end
+
+    it "does nothing when there are no duplicates" do
+      keeper_a = make_fact(object: "postgresql")
+      dup_b = make_fact(object: "sqlite", status: "disputed")
+      store.insert_conflict(fact_a_id: keeper_a, fact_b_id: dup_b)
+
+      result = maintenance.dedupe_open_conflicts
+      expect(result[:resolved]).to eq(0)
+      expect(store.conflicts.where(status: "open").count).to eq(1)
+    end
+
+    it "reassigns provenance from duplicate disputed facts onto the keeper" do
+      keeper_a = make_fact(object: "postgresql")
+      keeper_b = make_fact(object: "sqlite", status: "disputed")
+      dup_b = make_fact(object: "sqlite", status: "disputed")
+      store.insert_conflict(fact_a_id: keeper_a, fact_b_id: keeper_b)
+      store.insert_conflict(fact_a_id: keeper_a, fact_b_id: dup_b)
+
+      content_id = store.upsert_content_item(
+        source: "test", text_hash: "abc", byte_len: 1,
+        raw_text: "second detection"
+      )
+      store.insert_provenance(fact_id: dup_b, content_item_id: content_id,
+        strength: "stated", quote: "second detection")
+
+      maintenance.dedupe_open_conflicts
+
+      # Provenance from the dup's disputed fact moves to the keeper's disputed fact.
+      expect(store.provenance.where(fact_id: keeper_b).count).to eq(1)
+      expect(store.provenance.where(fact_id: dup_b).count).to eq(0)
+      # The duplicate disputed fact gets rejected so it stops appearing in facts_for_slot.
+      expect(store.facts.where(id: dup_b).first[:status]).to eq("rejected")
+    end
+
+    it "does not write when dry_run: true" do
+      keeper_a = make_fact(object: "postgresql")
+      dup1_b = make_fact(object: "sqlite", status: "disputed")
+      dup2_b = make_fact(object: "sqlite", status: "disputed")
+      store.insert_conflict(fact_a_id: keeper_a, fact_b_id: dup1_b)
+      store.insert_conflict(fact_a_id: keeper_a, fact_b_id: dup2_b)
+
+      result = maintenance.dedupe_open_conflicts(dry_run: true)
+      expect(result[:resolved]).to eq(1)
+      expect(store.conflicts.where(status: "open").count).to eq(2)
+      expect(result[:decisions].first[:action]).to eq(:resolve_duplicate)
+    end
+  end
+
+  describe "#reclassify_references" do
+    let!(:repo_id) { store.find_or_create_entity(type: "repo", name: "test-repo") }
+
+    def make_convention(object)
+      store.insert_fact(
+        subject_entity_id: repo_id, predicate: "convention",
+        object_literal: object, status: "active", confidence: 0.9, scope: "project"
+      )
+    end
+
+    it "reclassifies LOC/star/author facts from convention to reference" do
+      id_ref = make_convention("Cloud-backed Claude Code plugin (~1,195 LOC JavaScript) using Supermemory API")
+      id_conv = make_convention("Use frozen_string_literal: true at the top of Ruby files")
+
+      result = maintenance.reclassify_references
+      expect(result[:reclassified]).to eq(1)
+      expect(store.facts.where(id: id_ref).first[:predicate]).to eq("reference")
+      expect(store.facts.where(id: id_conv).first[:predicate]).to eq("convention")
+    end
+
+    it "ignores non-convention predicates" do
+      id_decision = store.insert_fact(
+        subject_entity_id: repo_id, predicate: "decision",
+        object_literal: "Library X is a plugin by Jane Doe with 5,000+ stars",
+        status: "active", scope: "project", confidence: 0.9
+      )
+      result = maintenance.reclassify_references
+      expect(result[:reclassified]).to eq(0)
+      expect(store.facts.where(id: id_decision).first[:predicate]).to eq("decision")
+    end
+
+    it "is a no-op under dry_run" do
+      id = make_convention("Tool Y has 12,000+ stars by Jane Doe")
+      result = maintenance.reclassify_references(dry_run: true)
+      expect(result[:reclassified]).to eq(1)
+      expect(store.facts.where(id: id).first[:predicate]).to eq("convention")
+    end
+  end
+
   describe "#restore_multi_value_supersessions" do
     let!(:repo_id) { store.find_or_create_entity(type: "repo", name: "test-repo") }
 

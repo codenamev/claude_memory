@@ -38,6 +38,8 @@ module ClaudeMemory
         "embeddings" => {class: EmbeddingsCommand, description: "Inspect embedding backend"},
         "reject" => {class: RejectCommand, description: "Mark a fact as rejected"},
         "restore" => {class: RestoreCommand, description: "Restore superseded facts from obsolete single-value classification"},
+        "dedupe-conflicts" => {class: DedupeConflictsCommand, description: "Deduplicate historical open conflict rows that describe the same pair"},
+        "reclassify-references" => {class: ReclassifyReferencesCommand, description: "Retag existing convention facts that match reference-material heuristics"},
         "census" => {class: CensusCommand, description: "Aggregate predicate usage across project databases"},
         "dashboard" => {class: DashboardCommand, description: "Open debugging dashboard"}
       }.freeze

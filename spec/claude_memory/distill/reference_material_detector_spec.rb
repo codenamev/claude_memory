@@ -97,5 +97,22 @@ RSpec.describe ClaudeMemory::Distill::ReferenceMaterialDetector do
       extraction = ClaudeMemory::Distill::Extraction.new(facts: [])
       expect { detector.reclassify(extraction) }.not_to raise_error
     end
+
+    it "does not reclassify conventions that merely contain 'by Firstname Lastname' phrasing" do
+      # Production data (fact #142 in the claude_memory project DB): a real
+      # convention about refresh sequences contains "MCP launched by Claude
+      # Code run from PATH". The `by Claude Code` substring looked like
+      # author attribution, triggering a false positive. We now require
+      # a co-occurring strong signal (LOC count, star count, "is a plugin"
+      # descriptor) before reclassifying.
+      extraction = ClaudeMemory::Distill::Extraction.new(
+        facts: [
+          {subject: "repo", predicate: "convention",
+           object: "Four-surface staleness: hooks + MCP launched by Claude Code run from PATH — refresh all four."}
+        ]
+      )
+      out = detector.reclassify(extraction)
+      expect(out.facts.first[:predicate]).to eq("convention")
+    end
   end
 end

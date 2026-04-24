@@ -256,6 +256,114 @@ module ClaudeMemory
         true
       end
 
+      # Deduplicate open conflicts that describe the same contradiction.
+      # Before the Resolver#apply_conflict dedupe fix (2026-04-24), each
+      # re-extraction of the losing value in a single-value slot produced
+      # a new disputed fact + conflict row — production DBs accumulated 11
+      # open conflicts for "sqlite vs postgresql" referencing 11 different
+      # disputed facts. This pass keeps the earliest conflict per logical
+      # pair and marks the rest resolved, reinforcing the keeper's
+      # provenance chain with the duplicates' provenance.
+      #
+      # Pair key: (subject_entity_id, predicate, normalized(object_a), normalized(object_b))
+      # with object order sorted so A-vs-B == B-vs-A.
+      #
+      # @param dry_run [Boolean] when true, decide but don't write
+      # @return [Hash] {inspected:, resolved:, decisions: [{conflict_id:, action:, keeper_id:}]}
+      def dedupe_open_conflicts(dry_run: false)
+        result = {inspected: 0, resolved: 0, decisions: []}
+
+        open_rows = @store.conflicts
+          .where(status: "open")
+          .order(:id)
+          .all
+        return result if open_rows.empty?
+
+        fact_ids = open_rows.flat_map { |r| [r[:fact_a_id], r[:fact_b_id]] }.uniq
+        facts = @store.facts
+          .where(id: fact_ids)
+          .select(:id, :subject_entity_id, :predicate, :object_literal, :status)
+          .all
+          .to_h { |f| [f[:id], f] }
+
+        @store.db.transaction do
+          groups = open_rows.group_by { |row| pair_key(row, facts) }.reject { |key, _| key.nil? }
+          groups.each_value do |rows_in_group|
+            result[:inspected] += rows_in_group.size
+            next if rows_in_group.size < 2
+
+            keeper = rows_in_group.first
+            duplicates = rows_in_group[1..]
+            duplicates.each do |dup|
+              result[:decisions] << {
+                conflict_id: dup[:id],
+                action: :resolve_duplicate,
+                keeper_id: keeper[:id],
+                duplicate_fact_id: dup[:fact_b_id]
+              }
+              # Counted whether or not we actually write, so dry-run output
+              # matches real-run output and callers can compare plans.
+              result[:resolved] += 1
+              next if dry_run
+
+              # Resolve the duplicate conflict. Also reject its disputed
+              # side (fact_b_id is always the newer inserted-as-disputed
+              # fact per Resolver convention), and shift its provenance
+              # onto the keeper's fact_b so the evidence isn't lost.
+              keeper_fact_b_id = keeper[:fact_b_id]
+              if dup[:fact_b_id] != keeper_fact_b_id
+                @store.provenance.where(fact_id: dup[:fact_b_id]).update(fact_id: keeper_fact_b_id)
+                @store.facts.where(id: dup[:fact_b_id]).update(
+                  status: "rejected",
+                  valid_to: Time.now.utc.iso8601
+                )
+              end
+              @store.conflicts.where(id: dup[:id]).update(
+                status: "resolved",
+                notes: "Deduplicated into conflict ##{keeper[:id]}"
+              )
+            end
+          end
+        end
+
+        result
+      end
+
+      # Reclassify active facts currently labeled `convention` whose object
+      # text matches the ReferenceMaterialDetector heuristics. Fixes the
+      # historical data tail from before the detector was wired into
+      # `store_extraction` on 2026-04-24. Current writes can't create this
+      # pattern — this pass only cleans up what already exists.
+      #
+      # @param dry_run [Boolean] when true, decide but don't write
+      # @return [Hash] {inspected:, reclassified:, decisions: [{fact_id:, object:}]}
+      def reclassify_references(dry_run: false)
+        detector = ClaudeMemory::Distill::ReferenceMaterialDetector.new
+        result = {inspected: 0, reclassified: 0, decisions: []}
+
+        candidates = @store.facts
+          .where(status: "active", predicate: "convention")
+          .select(:id, :object_literal)
+          .all
+
+        @store.db.transaction do
+          candidates.each do |row|
+            result[:inspected] += 1
+            fact = {predicate: "convention", object: row[:object_literal]}
+            next unless detector.reference_material?(fact)
+
+            result[:decisions] << {fact_id: row[:id], object: row[:object_literal]}
+            result[:reclassified] += 1
+
+            unless dry_run
+              @store.facts.where(id: row[:id]).update(predicate: "reference")
+            end
+          end
+        end
+
+        result
+      end
+
       # Run SQLite VACUUM to reclaim space.
       # Returns: true
       def vacuum
@@ -264,6 +372,20 @@ module ClaudeMemory
       end
 
       private
+
+      # Canonical key for grouping open conflicts. Two conflicts are the
+      # "same" when they involve the same subject, predicate, and set of
+      # objects (A-vs-B == B-vs-A). Missing-fact conflicts (either side
+      # deleted) get a nil key and are skipped by the caller.
+      def pair_key(conflict_row, facts_by_id)
+        a = facts_by_id[conflict_row[:fact_a_id]]
+        b = facts_by_id[conflict_row[:fact_b_id]]
+        return nil unless a && b
+        return nil unless a[:subject_entity_id] == b[:subject_entity_id]
+        return nil unless a[:predicate] == b[:predicate]
+        objects = [a[:object_literal].to_s.downcase.strip, b[:object_literal].to_s.downcase.strip].sort
+        [a[:subject_entity_id], a[:predicate], objects]
+      end
 
       def restore_tokenize(text)
         return Set.new if text.nil?
