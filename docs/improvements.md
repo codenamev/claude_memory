@@ -306,14 +306,9 @@ Source: 2026-04-22 dashboard exploration
 - **Effort**: 2-3 days
 - **Recommendation**: **LOW PRIORITY** — Polling is adequate; SSE/WS is cosmetic polish.
 
-### 46. Dashboard + CLI: Weekly digest
+### ~~46. Dashboard + CLI: Weekly digest~~ ✅ Implemented 2026-04-24
 
-Source: 2026-04-22 dashboard exploration
-
-- **Value**: Users don't need to visit the dashboard daily. A Sunday-night summary ("This week memory surfaced 12 facts across 8 sessions, captured 3 new conventions, flagged 2 conflicts") drives retention and closes the feedback loop for invisible value.
-- **Implementation**: `claude-memory digest [--since 7d]` CLI command producing a markdown report; optional cron integration for users who want auto-email.
-- **Effort**: 2 days
-- **Recommendation**: **LOW PRIORITY** — Deferred from 2026-04-22 round.
+`claude-memory digest [--since DAYS] [--output FILE]` renders a markdown report from already-existing aggregates — no new schema, no cron. Sections: Activity (moments bucketed by event_type), New knowledge (active facts created in the window, grouped by predicate), Utilization (30d extracted-vs-used ratio from `Dashboard::Trust#utilization`), Conflicts (deduped open count via `Dashboard::Conflicts#distinct_open_counts`), Feedback (👍/👎 from the #43 moment_feedback table). `--output FILE` writes to disk; default is stdout. `--since 0` errors out so the user knows the window must be positive. Covered by command specs (baseline, activity grouping, predicate grouping, since-window, positive-only validation, output-file, feedback inclusion).
 
 ### ~~7. MCP Discovery Tools~~ ✅ Implemented 2026-03-02
 
@@ -414,4 +409,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-24 - #38 (display-layer conflict dedupe) and #43 (moment feedback) landed today; #40 and #42 marked as implemented to reflect earlier-shipped commits.*
+*Last updated: 2026-04-24 - #38, #43, and #46 (weekly digest) landed today; #40 and #42 marked as implemented to reflect earlier-shipped commits.*

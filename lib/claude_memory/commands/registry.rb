@@ -41,7 +41,8 @@ module ClaudeMemory
         "dedupe-conflicts" => {class: DedupeConflictsCommand, description: "Deduplicate historical open conflict rows that describe the same pair"},
         "reclassify-references" => {class: ReclassifyReferencesCommand, description: "Retag existing convention facts that match reference-material heuristics"},
         "census" => {class: CensusCommand, description: "Aggregate predicate usage across project databases"},
-        "dashboard" => {class: DashboardCommand, description: "Open debugging dashboard"}
+        "dashboard" => {class: DashboardCommand, description: "Open debugging dashboard"},
+        "digest" => {class: DigestCommand, description: "Render a weekly markdown digest of memory activity"}
       }.freeze
 
       # Find a command class by name
