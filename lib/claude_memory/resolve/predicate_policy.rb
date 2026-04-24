@@ -17,6 +17,7 @@ module ClaudeMemory
         "convention" => {cardinality: :multi, exclusive: false},
         "decision" => {cardinality: :multi, exclusive: false},
         "architecture" => {cardinality: :multi, exclusive: false},
+        "reference" => {cardinality: :multi, exclusive: false},
         "uses_framework" => {cardinality: :multi, exclusive: false},
         "uses_language" => {cardinality: :multi, exclusive: false},
         "uses_database" => {cardinality: :single, exclusive: true},
@@ -46,6 +47,7 @@ module ClaudeMemory
       SECTION_MAP = {
         "decision" => :decisions,
         "convention" => :conventions,
+        "reference" => :references,
         "uses_database" => :constraints,
         "uses_framework" => :constraints,
         "uses_language" => :constraints,

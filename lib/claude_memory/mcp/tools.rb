@@ -150,7 +150,13 @@ module ClaudeMemory
           details[:query] = arguments["query"] || arguments["concepts"]&.join(", ")
           details[:scope] = arguments["scope"]
           details[:result_count] = extract_result_count(result)
-          details[:top_fact_ids] = extract_top_fact_ids(result)
+          # top_fact_ids is a flat list of the first 5 IDs; top_facts_by_scope
+          # groups the same IDs by source so dashboard readers can resolve
+          # each ID from the DB it actually came from. Fact IDs autoincrement
+          # per-DB, so a bare ID without scope is ambiguous.
+          scoped = extract_top_facts_scoped(result)
+          details[:top_fact_ids] = scoped.values.flatten.first(5)
+          details[:top_facts_by_scope] = scoped if scoped.any?
           details[:results_by_scope] = extract_scope_breakdown(result)
         else
           details[:facts_created] = result[:facts_created]
@@ -178,19 +184,28 @@ module ClaudeMemory
         0
       end
 
-      # Capture up to 5 fact ids from a recall result so the dashboard can
-      # show "what Claude actually got back" when a user drills into an event.
-      def extract_top_fact_ids(result, limit: 5)
-        return nil unless result.is_a?(Hash)
-
+      # Capture up to 5 fact ids from a recall result, grouped by source scope.
+      # Fact IDs autoincrement per-DB, so without scope a bare ID is ambiguous
+      # (project fact #1 and global fact #1 are different facts). Recall rows
+      # carry either a :source or :scope field identifying which DB the fact
+      # came from; we use that to group.
+      #
+      # @return [Hash{String => Array<Integer>}] e.g. {"project" => [5, 8], "global" => [1]}
+      def extract_top_facts_scoped(result, limit: 5)
+        return {} unless result.is_a?(Hash)
         collection = [:facts, :results, :items].map { |k| result[k] }.find { |v| v.is_a?(Array) }
-        return nil unless collection
+        return {} unless collection
 
-        ids = collection.first(limit).map { |row|
-          row.is_a?(Hash) ? (row[:id] || row["id"]) : nil
-        }.compact
-
-        ids.empty? ? nil : ids
+        grouped = Hash.new { |h, k| h[k] = [] }
+        collection.first(limit).each do |row|
+          next unless row.is_a?(Hash)
+          fact = row[:fact] || row["fact"] || row
+          id = fact.is_a?(Hash) ? (fact[:id] || fact["id"]) : nil
+          next unless id
+          scope = row[:source] || row["source"] || fact[:scope] || fact["scope"] || "project"
+          grouped[scope.to_s] << id
+        end
+        grouped
       end
 
       def extract_session_id(arguments)

@@ -172,14 +172,17 @@ module ClaudeMemory
       def hook_context(payload, db_path)
         project_path = payload["project_path"] || payload["cwd"]
         source = payload["source"]
+        session_id = payload["session_id"]
         manager = ClaudeMemory::Store::StoreManager.new(
           project_db_path: db_path,
           project_path: project_path
         )
         manager.ensure_both!
 
+        t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         injector = ClaudeMemory::Hook::ContextInjector.new(manager, source: source)
         context_text = injector.generate_context
+        duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round
 
         if context_text
           response = {
@@ -191,10 +194,41 @@ module ClaudeMemory
           stdout.puts JSON.generate(response)
         end
 
+        record_context_activity(manager, context_text, injector,
+          session_id: session_id, source: source, duration_ms: duration_ms)
+
         manager.close
         Hook::ExitCodes::SUCCESS
       rescue => e
         classify_error(e)
+      end
+
+      CONTEXT_PREVIEW_BYTES = 400
+
+      def record_context_activity(manager, context_text, injector, session_id:, source:, duration_ms:)
+        store = manager.project_store || manager.global_store
+        return unless store
+
+        by_scope = injector.emitted_facts_by_scope.transform_values { |ids| ids.first(10) }
+        details = {
+          source: source,
+          context_length: context_text&.length,
+          preview: context_text&.byteslice(0, CONTEXT_PREVIEW_BYTES),
+          truncated: context_text ? context_text.bytesize > CONTEXT_PREVIEW_BYTES : false,
+          top_fact_ids: injector.emitted_fact_ids.first(10),
+          top_facts_by_scope: (by_scope if by_scope.any?),
+          top_subjects: injector.emitted_subjects.uniq.first(10),
+          fact_count: injector.emitted_fact_ids.size
+        }.compact
+
+        ClaudeMemory::ActivityLog.record(store,
+          event_type: "hook_context",
+          status: context_text ? "success" : "skipped",
+          session_id: session_id,
+          duration_ms: duration_ms,
+          details: details)
+      rescue => e
+        ClaudeMemory.logger.debug("record_context_activity failed: #{e.message}")
       end
 
       def classify_error(error)

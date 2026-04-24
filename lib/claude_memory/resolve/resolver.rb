@@ -150,6 +150,20 @@ module ClaudeMemory
       end
 
       def apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at, project_path:, scope:)
+        # Before creating a new disputed fact + conflict row, check whether
+        # we've already recorded this exact contradiction against the same
+        # active slot. Without this guard, every re-extraction of the losing
+        # value produced a new disputed fact + conflict row — the production
+        # DB accumulated 11 identical sqlite-vs-postgresql conflict rows that
+        # way. facts_for_slot defaults to status="active", so the existing
+        # disputed fact stayed invisible until we explicitly asked for it.
+        existing_disputed = @store.facts_for_slot(subject_id, fact_data[:predicate], status: "disputed")
+        matching = existing_disputed.find { |f| values_match?(f, fact_data[:object], nil) }
+        if matching
+          add_provenance(matching[:id], content_item_id, fact_data)
+          return {created: 0, superseded: 0, conflicts: 0, provenance: 1}
+        end
+
         create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at,
           project_path: project_path, scope: scope)
         {created: 0, superseded: 0, conflicts: 1, provenance: 0}

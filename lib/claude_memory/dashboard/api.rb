@@ -70,6 +70,22 @@ module ClaudeMemory
         Conflicts.new(@manager).list(params)
       end
 
+      def moments(params = {})
+        Moments.new(@manager).list(params)
+      end
+
+      def trust
+        Trust.new(@manager).snapshot
+      end
+
+      def knowledge(params = {})
+        Knowledge.new(@manager).summary(params)
+      end
+
+      def reuse(params = {})
+        Reuse.new(@manager).top(params)
+      end
+
       def conflict_detail(id, scope = "project")
         Conflicts.new(@manager).detail(id, scope)
       end
@@ -130,17 +146,112 @@ module ClaudeMemory
         content_item = content_item_id ? load_content_item(store, content_item_id) : nil
         linked_facts = if content_item_id
           load_linked_facts(store, content_item_id)
-        elsif details[:top_fact_ids].is_a?(Array) && !details[:top_fact_ids].empty?
-          load_facts_by_ids(store, details[:top_fact_ids])
         else
-          []
+          scoped = ScopedFactResolver.scoped_ids_from_details(details)
+          scoped.any? ? ScopedFactResolver.resolve(@manager, scoped) : []
         end
+
+        # For recalls, "what triggered this" is high-signal context that the
+        # raw event detail can't answer. Find the ingest immediately before
+        # this recall so the modal can show the user prompt / assistant turn
+        # that motivated the lookup. Time-window fallback when session_id is
+        # absent (MCP tool calls don't thread session_id).
+        trigger = (row[:event_type] == "recall") ? find_recall_trigger(store, row) : nil
 
         {
           event: event,
           content_item: content_item,
-          linked_facts: linked_facts
+          linked_facts: linked_facts,
+          trigger: trigger
+        }.compact
+      end
+
+      # Find the hook_ingest event that most likely triggered a given recall.
+      # Recall events often arrive from MCP tool calls without a session_id,
+      # so we use time proximity: the last successful ingest before the recall
+      # within a small window.
+      TRIGGER_WINDOW_SECONDS = 600 # 10 min — a realistic session stretch
+
+      def find_recall_trigger(store, recall_row)
+        window_start = (Time.parse(recall_row[:occurred_at]) - TRIGGER_WINDOW_SECONDS).utc.iso8601
+        dataset = store.activity_events
+          .where(event_type: %w[hook_ingest hook_context])
+          .where(status: "success")
+          .where { occurred_at <= recall_row[:occurred_at] }
+          .where { occurred_at >= window_start }
+
+        if recall_row[:session_id]
+          dataset = dataset.where(session_id: recall_row[:session_id])
+        end
+
+        row = dataset.order(Sequel.desc(:occurred_at)).first
+        return nil unless row
+
+        details = row[:detail_json] ? JSON.parse(row[:detail_json], symbolize_names: true) : {}
+        content_item_id = details[:content_id] || details[:content_item_id]
+        content = content_item_id ? load_content_item(store, content_item_id) : nil
+
+        {
+          event_id: row[:id],
+          event_type: row[:event_type],
+          occurred_at: row[:occurred_at],
+          occurred_ago: Core::RelativeTime.format(row[:occurred_at]),
+          session_id: row[:session_id],
+          user_prompt: content ? extract_user_prompt(content[:raw_text_preview]) : nil,
+          content_item: content
         }
+      rescue ArgumentError, JSON::ParserError, Sequel::DatabaseError => e
+        ClaudeMemory.logger.debug("find_recall_trigger failed: #{e.message}")
+        nil
+      end
+
+      # Claude Code transcripts are JSONL where each line is a user/assistant
+      # turn. Extract the most recent *human* user message (not a tool_result
+      # or Claude-Code command-stdout wrapper) so recall moments can show
+      # "what the user asked" instead of raw JSONL.
+      #
+      # Filters out:
+      # - tool_result entries (tool plumbing, not prompts)
+      # - <local-command-*> / <command-*> tagged content (Claude Code shell ops)
+      # - Blank / whitespace-only messages
+      #
+      # Returns nil on parse failure or when no human prompt is found.
+      def extract_user_prompt(raw_text)
+        return nil unless raw_text.is_a?(String) && !raw_text.empty?
+
+        raw_text.split("\n").reverse_each do |line|
+          next if line.strip.empty?
+          begin
+            turn = JSON.parse(line)
+          rescue JSON::ParserError
+            next
+          end
+          next unless turn.is_a?(Hash) && turn.dig("message", "role") == "user"
+
+          content = turn.dig("message", "content")
+          text = case content
+          when String then content
+          when Array
+            content.filter_map { |c|
+              next unless c.is_a?(Hash) && c["type"] == "text" && c["text"]
+              c["text"]
+            }.first
+          end
+
+          stripped = text.to_s.strip
+          next if stripped.empty?
+          next if plumbing_noise?(stripped)
+          return stripped
+        end
+        nil
+      end
+
+      COMMAND_TAG_RE = /\A<(?:local-command-[a-z]+|command-(?:name|args|message|stdout|stderr))\b/i
+
+      def plumbing_noise?(text)
+        return true if text.match?(COMMAND_TAG_RE)
+        return true if text.start_with?("[tool_") # tool_use / tool_result stringified
+        false
       end
 
       # Full detail view for a single fact — subject/predicate/object,
@@ -239,19 +350,32 @@ module ClaudeMemory
         }
       end
 
+      STALE_WINDOW_DAYS = 30
+
       def facts(params = {})
         scope = params["scope"] || "all"
         limit = (params["limit"] || 50).to_i
         offset = (params["offset"] || 0).to_i
         status_filter = params["status"] || "active"
         search = params["q"]
+        stale_only = params["stale"] == "true"
 
         stores = facts_stores_for(scope)
         return {facts: [], total: 0, limit: limit, offset: offset, scope: scope} if stores.empty?
 
+        # [scope, id] pairs seen in recent recalls. We exclude per-scope so
+        # project fact #5 being recalled doesn't hide global fact #5 from
+        # the stale view (and vice versa).
+        stale_excluded_pairs = stale_only ? facts_seen_in_recent_recalls : []
+        stale_excluded_by_scope = stale_excluded_pairs.group_by(&:first).transform_values { |pairs| pairs.map(&:last) }
+
         collected = stores.flat_map { |source, store|
           dataset = store.facts.where(status: status_filter)
           dataset = dataset.where(Sequel.like(:predicate, "%#{search}%") | Sequel.like(:object_literal, "%#{search}%")) if search && !search.empty?
+          if stale_only
+            excluded = stale_excluded_by_scope[source] || []
+            dataset = dataset.exclude(id: excluded) if excluded.any?
+          end
           rows = dataset.order(Sequel.desc(:created_at)).all
           presented = FactPresenter.new(store).list_summary(rows)
           presented.map { |f| f.merge(source: source) }
@@ -263,8 +387,35 @@ module ClaudeMemory
           limit: limit,
           offset: offset,
           scope: scope,
+          stale: stale_only,
           facts: Array(collected[offset, limit])
         }
+      end
+
+      # Aggregate scoped [scope, id] pairs that showed up in any successful
+      # recall over the stale window. Used to exclude "has been recalled
+      # recently" facts when the caller wants only the stale ones.
+      # Returns pairs rather than bare IDs so project fact #1 and global
+      # fact #1 don't collide.
+      def facts_seen_in_recent_recalls
+        store = default_store
+        return [] unless store
+        cutoff = (Time.now.utc - STALE_WINDOW_DAYS * 86_400).iso8601
+        pairs = Set.new
+        store.activity_events
+          .where(event_type: "recall", status: "success")
+          .where { occurred_at >= cutoff }
+          .select(:detail_json)
+          .all
+          .each do |row|
+            details = row[:detail_json] ? JSON.parse(row[:detail_json]) : {}
+            scoped = ScopedFactResolver.scoped_ids_from_details(details)
+            ScopedFactResolver.flat_pairs(scoped).each { |pair| pairs << pair }
+          end
+        pairs.to_a
+      rescue Sequel::DatabaseError, JSON::ParserError => e
+        ClaudeMemory.logger.debug("facts_seen_in_recent_recalls failed: #{e.message}")
+        []
       end
 
       def efficacy(params = {})

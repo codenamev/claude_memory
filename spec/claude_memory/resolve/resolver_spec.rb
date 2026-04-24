@@ -89,6 +89,36 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
           expect(conflicts.size).to eq(1)
         end
 
+        it "does not duplicate a conflict when the same contradiction is re-extracted" do
+          # Audited in .claude/memory.sqlite3 on 2026-04-24: sqlite vs postgresql
+          # conflicts appeared 11 times for what is semantically one contradiction.
+          # Root cause: disputed facts are invisible to facts_for_slot (defaults
+          # to status='active'), so the next re-extraction of the losing value
+          # doesn't find the existing disputed fact — it inserts another disputed
+          # fact and a new conflict row.
+          extraction_winner = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_database", object: "postgresql", strength: "stated"}]
+          )
+          resolver.apply(extraction_winner)
+
+          extraction_loser = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_database", object: "sqlite", strength: "inferred"}]
+          )
+          resolver.apply(extraction_loser)
+          result = resolver.apply(extraction_loser)
+
+          # Second application must not create another disputed fact or conflict.
+          expect(result[:conflicts_created]).to eq(0)
+          expect(result[:facts_created]).to eq(0)
+          # Provenance still accrues so we can tell how many times the
+          # contradiction was observed.
+          expect(result[:provenance_created]).to eq(1)
+
+          expect(store.open_conflicts.size).to eq(1)
+          disputed = store.facts.where(status: "disputed").all
+          expect(disputed.size).to eq(1)
+        end
+
         it "adds provenance to matching existing fact" do
           extraction1 = ClaudeMemory::Distill::Extraction.new(
             facts: [{subject: "repo", predicate: "uses_database", object: "postgresql", strength: "stated"}]

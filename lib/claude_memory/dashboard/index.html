@@ -3,21 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ClaudeMemory Dashboard</title>
+<title>ClaudeMemory</title>
 <style>
   :root {
     --bg: #0d1117;
     --surface: #161b22;
     --surface2: #21262d;
+    --surface3: #2d333b;
     --border: #30363d;
-    --text: #c9d1d9;
+    --text: #e6edf3;
     --text-dim: #8b949e;
+    --text-faint: #6e7681;
     --accent: #58a6ff;
+    --accent-dim: rgba(88,166,255,0.15);
     --green: #3fb950;
+    --green-dim: rgba(63,185,80,0.12);
     --yellow: #d29922;
+    --yellow-dim: rgba(210,153,34,0.12);
     --red: #f85149;
+    --red-dim: rgba(248,81,73,0.12);
     --purple: #bc8cff;
+    --purple-dim: rgba(188,140,255,0.12);
     --radius: 8px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -26,200 +34,269 @@
     color: var(--text);
     line-height: 1.5;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
+  button, input, select, textarea { font-family: inherit; color: inherit; }
+
+  /* ---------- Top strip ---------- */
   header {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 16px 24px;
+    padding: 14px 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
   }
-  header h1 { font-size: 18px; font-weight: 600; }
-  header h1 span { color: var(--accent); }
-  .header-meta { color: var(--text-dim); font-size: 13px; }
-  .header-meta .version { color: var(--accent); }
-  .header-meta .status-dot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-right: 4px;
-    vertical-align: middle;
-  }
-  .status-dot.healthy { background: var(--green); }
-  .status-dot.warning { background: var(--yellow); }
-  .status-dot.error { background: var(--red); }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand h1 span { color: var(--accent); }
+  .brand .tagline { font-size: 12px; color: var(--text-faint); }
 
-  main { max-width: 1280px; margin: 0 auto; padding: 24px; }
-
-  .tabs {
-    display: flex;
-    gap: 2px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
-  }
-  .tab {
-    padding: 8px 16px;
-    cursor: pointer;
+  .top-actions { display: flex; align-items: center; gap: 12px; }
+  .health-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+  .health-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 12px;
     color: var(--text-dim);
-    border-bottom: 2px solid transparent;
-    font-size: 14px;
+    cursor: default;
+  }
+  .health-pill.actionable { cursor: pointer; }
+  .health-pill.actionable:hover { border-color: var(--accent); color: var(--text); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.healthy { background: var(--green); }
+  .dot.warning { background: var(--yellow); }
+  .dot.error { background: var(--red); }
+
+  .icon-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 12px;
     transition: all 0.15s;
   }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--text); }
+  .icon-btn.primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
 
-  .grid { display: grid; gap: 16px; }
-  .grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+  /* ---------- Layout ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 24px;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+  }
 
-  .card {
+  /* ---------- Trust sidebar ---------- */
+  aside {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: sticky;
+    top: 24px;
+  }
+  @media (max-width: 880px) {
+    aside { position: static; }
+  }
+  .panel {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 16px;
   }
-  .card h3 {
-    font-size: 12px;
+  .panel-label {
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
     margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
-  .card .value {
-    font-size: 28px;
+  .panel-hint {
+    font-size: 10px;
+    color: var(--text-faint);
+    cursor: help;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .moments-headline {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .moments-headline .n {
+    font-size: 40px;
     font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .moments-headline .delta {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .delta.up { color: var(--green); }
+  .delta.down { color: var(--red); }
+  .delta.flat { color: var(--text-dim); }
+  .moments-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+
+  /* Knowledge-base sidebar panel */
+  .kb-totals {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--surface2);
+  }
+  .kb-totals .big {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
     color: var(--text);
   }
-  .card .sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-
-  .health-checks {
+  .kb-totals .split {
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .kb-rows { display: flex; flex-direction: column; gap: 4px; }
+  .kb-row {
     display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    transition: background 0.15s;
+  }
+  .kb-row:hover { background: var(--surface2); }
+  .kb-row .kb-label { display: flex; flex-direction: column; }
+  .kb-row .kb-desc { font-size: 10px; color: var(--text-faint); margin-top: 1px; }
+  .kb-row .kb-count {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 14px;
+  }
+  .kb-row.empty { cursor: default; opacity: 0.55; }
+  .kb-row.empty:hover { background: transparent; }
+  .kb-row.empty .kb-count { color: var(--text-faint); }
+
+  /* Reuse sidebar panel */
+  .reuse-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .reuse-list li {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text);
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 4px;
+    transition: background 0.15s;
+  }
+  .reuse-list li:hover { background: var(--surface2); }
+  .reuse-list .reuse-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+  .reuse-list .reuse-head .pred {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    background: var(--purple-dim);
+    color: var(--purple);
+    border-radius: 3px;
+  }
+  .reuse-list .reuse-count {
+    font-variant-numeric: tabular-nums;
+    color: var(--green);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .reuse-list .reuse-obj {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .reuse-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.45;
+  }
+
+  .review-rows { display: flex; flex-direction: column; gap: 6px; }
+  .review-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .review-row.alert { background: var(--yellow-dim); color: var(--text); cursor: pointer; }
+  .review-row.alert:hover { background: rgba(210,153,34,0.2); }
+  .review-row .count { font-weight: 600; color: var(--text); }
+
+  /* ---------- Main feed ---------- */
+  main { min-width: 0; }
+
+  .feed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
     gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 24px;
   }
-  .health-check {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px 16px;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 1;
-    min-width: 200px;
-  }
-  .health-check .label { font-weight: 500; }
-  .health-check .msg { color: var(--text-dim); }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  th {
-    text-align: left;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text-dim);
-    font-weight: 500;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  td {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--surface2);
-    vertical-align: top;
-  }
-  tr:hover td { background: var(--surface2); }
-
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 500;
-  }
-  .badge-success { background: rgba(63,185,80,0.15); color: var(--green); }
-  .badge-warning { background: rgba(210,153,34,0.15); color: var(--yellow); }
-  .badge-error { background: rgba(248,81,73,0.15); color: var(--red); }
-  .badge-info { background: rgba(88,166,255,0.15); color: var(--accent); }
-  .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
-
-  .bar-chart { margin-top: 12px; }
-  .bar-row {
-    display: flex;
-    align-items: center;
-    margin-bottom: 6px;
-    font-size: 13px;
-  }
-  .bar-label { width: 160px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-track { flex: 1; height: 20px; background: var(--surface2); border-radius: 4px; margin: 0 8px; overflow: hidden; }
-  .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.5s ease; min-width: 2px; }
-  .bar-value { width: 40px; text-align: right; color: var(--text-dim); font-size: 12px; }
-
-  .timeline-chart {
-    display: flex;
-    align-items: flex-end;
-    gap: 2px;
-    height: 120px;
-    padding: 8px 0;
-  }
-  .timeline-bar {
-    flex: 1;
-    background: var(--accent);
-    border-radius: 2px 2px 0 0;
-    min-height: 2px;
-    opacity: 0.7;
-    transition: opacity 0.15s;
-    position: relative;
-  }
-  .timeline-bar:hover { opacity: 1; }
-  .timeline-bar .tooltip {
-    display: none;
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    white-space: nowrap;
-    z-index: 10;
-  }
-  .timeline-bar:hover .tooltip { display: block; }
-
-  .search-box {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 8px 12px;
-    color: var(--text);
+  .feed-title {
     font-size: 14px;
-    width: 100%;
-    max-width: 400px;
-    margin-bottom: 16px;
-    outline: none;
+    font-weight: 500;
+    color: var(--text);
   }
-  .search-box:focus { border-color: var(--accent); }
+  .feed-title .count { color: var(--text-dim); font-weight: 400; margin-left: 6px; }
 
-  .filter-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .filter-btn {
-    padding: 4px 12px;
-    border-radius: 16px;
+  .feed-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    padding: 4px 10px;
+    border-radius: 999px;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text-dim);
@@ -227,51 +304,160 @@
     font-size: 12px;
     transition: all 0.15s;
   }
-  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
-  .filter-btn.active { background: rgba(88,166,255,0.15); border-color: var(--accent); color: var(--accent); }
+  .chip:hover { color: var(--text); border-color: var(--text-dim); }
+  .chip.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
 
-  .empty-state {
+  .feed { display: flex; flex-direction: column; gap: 10px; }
+  .feed-empty {
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 40px 24px;
     text-align: center;
-    padding: 48px;
     color: var(--text-dim);
+    font-size: 14px;
   }
-  .empty-state p { font-size: 14px; margin-top: 8px; }
-
-  .efficacy-card {
-    text-align: center;
-    padding: 24px;
+  .feed-empty h3 {
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 8px;
   }
-  .efficacy-card .big-number {
-    font-size: 48px;
-    font-weight: 700;
+  .feed-empty code {
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 13px;
     color: var(--accent);
   }
-  .efficacy-card .label {
-    font-size: 14px;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
 
-  .refresh-btn {
-    background: var(--surface2);
+  .moment {
+    background: var(--surface);
     border: 1px solid var(--border);
-    color: var(--text-dim);
-    padding: 4px 12px;
     border-radius: var(--radius);
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.15s;
+    padding: 14px 16px;
+    display: flex;
+    gap: 14px;
+    animation: slideIn 0.25s ease;
   }
-  .refresh-btn:hover { border-color: var(--accent); color: var(--text); }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .moment:hover { border-color: var(--surface3); }
 
-  #status-text.actionable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
-  #status-text.actionable:hover { color: var(--text); }
-  .health-check.actionable { cursor: pointer; }
-  .health-check.actionable:hover { border-color: var(--accent); }
+  .moment-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .moment-icon.context { background: var(--purple-dim); color: var(--purple); }
+  .moment-icon.recall_hit { background: var(--accent-dim); color: var(--accent); }
+  .moment-icon.recall_empty { background: var(--yellow-dim); color: var(--yellow); }
+  .moment-icon.extraction { background: var(--green-dim); color: var(--green); }
+  .moment-icon.ingest { background: var(--surface3); color: var(--text-dim); }
+  .moment-icon.sweep { background: var(--surface3); color: var(--text-faint); }
+  .moment-icon.conflict { background: var(--red-dim); color: var(--red); }
 
+  .moment-body { flex: 1; min-width: 0; }
+  .moment-headline {
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--text);
+  }
+  .moment-headline strong { color: var(--text); font-weight: 600; }
+  .moment-meta {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 2px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .moment-meta .dotsep::before { content: "·"; margin: 0 4px; color: var(--text-faint); }
+
+  .moment-detail {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .moment-facts {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .moment-facts li {
+    font-size: 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .moment-facts .pred {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    background: var(--purple-dim);
+    color: var(--purple);
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .moment-facts .obj {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .moment-expand {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+    margin-top: 6px;
+  }
+  .moment-expand:hover { color: var(--accent); }
+
+  .moment-preview {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border-left: 2px solid var(--surface3);
+    border-radius: 0 4px 4px 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    max-height: 120px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .moment-query {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+
+  /* ---------- Modals & Advanced drawer ---------- */
   .modal-backdrop {
     position: fixed; inset: 0;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.7);
     display: none;
     align-items: flex-start;
     justify-content: center;
@@ -287,8 +473,9 @@
     width: 100%;
     max-width: 720px;
     padding: 20px 24px 24px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    box-shadow: 0 12px 48px rgba(0,0,0,0.6);
   }
+  .modal-wide { max-width: 960px; }
   .modal-header {
     display: flex;
     align-items: center;
@@ -306,17 +493,20 @@
     padding: 4px 8px;
   }
   .modal-close:hover { color: var(--text); }
-  .modal-issue {
-    border-top: 1px solid var(--surface2);
-    padding: 16px 0;
+  .modal-section { margin-top: 16px; }
+  .modal-section:first-of-type { margin-top: 0; }
+  .modal-section h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-bottom: 8px;
   }
+  .modal-issue { border-top: 1px solid var(--surface2); padding: 16px 0; }
   .modal-issue:first-of-type { border-top: none; padding-top: 0; }
   .modal-issue-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 500;
-    margin-bottom: 4px;
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 500; margin-bottom: 4px;
   }
   .modal-issue-msg { color: var(--text-dim); font-size: 13px; margin-bottom: 8px; }
   .modal-issue-fix {
@@ -332,19 +522,9 @@
     padding: 1px 6px;
     border-radius: 3px;
     font-size: 12px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--mono);
   }
-  .modal-empty { color: var(--text-dim); font-size: 13px; }
-  .modal-wide { max-width: 960px; }
-  .modal-section { margin-top: 16px; }
-  .modal-section:first-of-type { margin-top: 0; }
-  .modal-section h3 {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-dim);
-    margin-bottom: 8px;
-  }
+
   .modal-kv {
     display: grid;
     grid-template-columns: 140px 1fr;
@@ -352,11 +532,8 @@
     font-size: 13px;
   }
   .modal-kv dt { color: var(--text-dim); }
-  .modal-kv dd {
-    word-break: break-word;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
-  }
+  .modal-kv dd { word-break: break-word; font-family: var(--mono); font-size: 12px; }
+
   pre.modal-json, pre.modal-text {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -366,58 +543,45 @@
     max-height: 320px;
     overflow: auto;
     font-size: 12px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--mono);
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .json-key { color: var(--accent); }
-  .json-string { color: var(--green); }
-  .json-number { color: var(--yellow); }
-  .json-bool { color: var(--purple); }
-  .json-null { color: var(--text-dim); font-style: italic; }
-  .json-error {
-    color: var(--red);
-    font-size: 11px;
-    display: block;
-    margin-bottom: 6px;
-    opacity: 0.9;
-  }
-  tr.row-clickable { cursor: pointer; }
-  tr.row-clickable:hover td { background: var(--surface2); }
 
+  /* Conflict pair — inline in moment detail & in advanced drawer */
   .conflict-pair {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: 12px;
+    margin-top: 8px;
   }
   .conflict-side {
     background: var(--surface2);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px;
+    border-radius: 6px;
+    padding: 12px;
   }
   .conflict-side h4 {
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-dim);
-    margin-bottom: 8px;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-bottom: 6px;
   }
   .conflict-fact-object {
     background: var(--bg);
     border-radius: 4px;
     padding: 8px 10px;
     margin: 6px 0 10px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--mono);
     font-size: 12px;
     white-space: pre-wrap;
     word-break: break-word;
-    max-height: 200px;
+    max-height: 160px;
     overflow: auto;
   }
   .conflict-prov-list {
     list-style: none;
-    padding-left: 0;
     font-size: 12px;
     color: var(--text-dim);
   }
@@ -428,47 +592,44 @@
   .conflict-prov-list li:first-child { border-top: none; }
   .conflict-prov-list .quote {
     color: var(--text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--mono);
     font-size: 11px;
     display: block;
     padding-top: 2px;
   }
   .conflict-actions {
-    margin-top: 12px;
+    margin-top: 10px;
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: flex-start;
   }
   .btn-reject {
     background: transparent;
     border: 1px solid var(--red);
     color: var(--red);
-    padding: 6px 12px;
+    padding: 5px 10px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
   }
-  .btn-reject:hover { background: rgba(248,81,73,0.08); }
+  .btn-reject:hover { background: var(--red-dim); }
   .btn-reject:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-promote {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn-promote:hover { background: var(--accent-dim); }
   .conflict-reason {
     flex: 1;
     background: var(--bg);
     border: 1px solid var(--border);
     color: var(--text);
-    font-size: 12px;
-    padding: 6px 8px;
+    font-size: 11px;
+    padding: 4px 6px;
     border-radius: 4px;
-    min-height: 28px;
+    min-height: 24px;
     resize: vertical;
-  }
-  .conflict-meta {
-    font-size: 12px;
-    color: var(--text-dim);
-    padding: 10px 12px;
-    background: var(--surface2);
-    border-radius: 4px;
-    margin-bottom: 16px;
   }
 
   .toast {
@@ -488,381 +649,674 @@
     z-index: 200;
     max-width: 420px;
   }
-  .toast.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  .toast.visible { opacity: 1; transform: translateY(0); }
   .toast.error { border-color: var(--red); }
 
-  @media (max-width: 768px) {
-    .grid-2 { grid-template-columns: 1fr; }
-    .grid-4 { grid-template-columns: repeat(2, 1fr); }
-    .health-checks { flex-direction: column; }
+  /* ---------- Advanced drawer ---------- */
+  .drawer {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: min(960px, 100%);
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+    z-index: 90;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-scrim {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 89;
+    display: none;
+  }
+  .drawer-scrim.open { display: block; }
+  .drawer-header {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 1;
+  }
+  .drawer-header h2 { font-size: 15px; font-weight: 600; }
+  .drawer-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    background: var(--surface);
+  }
+  .drawer-tab {
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .drawer-tab:hover { color: var(--text); }
+  .drawer-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .drawer-panel { display: none; padding: 20px; }
+  .drawer-panel.active { display: block; }
+
+  /* Generic tables inside drawer */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-faint);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--surface2);
+    vertical-align: top;
+  }
+  tr.row-clickable { cursor: pointer; }
+  tr.row-clickable:hover td { background: var(--surface2); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 500;
+    font-family: var(--mono);
+  }
+  .badge-success { background: var(--green-dim); color: var(--green); }
+  .badge-warning { background: var(--yellow-dim); color: var(--yellow); }
+  .badge-error { background: var(--red-dim); color: var(--red); }
+  .badge-info { background: var(--accent-dim); color: var(--accent); }
+  .badge-purple { background: var(--purple-dim); color: var(--purple); }
+
+  .bar-chart { margin-top: 8px; }
+  .bar-row { display: flex; align-items: center; margin-bottom: 4px; font-size: 12px; }
+  .bar-label { width: 140px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; height: 14px; background: var(--surface2); border-radius: 3px; margin: 0 6px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 3px; min-width: 2px; transition: width 0.4s ease; }
+  .bar-value { width: 36px; text-align: right; color: var(--text-dim); font-size: 11px; }
+
+  .search-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  .search-box:focus { border-color: var(--accent); }
+
+  .adv-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .adv-card h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-bottom: 10px;
+  }
+  .adv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+  }
+  .adv-metric {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .adv-metric .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+  .adv-metric .value {
+    font-size: 22px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .filter-row .search-box { flex: 1; min-width: 220px; }
+
+  .json-key { color: var(--accent); }
+  .json-string { color: var(--green); }
+  .json-number { color: var(--yellow); }
+  .json-bool { color: var(--purple); }
+  .json-null { color: var(--text-faint); font-style: italic; }
+  .json-error { color: var(--red); font-size: 11px; display: block; margin-bottom: 6px; }
+
+  /* ---------- Rich moment modals ---------- */
+  .recall-header {
+    display: flex;
+    gap: 24px;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-radius: 6px;
+    margin-bottom: 14px;
+  }
+  .recall-stat { display: flex; flex-direction: column; gap: 2px; }
+  .recall-stat-n { font-size: 20px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+  .recall-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); }
+  .recall-query {
+    margin-bottom: 14px;
+  }
+  .recall-query .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-bottom: 4px; }
+  .recall-query .query-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--bg);
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    word-break: break-word;
+  }
+  .trigger-card {
+    background: var(--surface2);
+    border-left: 3px solid var(--accent);
+    padding: 10px 12px;
+    border-radius: 0 6px 6px 0;
+  }
+  .trigger-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-bottom: 4px; }
+  .trigger-prompt { font-size: 13px; line-height: 1.5; color: var(--text); }
+  .trigger-session { font-size: 11px; color: var(--text-faint); margin-top: 6px; font-family: var(--mono); }
+
+  .facts-table { width: 100%; }
+  .facts-table .object-cell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .facts-table tr.row-clickable td { padding: 10px; }
+
+  .source-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .source-meta code { background: var(--bg); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+  .source-body {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    max-height: 380px;
+    overflow: auto;
+  }
+  .prose {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .context-preview {
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .turn {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-left: 2px solid var(--border);
+    background: var(--surface);
+    border-radius: 0 4px 4px 0;
+  }
+  .turn:last-child { margin-bottom: 0; }
+  .turn-user { border-left-color: var(--accent); }
+  .turn-assistant { border-left-color: var(--purple); }
+  .turn-role {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-bottom: 4px;
+  }
+  .turn-user .turn-role { color: var(--accent); }
+  .turn-assistant .turn-role { color: var(--purple); }
+  .turn-text {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+
+  .modal-collapsible {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .modal-collapsible summary {
+    cursor: pointer;
+    padding: 6px 0;
+    user-select: none;
+  }
+  .modal-collapsible summary:hover { color: var(--text); }
+  .modal-collapsible[open] summary { color: var(--text); }
+
+  /* ---------- Knowledge drawer tab ---------- */
+  .knowledge-body { display: flex; flex-direction: column; gap: 24px; }
+  .knowledge-section { }
+  .knowledge-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .knowledge-section-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .knowledge-section-header .count {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .knowledge-section-header .desc {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-left: auto;
+  }
+  .knowledge-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 20px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .knowledge-cards { display: flex; flex-direction: column; gap: 8px; }
+  .knowledge-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .knowledge-card:hover { border-color: var(--accent); }
+  .knowledge-card .kc-object {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .knowledge-card .kc-meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-faint);
+    flex-wrap: wrap;
+  }
+  .knowledge-card .kc-meta .pred {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    background: var(--purple-dim);
+    color: var(--purple);
+    border-radius: 3px;
+  }
+  .knowledge-card .kc-meta .src {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .knowledge-card .kc-meta .src.project { background: var(--accent-dim); color: var(--accent); }
+  .knowledge-card .kc-meta .src.global { background: var(--purple-dim); color: var(--purple); }
+  .knowledge-card.highlighted {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+
+  /* ---------- Recall error card ---------- */
+  .recall-error-card {
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+  .recall-error-card h4 {
+    color: var(--red);
+    font-size: 13px;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .recall-error-card p {
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+  .recall-error-card .cmd-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .recall-error-card .cmd { flex: 1; color: var(--text); word-break: break-all; }
+  .recall-error-card .copy-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .recall-error-card .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .recall-error-card .retry-hint {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 8px;
   }
 </style>
 </head>
 <body>
 
 <header>
-  <h1><span>Claude</span>Memory Dashboard</h1>
-  <div class="header-meta">
-    <span class="status-dot" id="status-dot"></span>
-    <span id="status-text">Loading...</span>
-    &middot;
-    <span class="version" id="version-text"></span>
-    &middot;
-    <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+  <div class="brand">
+    <h1><span>Claude</span>Memory</h1>
+    <span class="tagline" id="version-tag"></span>
+  </div>
+  <div class="top-actions">
+    <div class="health-strip" id="health-strip"></div>
+    <button class="icon-btn" onclick="loadAll()" title="Refresh">↻</button>
+    <button class="icon-btn" onclick="openDrawer('overview')">Advanced ▸</button>
   </div>
 </header>
 
-<main>
-  <div class="health-checks" id="health-checks"></div>
-
-  <div class="modal-backdrop" id="health-modal" role="dialog" aria-labelledby="health-modal-title" aria-modal="true">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h2 id="health-modal-title">How to fix</h2>
-        <button class="modal-close" aria-label="Close" onclick="closeHealthModal()">&times;</button>
+<div class="layout">
+  <aside>
+    <div class="panel" id="panel-knowledge">
+      <div class="panel-label">Your knowledge base
+        <span class="panel-hint" title="Facts Claude has learned from your sessions, grouped by category. Click to browse each.">ⓘ</span>
       </div>
-      <div id="health-modal-body"></div>
+      <div class="kb-totals" id="kb-totals"></div>
+      <div class="kb-rows" id="kb-rows"></div>
     </div>
-  </div>
 
-  <div class="modal-backdrop" id="activity-modal" role="dialog" aria-labelledby="activity-modal-title" aria-modal="true">
-    <div class="modal modal-wide" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h2 id="activity-modal-title">Activity details</h2>
-        <button class="modal-close" aria-label="Close" onclick="closeActivityModal()">&times;</button>
+    <div class="panel" id="panel-reuse">
+      <div class="panel-label">Most used this week
+        <span class="panel-hint" title="Facts Claude actually recalled or injected into sessions in the last 7 days. This is the ROI — memories you taught that are actively shaping responses.">ⓘ</span>
       </div>
-      <div id="activity-modal-body"></div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="conflict-modal" role="dialog" aria-labelledby="conflict-modal-title" aria-modal="true">
-    <div class="modal modal-wide" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h2 id="conflict-modal-title">Conflict</h2>
-        <button class="modal-close" aria-label="Close" onclick="closeConflictModal()">&times;</button>
-      </div>
-      <div id="conflict-modal-body"></div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="fact-modal" role="dialog" aria-labelledby="fact-modal-title" aria-modal="true">
-    <div class="modal modal-wide" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h2 id="fact-modal-title">Fact detail</h2>
-        <button class="modal-close" aria-label="Close" onclick="closeFactModal()">&times;</button>
-      </div>
-      <div id="fact-modal-body"></div>
-    </div>
-  </div>
-
-  <div id="toast" class="toast"></div>
-
-  <div class="tabs">
-    <div class="tab active" data-tab="overview">Overview</div>
-    <div class="tab" data-tab="activity">Activity</div>
-    <div class="tab" data-tab="facts">Facts</div>
-    <div class="tab" data-tab="explore">Explore</div>
-    <div class="tab" data-tab="efficacy">Efficacy</div>
-    <div class="tab" data-tab="conflicts">Conflicts</div>
-  </div>
-
-  <!-- Overview Tab -->
-  <div class="tab-panel active" id="tab-overview">
-    <div class="card" id="session-card" style="display: none;">
-      <h3>This session</h3>
-      <div id="session-card-body"></div>
-    </div>
-    <div id="metric-rows"></div>
-    <div class="grid grid-2" style="margin-top: 24px;">
-      <div class="card">
-        <h3>Top Predicates</h3>
-        <div class="bar-chart" id="predicate-chart"></div>
-      </div>
-      <div class="card">
-        <h3>Entity Types</h3>
-        <div class="bar-chart" id="entity-chart"></div>
+      <ul class="reuse-list" id="reuse-list"></ul>
+      <div class="reuse-empty" id="reuse-empty" style="display:none;">
+        No memory recalls in the last 7 days. When Claude calls memory.recall / memory.conventions / memory.decisions, the top facts returned will appear here.
       </div>
     </div>
-    <div class="card" style="margin-top: 24px;">
-      <h3>Activity Timeline (30 days)</h3>
-      <div class="timeline-chart" id="timeline-chart"></div>
+
+    <div class="panel" id="panel-moments">
+      <div class="panel-label">Activity this week</div>
+      <div class="moments-headline">
+        <span class="n" id="moments-count">—</span>
+        <span class="delta flat" id="moments-delta"></span>
+      </div>
+      <div class="moments-sub" id="moments-sub"></div>
     </div>
+
+    <div class="panel" id="panel-review">
+      <div class="panel-label">Needs review</div>
+      <div class="review-rows" id="review-rows"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="feed-header">
+      <div class="feed-title">Recent moments <span class="count" id="feed-count"></span></div>
+      <div class="feed-filters" id="feed-filters">
+        <button class="chip active" data-kinds="context_injection,recall_hit,recall_empty,extraction">Value moments</button>
+        <button class="chip" data-kinds="context_injection">Context</button>
+        <button class="chip" data-kinds="recall_hit,recall_empty">Recalls</button>
+        <button class="chip" data-kinds="extraction">Extractions</button>
+        <button class="chip" data-kinds="ingest,ingest_skipped,sweep">Plumbing</button>
+        <button class="chip" data-kinds="">All</button>
+      </div>
+    </div>
+    <div class="feed" id="feed"></div>
+    <div class="feed-empty" id="feed-empty" style="display:none;">
+      <h3>No value moments yet in this filter</h3>
+      <p>A "value moment" is when memory shapes a Claude session — an injection at session start, a recall during a conversation, or an extraction that captures a new fact.</p>
+      <p style="margin-top: 10px;">Check <button class="icon-btn" style="display: inline-block;" onclick="switchFeedToAll()">All</button> to see plumbing events, or open Claude Code and start a conversation to produce new moments.</p>
+    </div>
+  </main>
+</div>
+
+<!-- ---------- Modals ---------- -->
+<div class="modal-backdrop" id="health-modal" role="dialog" aria-modal="true">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>How to fix</h2>
+      <button class="modal-close" aria-label="Close" onclick="closeModal('health-modal')">&times;</button>
+    </div>
+    <div id="health-modal-body"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="moment-modal" role="dialog" aria-modal="true">
+  <div class="modal modal-wide" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="moment-modal-title">Moment details</h2>
+      <button class="modal-close" aria-label="Close" onclick="closeModal('moment-modal')">&times;</button>
+    </div>
+    <div id="moment-modal-body"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="conflict-modal" role="dialog" aria-modal="true">
+  <div class="modal modal-wide" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Conflict</h2>
+      <button class="modal-close" aria-label="Close" onclick="closeModal('conflict-modal')">&times;</button>
+    </div>
+    <div id="conflict-modal-body"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="fact-modal" role="dialog" aria-modal="true">
+  <div class="modal modal-wide" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Fact detail</h2>
+      <button class="modal-close" aria-label="Close" onclick="closeModal('fact-modal')">&times;</button>
+    </div>
+    <div id="fact-modal-body"></div>
+  </div>
+</div>
+
+<!-- ---------- Advanced drawer ---------- -->
+<div class="drawer-scrim" id="drawer-scrim" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <h2>Advanced</h2>
+    <button class="modal-close" onclick="closeDrawer()">&times;</button>
+  </div>
+  <div class="drawer-tabs">
+    <div class="drawer-tab active" data-adv="knowledge">Knowledge</div>
+    <div class="drawer-tab" data-adv="overview">Overview</div>
+    <div class="drawer-tab" data-adv="facts">Facts</div>
+    <div class="drawer-tab" data-adv="explore">Explore</div>
+    <div class="drawer-tab" data-adv="efficacy">Efficacy</div>
+    <div class="drawer-tab" data-adv="conflicts">Conflicts</div>
+    <div class="drawer-tab" data-adv="activity">Raw log</div>
   </div>
 
-  <!-- Activity Tab -->
-  <div class="tab-panel" id="tab-activity">
+  <div class="drawer-panel active" id="adv-knowledge">
     <div class="filter-row">
-      <span style="color: var(--text-dim); font-size: 12px;">Filter:</span>
-      <button class="filter-btn active" data-filter="all">All</button>
-      <button class="filter-btn" data-filter="hook_ingest">Ingest</button>
-      <button class="filter-btn" data-filter="hook_context">Context</button>
-      <button class="filter-btn" data-filter="hook_sweep">Sweep</button>
-      <button class="filter-btn" data-filter="recall">Recall</button>
-      <button class="filter-btn" data-filter="store_extraction">Store</button>
+      <button class="chip active" data-knowledge-scope="all">All scopes</button>
+      <button class="chip" data-knowledge-scope="project">Project only</button>
+      <button class="chip" data-knowledge-scope="global">Global only</button>
+      <span style="color: var(--text-faint); font-size: 11px; margin-left: auto;" id="knowledge-totals"></span>
     </div>
-    <div class="card">
+    <div class="knowledge-body" id="knowledge-body"></div>
+  </div>
+
+  <div class="drawer-panel" id="adv-overview">
+    <div id="overview-rows"></div>
+    <div class="adv-card">
+      <h3>Top predicates</h3>
+      <div class="bar-chart" id="predicate-chart"></div>
+    </div>
+    <div class="adv-card">
+      <h3>Entity types</h3>
+      <div class="bar-chart" id="entity-chart"></div>
+    </div>
+  </div>
+
+  <div class="drawer-panel" id="adv-facts">
+    <div class="filter-row">
+      <input class="search-box" id="fact-search" placeholder="Search by predicate or value…">
+      <button class="chip active" data-fact-scope="all">All</button>
+      <button class="chip" data-fact-scope="project">Project</button>
+      <button class="chip" data-fact-scope="global">Global</button>
+      <button class="chip active" data-status="active">Active</button>
+      <button class="chip" data-status="superseded">Superseded</button>
+      <button class="chip" id="stale-chip" data-stale="true" title="Active facts never returned by a recall in the last 30 days">Stale (30d)</button>
+    </div>
+    <div class="adv-card" style="padding: 0;">
       <table>
         <thead>
-          <tr>
-            <th>Time</th>
-            <th>Event</th>
-            <th>Scope</th>
-            <th>Status</th>
-            <th>Duration</th>
-            <th>Details</th>
-          </tr>
-        </thead>
-        <tbody id="activity-tbody"></tbody>
-      </table>
-      <div class="empty-state" id="activity-empty" style="display:none;">
-        <p>No activity events recorded yet.</p>
-        <p>Events will appear here as hooks run and memory tools are used.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Facts Tab -->
-  <div class="tab-panel" id="tab-facts">
-    <div class="filter-row">
-      <input class="search-box" id="fact-search" placeholder="Search facts by predicate or value..." />
-      <button class="filter-btn active" data-fact-scope="all">All</button>
-      <button class="filter-btn" data-fact-scope="project">Project</button>
-      <button class="filter-btn" data-fact-scope="global">Global</button>
-      <span style="color: var(--text-dim); font-size: 12px; margin-left: 16px;">Status:</span>
-      <button class="filter-btn active" data-status="active">Active</button>
-      <button class="filter-btn" data-status="superseded">Superseded</button>
-    </div>
-    <div class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Subject</th>
-            <th>Predicate</th>
-            <th>Object</th>
-            <th>Confidence</th>
-            <th>Scope</th>
-            <th>Source</th>
-            <th>Created</th>
-          </tr>
+          <tr><th>ID</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Conf</th><th>Source</th><th>Created</th></tr>
         </thead>
         <tbody id="facts-tbody"></tbody>
       </table>
-      <div class="empty-state" id="facts-empty" style="display:none;">
-        <p>No facts found.</p>
-      </div>
     </div>
   </div>
 
-  <!-- Explore Tab -->
-  <div class="tab-panel" id="tab-explore">
-    <div class="card">
-      <h3>Try a recall</h3>
-      <p style="color: var(--text-dim); font-size: 12px; margin-bottom: 12px;">
-        Run a query through the same pipeline Claude uses via <code>memory.recall</code>.
-        Useful for verifying that memory actually has what you'd expect to find.
+  <div class="drawer-panel" id="adv-explore">
+    <div class="adv-card">
+      <h3>Run a recall</h3>
+      <p style="color: var(--text-dim); font-size: 12px; margin-bottom: 10px;">
+        Fires the same pipeline Claude uses via <code>memory.recall</code>. Useful for verifying that memory has what you'd expect.
       </p>
-      <div style="display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;">
-        <input type="text" id="explore-query" placeholder="e.g., dashboard architecture" class="search-box" style="flex: 1; min-width: 260px;">
-        <select id="explore-scope" class="search-box" style="max-width: 140px;">
+      <div class="filter-row">
+        <input class="search-box" id="explore-query" placeholder="e.g., dashboard architecture">
+        <select class="search-box" id="explore-scope" style="flex: 0 0 130px;">
           <option value="all">All scopes</option>
           <option value="project">Project only</option>
           <option value="global">Global only</option>
         </select>
-        <select id="explore-limit" class="search-box" style="max-width: 120px;">
+        <select class="search-box" id="explore-limit" style="flex: 0 0 110px;">
           <option value="5">5 results</option>
           <option value="10" selected>10 results</option>
           <option value="20">20 results</option>
           <option value="50">50 results</option>
         </select>
-        <button id="explore-btn" class="filter-btn" style="padding: 8px 16px;">Recall</button>
+        <button class="icon-btn primary" id="explore-btn">Recall</button>
       </div>
-      <div id="explore-meta" style="margin-top: 12px; font-size: 12px; color: var(--text-dim);"></div>
+      <div id="explore-meta" style="font-size: 12px; color: var(--text-dim);"></div>
     </div>
-    <div class="card" style="margin-top: 16px;">
+    <div class="adv-card" style="padding: 0;">
       <table>
         <thead>
-          <tr>
-            <th>#</th>
-            <th>Subject</th>
-            <th>Predicate</th>
-            <th>Object</th>
-            <th>Scope</th>
-            <th>Source</th>
-            <th>Receipts</th>
-            <th>Score</th>
-          </tr>
+          <tr><th>#</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Scope</th><th>Receipts</th><th>Score</th></tr>
         </thead>
         <tbody id="explore-tbody"></tbody>
       </table>
-      <div class="empty-state" id="explore-empty">
-        <p>Enter a query above to see what memory would return.</p>
-      </div>
     </div>
   </div>
 
-  <!-- Efficacy Tab -->
-  <div class="tab-panel" id="tab-efficacy">
+  <div class="drawer-panel" id="adv-efficacy">
     <div class="filter-row">
-      <span style="color: var(--text-dim); font-size: 12px;">Timeframe:</span>
-      <button class="filter-btn" data-timeframe="session">This session</button>
-      <button class="filter-btn active" data-timeframe="7d">Last 7 days</button>
-      <button class="filter-btn" data-timeframe="all">All time</button>
+      <button class="chip" data-timeframe="session">This session</button>
+      <button class="chip active" data-timeframe="7d">Last 7 days</button>
+      <button class="chip" data-timeframe="all">All time</button>
     </div>
-    <div class="grid grid-4" id="efficacy-cards"></div>
-
-    <div class="grid grid-2" style="margin-top: 24px;">
-      <div class="card">
-        <h3>Tool mix</h3>
-        <div class="bar-chart" id="efficacy-tool-mix"></div>
-      </div>
-      <div class="card">
-        <h3>Source contribution (where returned facts came from)</h3>
-        <div class="bar-chart" id="efficacy-source-contribution"></div>
-      </div>
+    <div class="adv-grid" id="efficacy-cards"></div>
+    <div class="adv-card" style="margin-top: 16px;">
+      <h3>Tool mix</h3>
+      <div class="bar-chart" id="efficacy-tool-mix"></div>
     </div>
-    <div class="card" style="margin-top: 24px;">
-      <h3>Memory gaps (queries returning 0 results)</h3>
+    <div class="adv-card">
+      <h3>Memory gaps (zero-result queries)</h3>
       <div id="efficacy-gaps"></div>
     </div>
-
-    <div class="card" style="margin-top: 24px;">
-      <h3>Recall trace</h3>
+    <div class="adv-card" style="padding: 0;">
       <table>
         <thead>
-          <tr>
-            <th>When</th>
-            <th>Tool</th>
-            <th>Query</th>
-            <th>Results</th>
-            <th>Latency</th>
-            <th>Session</th>
-          </tr>
+          <tr><th>When</th><th>Tool</th><th>Query</th><th>Results</th><th>Latency</th></tr>
         </thead>
         <tbody id="efficacy-trace-tbody"></tbody>
       </table>
-      <div class="empty-state" id="efficacy-empty" style="display:none;">
-        <p>No recall events yet in this timeframe.</p>
-        <p>As Claude calls memory.recall / memory.decisions / memory.conventions, events will show up here.</p>
-      </div>
     </div>
   </div>
 
-  <!-- Conflicts Tab -->
-  <div class="tab-panel" id="tab-conflicts">
+  <div class="drawer-panel" id="adv-conflicts">
     <div class="filter-row">
-      <button class="filter-btn active" data-conflict-scope="project">Project <span data-count-scope="project">—</span></button>
-      <button class="filter-btn" data-conflict-scope="global">Global <span data-count-scope="global">—</span></button>
-      <button class="filter-btn" data-conflict-scope="all">All</button>
-      <span style="color: var(--text-dim); font-size: 12px; margin-left: 16px;">Status:</span>
-      <button class="filter-btn active" data-conflict-status="open">Open</button>
-      <button class="filter-btn" data-conflict-status="resolved">Resolved</button>
-      <button class="filter-btn" data-conflict-status="all">All</button>
+      <button class="chip active" data-conflict-scope="project">Project <span data-count-scope="project">—</span></button>
+      <button class="chip" data-conflict-scope="global">Global <span data-count-scope="global">—</span></button>
+      <button class="chip" data-conflict-scope="all">All</button>
+      <button class="chip active" data-conflict-status="open">Open</button>
+      <button class="chip" data-conflict-status="resolved">Resolved</button>
     </div>
-    <div class="card">
+    <div class="adv-card" style="padding: 0;">
       <table>
-        <thead id="conflicts-thead">
-          <tr>
-            <th>Detected</th>
-            <th>Fact A</th>
-            <th></th>
-            <th>Fact B</th>
-            <th class="conflict-source-col">Source</th>
-            <th>Status</th>
-          </tr>
+        <thead>
+          <tr><th>Detected</th><th>Fact A</th><th></th><th>Fact B</th><th>Status</th></tr>
         </thead>
         <tbody id="conflicts-tbody"></tbody>
       </table>
-      <div class="empty-state" id="conflicts-empty" style="display:none;">
-        <p>No conflicts in this view.</p>
-        <p>Conflicts are created when two facts about the same subject contradict each other.</p>
-      </div>
     </div>
   </div>
-</main>
+
+  <div class="drawer-panel" id="adv-activity">
+    <div class="adv-card" style="padding: 0;">
+      <table>
+        <thead>
+          <tr><th>Time</th><th>Event</th><th>Status</th><th>Duration</th><th>Details</th></tr>
+        </thead>
+        <tbody id="activity-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
 
 <script>
-// Tab navigation
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-  });
-});
+// ==================== State ====================
+let lastHealth = null;
+let currentKinds = 'context_injection,recall_hit,recall_empty,extraction';
+let currentTimeframe = '7d';
+let currentSessionId = null;
+let currentFactId = null;
+let currentFactScope = null;
+let currentConflictId = null;
+let currentConflictScope = null;
 
-// Activity filter buttons
-document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    loadActivity(btn.dataset.filter === 'all' ? null : btn.dataset.filter);
-  });
-});
-
-// Efficacy timeframe buttons
-document.querySelectorAll('.filter-btn[data-timeframe]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn[data-timeframe]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentTimeframe = btn.dataset.timeframe;
-    loadEfficacy();
-  });
-});
-
-// Conflicts filter buttons
-document.querySelectorAll('.filter-btn[data-conflict-scope]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn[data-conflict-scope]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    loadConflicts();
-  });
-});
-document.querySelectorAll('.filter-btn[data-conflict-status]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn[data-conflict-status]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    loadConflicts();
-  });
-});
-
-// Fact status filter buttons
-document.querySelectorAll('.filter-btn[data-status]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn[data-status]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    loadFacts(currentFactParams());
-  });
-});
-
-// Fact scope filter buttons
-document.querySelectorAll('.filter-btn[data-fact-scope]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn[data-fact-scope]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    loadFacts(currentFactParams());
-  });
-});
-
-function currentFactParams() {
-  const scope = document.querySelector('.filter-btn[data-fact-scope].active')?.dataset.factScope || 'all';
-  const status = document.querySelector('.filter-btn[data-status].active')?.dataset.status || 'active';
-  const q = document.getElementById('fact-search').value;
-  return {scope, status, q};
-}
-
-// Fact search with debounce
-let searchTimeout;
-document.getElementById('fact-search').addEventListener('input', () => {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => loadFacts(currentFactParams()), 300);
-});
-
-// API calls
+// ==================== API helper ====================
 async function api(path, params = {}) {
   const qs = new URLSearchParams(params).toString();
   const url = qs ? `/api/${path}?${qs}` : `/api/${path}`;
@@ -870,510 +1324,1047 @@ async function api(path, params = {}) {
   return res.json();
 }
 
-// Load all data
+// ==================== Load cycle ====================
 async function loadAll() {
-  await loadActivity();
-  await Promise.all([loadHealth(), loadStats(), loadFacts(), loadEfficacy(), loadTimeline(), loadSessionCard(), loadConflicts()]);
+  await Promise.all([loadHealth(), loadTrust(), loadMoments(), loadKnowledgePanel(), loadReusePanel()]);
 }
 
-async function loadSessionCard() {
-  const card = document.getElementById('session-card');
-  const body = document.getElementById('session-card-body');
-  if (!currentSessionId) {
-    card.style.display = 'none';
-    return;
-  }
+async function loadKnowledgePanel() {
+  const data = await api('knowledge', {scope: 'all', limit: 1});
+  const totalsEl = document.getElementById('kb-totals');
+  const rowsEl = document.getElementById('kb-rows');
 
-  const data = await api('session', {session_id: currentSessionId});
-  if (!data.events) {
-    card.style.display = 'none';
-    return;
-  }
-
-  card.style.display = 'block';
-  body.innerHTML = `
-    <div style="display: flex; gap: 32px; flex-wrap: wrap; align-items: baseline; margin-top: 4px;">
-      <div>
-        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Session</div>
-        <code style="font-size: 13px;">${esc(data.session_id.slice(0, 8))}…</code>
-      </div>
-      <div>
-        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Recalls</div>
-        <div style="font-size: 20px; font-weight: 600;">${data.recalls}</div>
-      </div>
-      <div>
-        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Facts recalled</div>
-        <div style="font-size: 20px; font-weight: 600;">${data.facts_recalled}</div>
-      </div>
-      <div>
-        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Facts stored</div>
-        <div style="font-size: 20px; font-weight: 600;">${data.facts_stored}</div>
-      </div>
-      <div>
-        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Ingests</div>
-        <div style="font-size: 20px; font-weight: 600;">${data.ingests}</div>
-      </div>
-      <div>
-        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Total latency</div>
-        <div style="font-size: 20px; font-weight: 600;">${data.total_latency_ms}ms</div>
-      </div>
-    </div>
+  const projN = (data.totals && data.totals.project) || 0;
+  const globN = (data.totals && data.totals.global) || 0;
+  totalsEl.innerHTML = `
+    <span class="big">${(projN + globN).toLocaleString()}</span>
+    <span class="split">active facts <span style="color: var(--text-dim);">(${projN} project · ${globN} global)</span></span>
   `;
+
+  const sections = data.sections || [];
+  rowsEl.innerHTML = sections.map(s => {
+    const cls = s.count === 0 ? 'empty' : '';
+    const onclick = s.count === 0 ? '' : `onclick="openKnowledge('${s.key}')"`;
+    return `<div class="kb-row ${cls}" ${onclick} title="${esc(s.description)}">
+      <div class="kb-label">
+        <span>${esc(s.label)}</span>
+        <span class="kb-desc">${esc(s.description)}</span>
+      </div>
+      <span class="kb-count">${s.count}</span>
+    </div>`;
+  }).join('');
 }
 
-let lastHealth = null;
+async function loadReusePanel() {
+  const data = await api('reuse', {limit: 5});
+  const list = document.getElementById('reuse-list');
+  const empty = document.getElementById('reuse-empty');
+  const facts = data.facts || [];
+  if (!facts.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = facts.map(f => `
+    <li onclick="openFactModal(${f.id}, '${esc(f.source)}')" title="Last recalled ${esc(f.last_recalled_ago || '')}">
+      <div class="reuse-head">
+        <span class="pred">${esc(f.predicate)}</span>
+        <span class="reuse-count">${f.recall_count}×</span>
+      </div>
+      <div class="reuse-obj" title="${esc(f.object || '')}">${esc(f.object || '')}</div>
+    </li>
+  `).join('');
+}
+
+// Open the Advanced drawer on the Knowledge tab, pre-filtered to the given
+// section key. Called from the sidebar "Your knowledge base" rows.
+function openKnowledge(sectionKey) {
+  openDrawer('knowledge');
+  setTimeout(() => applyKnowledgeSection(sectionKey), 50);
+}
 
 async function loadHealth() {
   const data = await api('health');
   lastHealth = data;
-  const dot = document.getElementById('status-dot');
-  const text = document.getElementById('status-text');
-  const version = document.getElementById('version-text');
+  document.getElementById('version-tag').textContent = 'v' + (data.version || '?');
 
-  dot.className = 'status-dot ' + data.status;
-  text.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
-  version.textContent = 'v' + (data.version || '?');
-
-  const hasIssues = (data.checks || []).some(c => c.status !== 'healthy');
-  if (hasIssues) {
-    text.classList.add('actionable');
-    text.title = 'Click to see how to fix';
-    text.onclick = () => openHealthModal();
-  } else {
-    text.classList.remove('actionable');
-    text.title = '';
-    text.onclick = null;
-  }
-
-  const container = document.getElementById('health-checks');
-  container.innerHTML = (data.checks || []).map((c, i) => {
+  const strip = document.getElementById('health-strip');
+  strip.innerHTML = (data.checks || []).map(c => {
     const actionable = c.status !== 'healthy' && c.fix;
-    return `
-      <div class="health-check ${actionable ? 'actionable' : ''}"
-           ${actionable ? `onclick="openHealthModal('${c.name}')" title="Click to see how to fix"` : ''}>
-        <span class="status-dot ${c.status}"></span>
-        <span class="label">${c.name.replace('_', ' ')}</span>
-        <span class="msg">${esc(c.message)}</span>
-      </div>
-    `;
+    const click = actionable ? `onclick="openHealthModal('${c.name}')"` : '';
+    return `<span class="health-pill ${actionable ? 'actionable' : ''}" ${click}>
+      <span class="dot ${c.status}"></span>${esc(c.name.replace('_', ' '))}
+    </span>`;
   }).join('');
 }
 
-function openHealthModal(focusName) {
+function openHealthModal(focus) {
   if (!lastHealth) return;
   const issues = (lastHealth.checks || []).filter(c => c.status !== 'healthy');
   const body = document.getElementById('health-modal-body');
-
-  if (issues.length === 0) {
-    body.innerHTML = '<p class="modal-empty">Everything looks healthy. Nothing to fix.</p>';
+  if (!issues.length) {
+    body.innerHTML = '<p style="color: var(--text-dim);">Everything looks healthy.</p>';
   } else {
-    const ordered = focusName
-      ? [...issues.filter(c => c.name === focusName), ...issues.filter(c => c.name !== focusName)]
+    const ordered = focus
+      ? [...issues.filter(c => c.name === focus), ...issues.filter(c => c.name !== focus)]
       : issues;
     body.innerHTML = ordered.map(c => `
       <div class="modal-issue">
         <div class="modal-issue-title">
-          <span class="status-dot ${c.status}"></span>
-          <span>${c.name.replace('_', ' ')}</span>
-          <span class="badge badge-${c.status === 'error' ? 'error' : 'warning'}">${c.status}</span>
+          <span class="dot ${c.status}"></span>
+          <span>${esc(c.name.replace('_', ' '))}</span>
+          <span class="badge badge-${c.status === 'error' ? 'error' : 'warning'}">${esc(c.status)}</span>
         </div>
         <div class="modal-issue-msg">${esc(c.message)}</div>
         ${c.fix ? `<div class="modal-issue-fix">${renderFix(c.fix)}</div>` : ''}
       </div>
     `).join('');
   }
-
-  document.getElementById('health-modal').classList.add('open');
+  openModal('health-modal');
+}
+function renderFix(t) {
+  return esc(t).replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`);
 }
 
-function closeHealthModal() {
-  document.getElementById('health-modal').classList.remove('open');
+async function loadTrust() {
+  const data = await api('trust');
+
+  // Activity this week
+  const moments = data.weekly_moments || {this_week: 0, last_week: 0, delta: 0, by_kind: {}};
+  document.getElementById('moments-count').textContent = moments.this_week;
+  const deltaEl = document.getElementById('moments-delta');
+  const d = moments.delta;
+  deltaEl.classList.remove('up', 'down', 'flat');
+  if (d > 0) { deltaEl.classList.add('up'); deltaEl.textContent = `+${d} vs last week`; }
+  else if (d < 0) { deltaEl.classList.add('down'); deltaEl.textContent = `${d} vs last week`; }
+  else { deltaEl.classList.add('flat'); deltaEl.textContent = moments.this_week === 0 ? '—' : 'same as last week'; }
+
+  const bk = moments.by_kind || {};
+  const sub = [];
+  if (bk.recall) sub.push(`${bk.recall} recall${bk.recall === 1 ? '' : 's'}`);
+  if (bk.store_extraction) sub.push(`${bk.store_extraction} extraction${bk.store_extraction === 1 ? '' : 's'}`);
+  if (bk.hook_context) sub.push(`${bk.hook_context} injection${bk.hook_context === 1 ? '' : 's'}`);
+  document.getElementById('moments-sub').textContent = sub.length ? sub.join(' · ') : 'No value-producing events yet.';
+
+  // Needs review
+  const nr = data.needs_review || {};
+  const rows = [];
+  const conflicts = (nr.open_conflicts && nr.open_conflicts.total) || 0;
+  if (conflicts > 0) {
+    rows.push(`<div class="review-row alert" onclick="openDrawer('conflicts')">
+      <span>Open conflicts</span><span class="count">${conflicts}</span>
+    </div>`);
+  } else {
+    rows.push(`<div class="review-row"><span>Open conflicts</span><span class="count">0</span></div>`);
+  }
+  const stale = nr.stale_facts || 0;
+  if (stale > 0) {
+    rows.push(`<div class="review-row alert" onclick="openDrawer('facts'); setTimeout(applyStaleFilter, 50);">
+      <span>Facts never recalled (30d)</span><span class="count">${stale}</span>
+    </div>`);
+  }
+  const empty = nr.empty_recalls || 0;
+  if (empty > 0) {
+    rows.push(`<div class="review-row alert" onclick="openDrawer('efficacy')">
+      <span>Zero-result queries (7d)</span><span class="count">${empty}</span>
+    </div>`);
+  }
+  if (conflicts === 0 && stale === 0 && empty === 0) {
+    rows.push(`<div class="review-row" style="color: var(--green);">✓ Nothing urgent</div>`);
+  }
+  document.getElementById('review-rows').innerHTML = rows.join('');
 }
 
-function renderFix(fixText) {
-  // Escape, then wrap `backticked` spans in <code> for copy-friendliness.
-  return esc(fixText).replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`);
-}
+// ==================== Feed ====================
+async function loadMoments() {
+  const params = {limit: 50};
+  if (currentKinds) params.kinds = currentKinds;
+  const data = await api('moments', params);
+  const moments = data.moments || [];
 
-document.getElementById('health-modal').addEventListener('click', closeHealthModal);
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeHealthModal(); closeActivityModal(); closeConflictModal(); closeFactModal(); }
-});
-
-async function loadStats() {
-  const data = await api('stats');
-  const dbs = data.databases || {};
-  const rowsEl = document.getElementById('metric-rows');
-
-  // Render one metric row per scope so the user can tell at a glance
-  // whether memory is growing in project space, global space, or both.
-  // Aggregate separately for top predicates + entity-types charts.
-  const scopes = [
-    {key: 'project', label: 'Project', db: dbs.project || {}},
-    {key: 'global', label: 'Global', db: dbs.global || {}}
-  ];
-  let aggregateConflicts = 0;
-  let allPredicates = [], allEntityTypes = [];
-
-  const sections = scopes.map(({key, label, db}) => {
-    if (!db.exists) {
-      return `
-        <div style="margin-bottom: 18px;">
-          <h3 style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">${label} memory</h3>
-          <div class="card" style="color: var(--text-dim); font-size: 13px;">No ${label.toLowerCase()} database initialized.</div>
-        </div>
-      `;
-    }
-    aggregateConflicts += db.open_conflicts || 0;
-    allPredicates = allPredicates.concat(db.top_predicates || []);
-    allEntityTypes = allEntityTypes.concat(db.entity_types || []);
-
-    const conflictOnclick = (db.open_conflicts || 0) > 0 ? "switchTab('conflicts')" : null;
-    return `
-      <div style="margin-bottom: 18px;">
-        <h3 style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">${label} memory</h3>
-        <div class="grid grid-4">
-          ${metricCard('Active Facts', db.facts_active || 0, `${db.facts_total || 0} total`)}
-          ${metricCard('Entities', db.entities_total || 0, '')}
-          ${metricCard('Content Items', db.content_items || 0, 'ingested transcripts')}
-          ${metricCard('Open Conflicts', db.open_conflicts || 0, (db.open_conflicts || 0) > 0 ? 'need resolution' : 'none', conflictOnclick)}
-        </div>
-      </div>
-    `;
-  });
-
-  rowsEl.innerHTML = sections.join('');
-
-  renderBarChart('predicate-chart', mergeAndSort(allPredicates, 'predicate'));
-  renderBarChart('entity-chart', mergeAndSort(allEntityTypes, 'type'));
-}
-
-function mergeAndSort(items, key) {
-  const merged = {};
-  items.forEach(i => { merged[i[key]] = (merged[i[key]] || 0) + i.count; });
-  return Object.entries(merged)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([label, count]) => ({label, count}));
-}
-
-async function loadActivity(eventType) {
-  const params = {};
-  if (eventType) params.event_type = eventType;
-  const data = await api('activity', params);
-  const tbody = document.getElementById('activity-tbody');
-  const empty = document.getElementById('activity-empty');
-
-  // Seed current session id from the newest event so "this session"
-  // filter in other tabs scopes to the active MCP session.
-  if (!currentSessionId && data.events) {
-    const recent = data.events.find(e => e.session_id);
+  // Seed current session from newest moment with a session_id
+  if (!currentSessionId) {
+    const recent = moments.find(m => m.session_id);
     if (recent) currentSessionId = recent.session_id;
   }
 
-  if (!data.events || data.events.length === 0) {
-    tbody.innerHTML = '';
+  const feed = document.getElementById('feed');
+  const empty = document.getElementById('feed-empty');
+  document.getElementById('feed-count').textContent = moments.length ? `(${moments.length})` : '';
+
+  if (!moments.length) {
+    feed.innerHTML = '';
     empty.style.display = 'block';
     return;
   }
   empty.style.display = 'none';
-
-  tbody.innerHTML = data.events.map(e => {
-    const details = e.details || {};
-    const detailStr = formatDetails(e.event_type, details);
-    const scope = details.scope || '';
-    const scopeBadge = scope ? `<span class="badge badge-${scope === 'global' ? 'purple' : 'info'}" style="opacity: 0.8;">${esc(scope)}</span>` : '<span style="color: var(--text-dim); font-size: 11px;">—</span>';
-    return `<tr class="row-clickable" onclick="openActivityModal(${e.id})" title="Click for details">
-      <td title="${e.occurred_at}">${e.occurred_ago || e.occurred_at}</td>
-      <td><span class="badge badge-info">${e.event_type}</span></td>
-      <td>${scopeBadge}</td>
-      <td><span class="badge badge-${statusBadge(e.status)}">${e.status}</span></td>
-      <td>${e.duration_ms ? e.duration_ms + 'ms' : '-'}</td>
-      <td style="color: var(--text-dim)">${detailStr}</td>
-    </tr>`;
-  }).join('');
+  feed.innerHTML = moments.map(renderMoment).join('');
 }
 
-async function openActivityModal(id) {
-  const body = document.getElementById('activity-modal-body');
-  const modal = document.getElementById('activity-modal');
-  body.innerHTML = '<p class="modal-empty">Loading…</p>';
-  modal.classList.add('open');
+function renderMoment(m) {
+  const map = {
+    context_injection: {icon: 'C', cls: 'context', render: renderContextMoment},
+    context_skipped: {icon: 'C', cls: 'sweep', render: renderContextSkippedMoment},
+    recall_hit: {icon: 'R', cls: 'recall_hit', render: renderRecallMoment},
+    recall_empty: {icon: '?', cls: 'recall_empty', render: renderRecallMoment},
+    extraction: {icon: '+', cls: 'extraction', render: renderExtractionMoment},
+    ingest: {icon: '↓', cls: 'ingest', render: renderIngestMoment},
+    ingest_skipped: {icon: '—', cls: 'sweep', render: renderIngestSkippedMoment},
+    sweep: {icon: '~', cls: 'sweep', render: renderSweepMoment}
+  };
+  const def = map[m.kind] || {icon: '•', cls: 'sweep', render: renderGenericMoment};
+  return `<div class="moment" onclick="openMomentModal(${m.id})">
+    <div class="moment-icon ${def.cls}">${def.icon}</div>
+    <div class="moment-body">${def.render(m)}</div>
+  </div>`;
+}
 
+function renderContextMoment(m) {
+  const n = m.fact_count || (m.top_facts || []).length;
+  const headline = n > 0
+    ? `Memory showed Claude <strong>${n} fact${n === 1 ? '' : 's'}</strong> at session start`
+    : `Memory attempted session-start injection`;
+  const facts = (m.top_facts || []).slice(0, 5).map(f => `
+    <li><span class="pred">${esc(f.predicate)}</span><span class="obj" title="${esc(f.object || '')}">${esc(f.object || '')}</span></li>
+  `).join('');
+  return `
+    <div class="moment-headline">${headline}</div>
+    <div class="moment-meta">
+      <span>${esc(m.occurred_ago)}</span>
+      ${m.context_length ? `<span class="dotsep">${m.context_length.toLocaleString()} chars injected</span>` : ''}
+      ${m.session_id ? `<span class="dotsep">session ${esc(m.session_id.slice(0,8))}</span>` : ''}
+    </div>
+    ${facts ? `<ul class="moment-facts">${facts}</ul>` : ''}
+  `;
+}
+
+function renderContextSkippedMoment(m) {
+  return `
+    <div class="moment-headline">Session-start injection skipped <span style="color: var(--text-dim); font-size: 12px;">(no facts to inject)</span></div>
+    <div class="moment-meta"><span>${esc(m.occurred_ago)}</span></div>
+  `;
+}
+
+function renderRecallMoment(m) {
+  const n = m.result_count || 0;
+  const tool = (m.tool || 'memory.recall').replace('memory.', '');
+  const q = m.query || '(shortcut)';
+  const verb = n === 0 ? 'found nothing for' : `recalled <strong>${n} fact${n === 1 ? '' : 's'}</strong> for`;
+  const facts = (m.top_facts || []).slice(0, 3).map(f => `
+    <li><span class="pred">${esc(f.predicate)}</span><span class="obj" title="${esc(f.object || '')}">${esc(f.object || '')}</span></li>
+  `).join('');
+  return `
+    <div class="moment-headline">
+      Claude ${verb} <span class="moment-query">${esc(q)}</span>${queryQualityBadge(q)}
+    </div>
+    <div class="moment-meta">
+      <span>${esc(m.occurred_ago)}</span>
+      <span class="dotsep"><span class="badge badge-info">${esc(tool)}</span></span>
+      ${m.duration_ms != null ? `<span class="dotsep">${m.duration_ms}ms</span>` : ''}
+    </div>
+    ${facts ? `<ul class="moment-facts">${facts}</ul>` : ''}
+  `;
+}
+
+function renderExtractionMoment(m) {
+  const nf = m.facts_created || 0;
+  const ne = m.entities_created || 0;
+  const parts = [];
+  if (nf) parts.push(`<strong>${nf} fact${nf === 1 ? '' : 's'}</strong>`);
+  if (ne) parts.push(`<strong>${ne} entit${ne === 1 ? 'y' : 'ies'}</strong>`);
+  const desc = parts.length ? parts.join(' and ') : 'nothing';
+  const facts = (m.extracted_facts || []).slice(0, 3).map(f => `
+    <li><span class="pred">${esc(f.predicate)}</span><span class="obj" title="${esc(f.object || '')}">${esc(f.object || '')}</span></li>
+  `).join('');
+  return `
+    <div class="moment-headline">Claude learned ${desc}</div>
+    <div class="moment-meta">
+      <span>${esc(m.occurred_ago)}</span>
+      ${m.session_id ? `<span class="dotsep">session ${esc(m.session_id.slice(0,8))}</span>` : ''}
+    </div>
+    ${facts ? `<ul class="moment-facts">${facts}</ul>` : ''}
+  `;
+}
+
+function renderIngestMoment(m) {
+  const nFacts = (m.extracted_facts || []).length;
+  const bytes = m.bytes_read ? (m.bytes_read / 1024).toFixed(1) + ' KB' : '';
+  const factBit = nFacts > 0 ? ` → ${nFacts} fact${nFacts === 1 ? '' : 's'} linked` : '';
+  return `
+    <div class="moment-headline">Ingested transcript ${bytes ? `(${bytes})` : ''}${factBit}</div>
+    <div class="moment-meta">
+      <span>${esc(m.occurred_ago)}</span>
+      ${m.duration_ms != null ? `<span class="dotsep">${m.duration_ms}ms</span>` : ''}
+      ${m.session_id ? `<span class="dotsep">session ${esc(m.session_id.slice(0,8))}</span>` : ''}
+    </div>
+  `;
+}
+
+function renderIngestSkippedMoment(m) {
+  return `
+    <div class="moment-headline" style="color: var(--text-dim);">
+      Ingest skipped <span style="font-size: 12px;">(${esc(m.reason || 'no new content')})</span>
+    </div>
+    <div class="moment-meta"><span>${esc(m.occurred_ago)}</span></div>
+  `;
+}
+
+function renderSweepMoment(m) {
+  return `
+    <div class="moment-headline" style="color: var(--text-dim);">
+      Maintenance sweep ${m.elapsed_seconds ? `(${m.elapsed_seconds.toFixed(2)}s)` : ''}
+    </div>
+    <div class="moment-meta"><span>${esc(m.occurred_ago)}</span></div>
+  `;
+}
+
+function renderGenericMoment(m) {
+  return `
+    <div class="moment-headline">${esc(m.event_type)}</div>
+    <div class="moment-meta"><span>${esc(m.occurred_ago)}</span></div>
+  `;
+}
+
+async function openMomentModal(id) {
+  const body = document.getElementById('moment-modal-body');
+  const title = document.getElementById('moment-modal-title');
+  body.innerHTML = '<p style="color: var(--text-dim);">Loading…</p>';
+  title.textContent = 'Moment details';
+  openModal('moment-modal');
   try {
     const data = await api('activity/' + id);
-    if (data.error) {
-      body.innerHTML = `<p class="modal-empty">${esc(data.error)}</p>`;
-      return;
-    }
-    body.innerHTML = renderActivityDetail(data);
-  } catch (err) {
-    body.innerHTML = `<p class="modal-empty">Failed to load: ${esc(err.message)}</p>`;
+    if (data.error) { body.innerHTML = `<p style="color: var(--text-dim);">${esc(data.error)}</p>`; return; }
+    const rendered = renderMomentDetail(data);
+    title.textContent = rendered.title;
+    body.innerHTML = rendered.html;
+  } catch (e) {
+    body.innerHTML = `<p style="color: var(--text-dim);">Failed: ${esc(e.message)}</p>`;
   }
 }
 
-function closeActivityModal() {
-  document.getElementById('activity-modal').classList.remove('open');
+// Dispatcher: picks the right renderer by event type. Each renderer returns
+// { title, html } so the modal heading can reflect the narrative (e.g.
+// "Recall" vs "Memory details") rather than a generic "Moment details".
+function renderMomentDetail(data) {
+  const e = data.event || {};
+  switch (e.event_type) {
+    case 'recall':           return renderRecallDetail(data);
+    case 'store_extraction': return renderExtractionDetail(data);
+    case 'hook_context':     return renderContextDetail(data);
+    case 'hook_ingest':      return renderIngestDetail(data);
+    default:                 return renderGenericDetail(data);
+  }
 }
 
-function renderActivityDetail(data) {
+function renderRecallDetail(data) {
   const e = data.event || {};
-  const ci = data.content_item;
+  const d = e.details || {};
   const facts = data.linked_facts || [];
+  const trigger = data.trigger;
+  const tool = (d.tool || 'memory.recall').replace('memory.', '');
+  const query = d.query || '(shortcut)';
+  const n = d.result_count || facts.length || 0;
+  const title = `Recalled ${n} fact${n === 1 ? '' : 's'} for "${truncate(query, 60)}"`;
 
+  const triggerBlock = renderTriggerBlock(trigger);
   const header = `
-    <div class="modal-section">
-      <h3>Event</h3>
-      <dl class="modal-kv">
-        <dt>id</dt><dd>${e.id}</dd>
-        <dt>type</dt><dd><span class="badge badge-info">${esc(e.event_type)}</span></dd>
-        <dt>status</dt><dd><span class="badge badge-${statusBadge(e.status)}">${esc(e.status)}</span></dd>
-        <dt>occurred_at</dt><dd>${esc(e.occurred_at)} (${esc(e.occurred_ago || '')})</dd>
-        <dt>duration</dt><dd>${e.duration_ms != null ? e.duration_ms + 'ms' : '-'}</dd>
-        <dt>session_id</dt><dd>${esc(e.session_id || '-')}</dd>
-      </dl>
+    <div class="recall-header">
+      <div class="recall-stat"><div class="recall-stat-n">${n}</div><div class="recall-stat-label">facts returned</div></div>
+      <div class="recall-stat"><div class="recall-stat-n">${e.duration_ms != null ? e.duration_ms + 'ms' : '—'}</div><div class="recall-stat-label">latency</div></div>
+      <div class="recall-stat"><div class="recall-stat-n"><span class="badge badge-info">${esc(tool)}</span></div><div class="recall-stat-label">via</div></div>
     </div>
-    <div class="modal-section">
-      <h3>Details (raw)</h3>
-      <pre class="modal-json">${formatJson(e.details || {})}</pre>
+    <div class="recall-query">
+      <div class="label">Query</div>
+      <div class="query-text">${esc(query)}${queryQualityBadge(query)}</div>
     </div>
   `;
 
-  const contentSection = ci ? `
-    <div class="modal-section">
-      <h3>Content item #${ci.id}</h3>
+  const factsBlock = facts.length
+    ? `<div class="modal-section">
+         <h3>What Claude got back (${facts.length})</h3>
+         <table class="facts-table">
+           <thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Scope</th></tr></thead>
+           <tbody>
+             ${facts.map(f => `<tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.scope)}')">
+               <td><strong>${esc(f.subject || '—')}</strong></td>
+               <td><span class="badge badge-purple">${esc(f.predicate || '')}</span></td>
+               <td class="object-cell" title="${esc(f.object || '')}">${esc(f.object || '')}</td>
+               <td><span class="badge badge-info">${esc(f.scope || '')}</span></td>
+             </tr>`).join('')}
+           </tbody>
+         </table>
+       </div>`
+    : '<div class="modal-section"><p style="color: var(--text-dim);">No facts were returned by this recall.</p></div>';
+
+  const meta = `
+    <details class="modal-collapsible">
+      <summary>Raw event data</summary>
       <dl class="modal-kv">
-        <dt>source</dt><dd>${esc(ci.source || '-')}</dd>
-        <dt>session_id</dt><dd>${esc(ci.session_id || '-')}</dd>
-        <dt>transcript_path</dt><dd>${esc(ci.transcript_path || '-')}</dd>
-        <dt>project_path</dt><dd>${esc(ci.project_path || '-')}</dd>
-        <dt>byte_len</dt><dd>${ci.byte_len != null ? ci.byte_len.toLocaleString() : '-'}</dd>
-        <dt>ingested_at</dt><dd>${esc(ci.ingested_at || '-')}</dd>
+        <dt>id</dt><dd>${e.id}</dd>
+        <dt>occurred_at</dt><dd>${esc(e.occurred_at)} (${esc(e.occurred_ago || '')})</dd>
+        <dt>session_id</dt><dd>${esc(e.session_id || '—')}</dd>
       </dl>
-      <h3 style="margin-top: 12px;">Raw text${ci.truncated ? ' (truncated)' : ''}</h3>
-      <pre class="modal-text">${formatJson(ci.raw_text_preview, {fallbackLabel: 'Plain text (not JSON)', truncated: !!ci.truncated})}</pre>
-    </div>
-  ` : '';
+      <pre class="modal-json">${formatJson(d)}</pre>
+    </details>`;
 
-  const factsSection = facts.length > 0 ? `
-    <div class="modal-section">
-      <h3>Linked facts (${facts.length})</h3>
-      <table>
-        <thead>
-          <tr><th>ID</th><th>Subject</th><th>Predicate</th><th>Object</th><th>Scope</th></tr>
-        </thead>
-        <tbody>
-          ${facts.map(f => `
-            <tr>
-              <td><code>${f.docid || f.id}</code></td>
-              <td>${esc(f.subject)}</td>
-              <td><span class="badge badge-purple">${esc(f.predicate)}</span></td>
-              <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-                  title="${esc(f.object)}">${esc(f.object)}</td>
-              <td><span class="badge badge-info">${esc(f.scope)}</span></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  ` : '';
-
-  return header + contentSection + factsSection;
+  return {
+    title,
+    html: header + triggerBlock + factsBlock + meta
+  };
 }
 
-document.getElementById('activity-modal').addEventListener('click', closeActivityModal);
-
-async function loadConflicts() {
-  const scope = document.querySelector('.filter-btn[data-conflict-scope].active')?.dataset.conflictScope || 'project';
-  const status = document.querySelector('.filter-btn[data-conflict-status].active')?.dataset.conflictStatus || 'open';
-  const data = await api('conflicts', {scope, status});
-
-  // Populate sub-tab counts from the scope-agnostic counts payload
-  if (data.counts) {
-    ['project', 'global'].forEach(s => {
-      const el = document.querySelector(`[data-count-scope="${s}"]`);
-      if (!el) return;
-      const c = data.counts[s] || {};
-      el.textContent = '(' + (status === 'all' ? (c.total || 0) : (c[status] || 0)) + ')';
-    });
+function renderTriggerBlock(trigger) {
+  if (!trigger) return '';
+  const prompt = trigger.user_prompt;
+  const ago = trigger.occurred_ago || '';
+  if (prompt) {
+    const snippet = truncate(prompt, 280);
+    return `
+      <div class="modal-section">
+        <h3>What triggered this</h3>
+        <div class="trigger-card">
+          <div class="trigger-label">User prompt · ${esc(ago)}</div>
+          <div class="trigger-prompt">${esc(snippet)}${prompt.length > snippet.length ? '…' : ''}</div>
+          ${trigger.session_id ? `<div class="trigger-session">session ${esc(trigger.session_id.slice(0,8))}</div>` : ''}
+        </div>
+      </div>`;
   }
+  return `
+    <div class="modal-section">
+      <h3>What triggered this</h3>
+      <div class="trigger-card">
+        <div class="trigger-label">${esc(trigger.event_type)} · ${esc(ago)}</div>
+        <div style="color: var(--text-dim); font-size: 12px;">(No human-readable prompt in the preceding ingest.)</div>
+      </div>
+    </div>`;
+}
 
-  // Hide Source column when the view is scope-locked — it's redundant.
-  const showSource = (scope === 'all');
-  document.querySelectorAll('.conflict-source-col').forEach(th => th.style.display = showSource ? '' : 'none');
+function queryQualityBadge(q) {
+  if (!q || typeof q !== 'string') return '';
+  const trimmed = q.trim();
+  if (!trimmed) return '';
+  const words = trimmed.split(/\s+/);
+  if (words.length === 1 && trimmed.length < 12) {
+    return ' <span class="badge badge-warning" title="Very short query — results may be broad or incidental">narrow</span>';
+  }
+  if (words.length <= 2 && words.every(w => w.length < 12)) {
+    return ' <span class="badge badge-warning" title="Generic terms — matches tend to be broad and incidental">generic</span>';
+  }
+  return '';
+}
 
-  const tbody = document.getElementById('conflicts-tbody');
-  const empty = document.getElementById('conflicts-empty');
+function renderExtractionDetail(data) {
+  const e = data.event || {};
+  const d = e.details || {};
+  const ci = data.content_item;
+  const facts = data.linked_facts || [];
+  const nFacts = d.facts_created || facts.length;
+  const nEnts = d.entities_created || 0;
+  const title = `Extracted ${nFacts} fact${nFacts === 1 ? '' : 's'}`;
 
-  if (!data.conflicts || data.conflicts.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
+  const factsBlock = facts.length
+    ? `<div class="modal-section">
+         <h3>What Claude learned</h3>
+         <table class="facts-table">
+           <thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Scope</th></tr></thead>
+           <tbody>
+             ${facts.map(f => `<tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.scope)}')">
+               <td><strong>${esc(f.subject || '—')}</strong></td>
+               <td><span class="badge badge-purple">${esc(f.predicate || '')}</span></td>
+               <td class="object-cell" title="${esc(f.object || '')}">${esc(f.object || '')}</td>
+               <td><span class="badge badge-info">${esc(f.scope || '')}</span></td>
+             </tr>`).join('')}
+           </tbody>
+         </table>
+       </div>`
+    : '<div class="modal-section"><p style="color: var(--text-dim);">No facts could be linked.</p></div>';
+
+  const sourceBlock = ci ? renderSourceContent(ci) : '';
+  const summary = `
+    <div class="recall-header">
+      <div class="recall-stat"><div class="recall-stat-n">${nFacts}</div><div class="recall-stat-label">facts</div></div>
+      <div class="recall-stat"><div class="recall-stat-n">${nEnts}</div><div class="recall-stat-label">entities</div></div>
+      <div class="recall-stat"><div class="recall-stat-n">${e.duration_ms != null ? e.duration_ms + 'ms' : '—'}</div><div class="recall-stat-label">latency</div></div>
+    </div>`;
+
+  const meta = `
+    <details class="modal-collapsible">
+      <summary>Raw event data</summary>
+      <dl class="modal-kv">
+        <dt>id</dt><dd>${e.id}</dd>
+        <dt>occurred_at</dt><dd>${esc(e.occurred_at)} (${esc(e.occurred_ago || '')})</dd>
+        <dt>session_id</dt><dd>${esc(e.session_id || '—')}</dd>
+      </dl>
+      <pre class="modal-json">${formatJson(d)}</pre>
+    </details>`;
+
+  return {title, html: summary + factsBlock + sourceBlock + meta};
+}
+
+// Smart source preview. Tries to extract readable prose:
+// - If the content is already prose (e.g. distilled concept summaries from
+//   the store_extraction MCP tool), render with wrapping, not monospace.
+// - If it's Claude Code transcript JSONL, pull out the user/assistant text
+//   turn-by-turn so the reader sees the conversation, not the envelope.
+function renderSourceContent(ci) {
+  const raw = ci.raw_text_preview || '';
+  const isTranscript = ci.source === 'claude_code' || /^\{"parentUuid"|^\{"type"/.test(raw);
+  const label = isTranscript ? 'From this conversation' : 'From this content';
+
+  const body = isTranscript ? renderTranscript(raw) : renderProse(raw);
+
+  return `
+    <div class="modal-section">
+      <h3>${label}</h3>
+      <div class="source-meta">
+        <span>source <code>${esc(ci.source || '—')}</code></span>
+        ${ci.session_id ? `<span>session ${esc(ci.session_id.slice(0,8))}</span>` : ''}
+        <span>${(ci.byte_len || 0).toLocaleString()} bytes</span>
+        ${ci.truncated ? '<span class="badge badge-warning">preview truncated</span>' : ''}
+      </div>
+      <div class="source-body">${body}</div>
+    </div>`;
+}
+
+function renderProse(raw) {
+  if (!raw) return '<p style="color: var(--text-dim);">(empty)</p>';
+  return `<div class="prose">${esc(raw)}</div>`;
+}
+
+function renderTranscript(raw) {
+  const lines = raw.split('\n');
+  const turns = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    let obj;
+    try { obj = JSON.parse(t); } catch (_) { continue; }
+    if (!obj || !obj.message) continue;
+    const role = obj.message.role;
+    const content = obj.message.content;
+    const text = extractTurnText(content);
+    if (!text) continue;
+    turns.push({role, text});
+    if (turns.length >= 6) break; // keep the modal tight
+  }
+  if (!turns.length) {
+    // Fallback to raw JSON if we couldn't find readable turns.
+    return `<pre class="modal-json">${formatJson(raw, {truncated: false})}</pre>`;
+  }
+  return turns.map(t => `
+    <div class="turn turn-${esc(t.role)}">
+      <div class="turn-role">${esc(t.role)}</div>
+      <div class="turn-text">${esc(truncate(t.text, 400))}${t.text.length > 400 ? '…' : ''}</div>
+    </div>
+  `).join('');
+}
+
+function extractTurnText(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return null;
+  for (const c of content) {
+    if (!c || typeof c !== 'object') continue;
+    if (c.type === 'text' && c.text) return c.text;
+    if (c.type === 'tool_result' && typeof c.content === 'string') return c.content;
+    if (c.type === 'tool_use' && c.name) return `[tool_use: ${c.name}]`;
+  }
+  return null;
+}
+
+function renderContextDetail(data) {
+  const e = data.event || {};
+  const d = e.details || {};
+  const facts = data.linked_facts || [];
+  const n = d.fact_count || facts.length;
+  const title = `Showed Claude ${n} fact${n === 1 ? '' : 's'} at session start`;
+
+  const preview = d.preview
+    ? `<div class="modal-section">
+         <h3>What was injected</h3>
+         <div class="prose context-preview">${esc(d.preview)}${d.truncated ? '\n…' : ''}</div>
+       </div>` : '';
+
+  const factsBlock = facts.length
+    ? `<div class="modal-section">
+         <h3>Facts injected</h3>
+         <table class="facts-table">
+           <thead><tr><th>Subject</th><th>Predicate</th><th>Object</th></tr></thead>
+           <tbody>
+             ${facts.map(f => `<tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.scope)}')">
+               <td><strong>${esc(f.subject || '—')}</strong></td>
+               <td><span class="badge badge-purple">${esc(f.predicate || '')}</span></td>
+               <td class="object-cell" title="${esc(f.object || '')}">${esc(f.object || '')}</td>
+             </tr>`).join('')}
+           </tbody>
+         </table>
+       </div>`
+    : '';
+
+  const meta = `
+    <details class="modal-collapsible">
+      <summary>Raw event data</summary>
+      <pre class="modal-json">${formatJson(d)}</pre>
+    </details>`;
+
+  return {title, html: preview + factsBlock + meta};
+}
+
+function renderIngestDetail(data) {
+  const e = data.event || {};
+  const d = e.details || {};
+  const ci = data.content_item;
+  const facts = data.linked_facts || [];
+  const title = `Ingested ${d.bytes_read ? (d.bytes_read/1024).toFixed(1) + ' KB' : 'transcript'}`;
+
+  const sourceBlock = ci ? renderSourceContent(ci) : '';
+  const factsBlock = facts.length
+    ? `<div class="modal-section">
+         <h3>Facts linked to this content (${facts.length})</h3>
+         <table class="facts-table">
+           <thead><tr><th>Subject</th><th>Predicate</th><th>Object</th></tr></thead>
+           <tbody>
+             ${facts.map(f => `<tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.scope)}')">
+               <td>${esc(f.subject || '—')}</td>
+               <td><span class="badge badge-purple">${esc(f.predicate || '')}</span></td>
+               <td class="object-cell" title="${esc(f.object || '')}">${esc(f.object || '')}</td>
+             </tr>`).join('')}
+           </tbody>
+         </table>
+       </div>`
+    : '';
+
+  return {title, html: sourceBlock + factsBlock};
+}
+
+function renderGenericDetail(data) {
+  const e = data.event || {};
+  const d = e.details || {};
+  return {
+    title: e.event_type || 'Event',
+    html: `
+      <div class="modal-section">
+        <dl class="modal-kv">
+          <dt>type</dt><dd><span class="badge badge-info">${esc(e.event_type)}</span></dd>
+          <dt>status</dt><dd><span class="badge badge-${statusBadge(e.status)}">${esc(e.status)}</span></dd>
+          <dt>occurred_at</dt><dd>${esc(e.occurred_at)} (${esc(e.occurred_ago || '')})</dd>
+          <dt>duration</dt><dd>${e.duration_ms != null ? e.duration_ms + 'ms' : '—'}</dd>
+          <dt>session_id</dt><dd>${esc(e.session_id || '—')}</dd>
+        </dl>
+        <pre class="modal-json">${formatJson(d)}</pre>
+      </div>
+    `
+  };
+}
+
+function truncate(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n) : s; }
+
+function switchFeedToAll() {
+  const allChip = document.querySelector('.chip[data-kinds=""]');
+  if (allChip) allChip.click();
+}
+
+// Feed filter chips
+document.querySelectorAll('.chip[data-kinds]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.chip[data-kinds]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentKinds = btn.dataset.kinds;
+    loadMoments();
+  });
+});
+
+// ==================== Modals / drawer ====================
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-backdrop').forEach(bd => bd.addEventListener('click', e => {
+  if (e.target === bd) bd.classList.remove('open');
+}));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+    closeDrawer();
+  }
+});
+
+function openDrawer(tab) {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-scrim').classList.add('open');
+  if (tab) switchAdvTab(tab);
+  loadAdvanced();
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawer-scrim').classList.remove('open');
+}
+document.querySelectorAll('.drawer-tab').forEach(t => t.addEventListener('click', () => switchAdvTab(t.dataset.adv)));
+function switchAdvTab(name) {
+  document.querySelectorAll('.drawer-tab').forEach(t => t.classList.toggle('active', t.dataset.adv === name));
+  document.querySelectorAll('.drawer-panel').forEach(p => p.classList.toggle('active', p.id === 'adv-' + name));
+}
+
+// ==================== Advanced drawer loaders ====================
+async function loadAdvanced() {
+  await Promise.all([loadKnowledge(), loadOverview(), loadFacts(), loadEfficacy(), loadConflicts(), loadActivityLog()]);
+}
+
+let knowledgeScope = 'all';
+let pendingKnowledgeSection = null;
+
+async function loadKnowledge() {
+  const data = await api('knowledge', {scope: knowledgeScope, limit: 100});
+  const body = document.getElementById('knowledge-body');
+  const totals = document.getElementById('knowledge-totals');
+
+  const projN = (data.totals && data.totals.project) || 0;
+  const globN = (data.totals && data.totals.global) || 0;
+  totals.textContent = `${(projN + globN).toLocaleString()} active · ${projN} project · ${globN} global`;
+
+  const sections = data.sections || [];
+  if (!sections.length) {
+    body.innerHTML = '<div class="knowledge-empty">No knowledge yet. Facts will appear here as Claude extracts decisions, conventions, and architecture from your sessions.</div>';
     return;
   }
-  empty.style.display = 'none';
 
+  body.innerHTML = sections.map(s => `
+    <section class="knowledge-section" id="kb-section-${esc(s.key)}">
+      <header class="knowledge-section-header">
+        <h3>${esc(s.label)}</h3>
+        <span class="count">${s.count}</span>
+        <span class="desc">${esc(s.description)}</span>
+      </header>
+      ${s.count === 0
+        ? '<div class="knowledge-empty">Nothing in this category yet.</div>'
+        : `<div class="knowledge-cards">${s.facts.map(kbCard).join('')}</div>`}
+    </section>
+  `).join('');
+
+  // Pending deep-link from sidebar — scroll to & highlight the requested
+  // section now that it's rendered. Cleared after first application so
+  // subsequent refreshes don't keep scrolling.
+  if (pendingKnowledgeSection) {
+    const el = document.getElementById('kb-section-' + pendingKnowledgeSection);
+    if (el) {
+      el.scrollIntoView({behavior: 'smooth', block: 'start'});
+      const header = el.querySelector('.knowledge-section-header h3');
+      if (header) {
+        header.style.transition = 'color 0.3s';
+        header.style.color = 'var(--accent)';
+        setTimeout(() => { header.style.color = ''; }, 1500);
+      }
+    }
+    pendingKnowledgeSection = null;
+  }
+}
+
+function kbCard(f) {
+  return `<div class="knowledge-card" onclick="openFactModal(${f.id}, '${esc(f.source)}')">
+    <div class="kc-object">${esc(f.object || '')}</div>
+    <div class="kc-meta">
+      <span class="pred">${esc(f.predicate)}</span>
+      <span class="src ${esc(f.source)}">${esc(f.source)}</span>
+      ${f.confidence != null ? `<span>${(f.confidence * 100).toFixed(0)}% confident</span>` : ''}
+      ${f.subject ? `<span>subject: <strong>${esc(f.subject)}</strong></span>` : ''}
+      ${f.created_ago ? `<span>added ${esc(f.created_ago)}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+function applyKnowledgeSection(sectionKey) {
+  pendingKnowledgeSection = sectionKey;
+  loadKnowledge();
+}
+
+document.querySelectorAll('.chip[data-knowledge-scope]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.chip[data-knowledge-scope]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    knowledgeScope = btn.dataset.knowledgeScope;
+    loadKnowledge();
+  });
+});
+
+async function loadOverview() {
+  const data = await api('stats');
+  const dbs = data.databases || {};
+  const host = document.getElementById('overview-rows');
+  const scopes = [
+    {key: 'project', label: 'Project', db: dbs.project || {}},
+    {key: 'global',  label: 'Global',  db: dbs.global  || {}}
+  ];
+  let preds = [], ents = [];
+  host.innerHTML = scopes.map(({label, db}) => {
+    if (!db.exists) {
+      return `<div class="adv-card"><h3>${label}</h3><div style="color: var(--text-dim); font-size: 12px;">Not initialized</div></div>`;
+    }
+    preds = preds.concat(db.top_predicates || []);
+    ents = ents.concat(db.entity_types || []);
+    return `<div class="adv-card">
+      <h3>${label} memory</h3>
+      <div class="adv-grid">
+        ${advMetric('Active facts', db.facts_active, `${db.facts_total} total`)}
+        ${advMetric('Entities', db.entities_total, '')}
+        ${advMetric('Content items', db.content_items, 'ingested')}
+        ${advMetric('Open conflicts', db.open_conflicts, db.open_conflicts ? 'need resolution' : 'none')}
+      </div>
+    </div>`;
+  }).join('');
+  renderBarChart('predicate-chart', mergeAndSort(preds, 'predicate'));
+  renderBarChart('entity-chart', mergeAndSort(ents, 'type'));
+}
+
+function advMetric(label, value, sub) {
+  return `<div class="adv-metric">
+    <div class="label">${label}</div>
+    <div class="value">${typeof value === 'number' ? value.toLocaleString() : (value ?? '—')}</div>
+    ${sub ? `<div class="label" style="text-transform: none; letter-spacing: 0; color: var(--text-faint); margin-top: 2px;">${sub}</div>` : ''}
+  </div>`;
+}
+function mergeAndSort(items, key) {
+  const m = {};
+  items.forEach(i => { m[i[key]] = (m[i[key]] || 0) + i.count; });
+  return Object.entries(m).sort((a,b) => b[1]-a[1]).slice(0,10).map(([label,count]) => ({label,count}));
+}
+
+async function loadFacts() {
+  const scope = document.querySelector('.chip[data-fact-scope].active')?.dataset.factScope || 'all';
+  const status = document.querySelector('.chip[data-status].active')?.dataset.status || 'active';
+  const q = document.getElementById('fact-search').value;
+  const stale = document.getElementById('stale-chip')?.classList.contains('active');
+  const params = {scope, status, q};
+  if (stale) params.stale = 'true';
+  const data = await api('facts', params);
+  const tbody = document.getElementById('facts-tbody');
+  if (!(data.facts || []).length) { tbody.innerHTML = '<tr><td colspan="7" style="color: var(--text-dim);">No facts match.</td></tr>'; return; }
+  tbody.innerHTML = data.facts.map(f => `
+    <tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.source)}')">
+      <td><code>${f.docid || f.id}</code></td>
+      <td>${esc(f.subject)}</td>
+      <td><span class="badge badge-purple">${esc(f.predicate)}</span></td>
+      <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(f.object)}">${esc(f.object)}</td>
+      <td>${f.confidence ? (f.confidence * 100).toFixed(0) + '%' : '-'}</td>
+      <td><span class="badge ${f.source === 'global' ? 'badge-purple' : 'badge-info'}">${esc(f.source)}</span></td>
+      <td style="font-size: 11px; color: var(--text-dim);" title="${f.created_at}">${f.created_ago || '-'}</td>
+    </tr>
+  `).join('');
+}
+
+document.querySelectorAll('.chip[data-fact-scope], .chip[data-status]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const grp = btn.dataset.factScope ? 'data-fact-scope' : 'data-status';
+    document.querySelectorAll(`.chip[${grp}]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadFacts();
+  });
+});
+// Stale chip is a toggle (not part of scope/status group — it composes with them)
+document.getElementById('stale-chip').addEventListener('click', (e) => {
+  e.currentTarget.classList.toggle('active');
+  loadFacts();
+});
+
+// Opens the Facts drawer with the stale filter pre-activated. Called from
+// the sidebar "Facts never recalled" review row.
+function applyStaleFilter() {
+  const chip = document.getElementById('stale-chip');
+  if (chip && !chip.classList.contains('active')) {
+    chip.classList.add('active');
+    loadFacts();
+  }
+}
+let factSearchTimer;
+document.getElementById('fact-search').addEventListener('input', () => {
+  clearTimeout(factSearchTimer);
+  factSearchTimer = setTimeout(loadFacts, 250);
+});
+
+async function loadEfficacy() {
+  const params = {};
+  if (currentTimeframe === '7d') params.since = new Date(Date.now() - 7*86400*1000).toISOString();
+  else if (currentTimeframe === 'session' && currentSessionId) params.session_id = currentSessionId;
+  const data = await api('efficacy', params);
+
+  const cards = document.getElementById('efficacy-cards');
+  cards.innerHTML = [
+    advMetric('Hit rate', data.recall_events < 10 ? `${data.successful_recalls}/${data.recall_events}` : data.hit_rate + '%', data.recall_events < 10 ? 'n<10 — raw ratio' : `of ${data.recall_events} recalls`),
+    advMetric('Recalls', data.recall_events, currentTimeframe === '7d' ? 'last 7 days' : currentTimeframe),
+    advMetric('Median results', data.median_results_per_query, 'per recall'),
+    advMetric('Median latency', (data.median_latency_ms || 0) + 'ms', 'p50')
+  ].join('');
+
+  renderBarChart('efficacy-tool-mix', (data.tool_mix || []).map(t => ({label: (t.tool || '—').replace('memory.', ''), count: t.count})));
+
+  const gaps = document.getElementById('efficacy-gaps');
+  if (!(data.memory_gaps || []).length) {
+    gaps.innerHTML = '<div style="color: var(--text-dim); font-size: 12px;">No zero-result queries.</div>';
+  } else {
+    gaps.innerHTML = data.memory_gaps.map(g => `
+      <div style="padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--surface2);">
+        <span style="color: var(--text-faint);">${g.occurred_ago}</span>
+        <span class="badge badge-info" style="margin: 0 6px;">${(g.tool || '').replace('memory.', '')}</span>
+        <code>${esc(g.query || '')}</code>
+      </div>
+    `).join('');
+  }
+
+  const tbody = document.getElementById('efficacy-trace-tbody');
+  if (!(data.recall_trace || []).length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color: var(--text-dim);">No recalls.</td></tr>';
+  } else {
+    tbody.innerHTML = data.recall_trace.map(r => `
+      <tr class="row-clickable" onclick="openMomentModal(${r.id})">
+        <td title="${r.occurred_at}">${r.occurred_ago}</td>
+        <td><span class="badge badge-info">${(r.tool || '').replace('memory.', '')}</span></td>
+        <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(r.query || '')}">${esc(r.query || '—')}</td>
+        <td>${r.result_count}</td>
+        <td>${r.duration_ms != null ? r.duration_ms + 'ms' : '-'}</td>
+      </tr>
+    `).join('');
+  }
+}
+document.querySelectorAll('.chip[data-timeframe]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.chip[data-timeframe]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTimeframe = btn.dataset.timeframe;
+    loadEfficacy();
+  });
+});
+
+async function loadConflicts() {
+  const scope = document.querySelector('.chip[data-conflict-scope].active')?.dataset.conflictScope || 'project';
+  const status = document.querySelector('.chip[data-conflict-status].active')?.dataset.conflictStatus || 'open';
+  const data = await api('conflicts', {scope, status});
+  if (data.counts) {
+    ['project','global'].forEach(s => {
+      const el = document.querySelector(`[data-count-scope="${s}"]`);
+      if (el) { const c = data.counts[s] || {}; el.textContent = '(' + (status === 'all' ? (c.total||0) : (c[status]||0)) + ')'; }
+    });
+  }
+  const tbody = document.getElementById('conflicts-tbody');
+  if (!(data.conflicts || []).length) { tbody.innerHTML = '<tr><td colspan="5" style="color: var(--text-dim);">No conflicts.</td></tr>'; return; }
   tbody.innerHTML = data.conflicts.map(c => {
-    const a = c.fact_a_preview || {};
-    const b = c.fact_b_preview || {};
-    const sourceCell = showSource ? `<td class="conflict-source-col"><span class="badge badge-info">${esc(c.source)}</span></td>` : '';
-    return `<tr class="row-clickable" onclick="openConflictModal(${c.id}, '${esc(c.source)}')" title="Click for details">
+    const a = c.fact_a_preview || {}, b = c.fact_b_preview || {};
+    return `<tr class="row-clickable" onclick="openConflictModal(${c.id}, '${esc(c.source)}')">
       <td title="${c.detected_at}">${c.detected_ago}</td>
-      <td style="max-width: 260px;">
+      <td style="max-width: 240px;">
         <span class="badge badge-purple">${esc(a.predicate || '?')}</span>
-        <div style="margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(a.object || '')}">${esc(a.object || '—')}</div>
+        <div style="font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(a.object || '')}">${esc(a.object || '—')}</div>
       </td>
-      <td style="text-align: center; color: var(--text-dim); font-size: 11px;">vs</td>
-      <td style="max-width: 260px;">
+      <td style="color: var(--text-faint); font-size: 11px;">vs</td>
+      <td style="max-width: 240px;">
         <span class="badge badge-purple">${esc(b.predicate || '?')}</span>
-        <div style="margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(b.object || '')}">${esc(b.object || '—')}</div>
+        <div style="font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(b.object || '')}">${esc(b.object || '—')}</div>
       </td>
-      ${sourceCell}
       <td><span class="badge badge-${c.status === 'open' ? 'warning' : 'success'}">${esc(c.status)}</span></td>
     </tr>`;
   }).join('');
 }
+document.querySelectorAll('.chip[data-conflict-scope], .chip[data-conflict-status]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const grp = btn.dataset.conflictScope ? 'data-conflict-scope' : 'data-conflict-status';
+    document.querySelectorAll(`.chip[${grp}]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadConflicts();
+  });
+});
 
-let currentConflictId = null;
-let currentConflictScope = null;
+async function loadActivityLog() {
+  const data = await api('activity', {limit: 100});
+  const tbody = document.getElementById('activity-tbody');
+  if (!(data.events || []).length) { tbody.innerHTML = '<tr><td colspan="5" style="color: var(--text-dim);">No events.</td></tr>'; return; }
+  tbody.innerHTML = data.events.map(e => `
+    <tr class="row-clickable" onclick="openMomentModal(${e.id})">
+      <td title="${e.occurred_at}">${e.occurred_ago || e.occurred_at}</td>
+      <td><span class="badge badge-info">${esc(e.event_type)}</span></td>
+      <td><span class="badge badge-${statusBadge(e.status)}">${esc(e.status)}</span></td>
+      <td>${e.duration_ms != null ? e.duration_ms + 'ms' : '-'}</td>
+      <td style="font-size: 11px; color: var(--text-dim);">${esc(JSON.stringify(e.details || {}).slice(0, 120))}</td>
+    </tr>
+  `).join('');
+}
 
+// ==================== Conflict modal (inline) ====================
 async function openConflictModal(id, scope) {
-  currentConflictId = id;
-  currentConflictScope = scope;
-  const modal = document.getElementById('conflict-modal');
+  currentConflictId = id; currentConflictScope = scope;
   const body = document.getElementById('conflict-modal-body');
-  body.innerHTML = '<p class="modal-empty">Loading…</p>';
-  modal.classList.add('open');
-
+  body.innerHTML = '<p style="color: var(--text-dim);">Loading…</p>';
+  openModal('conflict-modal');
   try {
     const data = await api('conflicts/' + id, {scope});
-    if (data.error) {
-      body.innerHTML = `<p class="modal-empty">${esc(data.error)}</p>`;
-      return;
-    }
+    if (data.error) { body.innerHTML = `<p style="color: var(--text-dim);">${esc(data.error)}</p>`; return; }
     body.innerHTML = renderConflictDetail(data);
-  } catch (err) {
-    body.innerHTML = `<p class="modal-empty">Failed to load: ${esc(err.message)}</p>`;
+  } catch (e) {
+    body.innerHTML = `<p style="color: var(--text-dim);">Failed: ${esc(e.message)}</p>`;
   }
 }
-
-function closeConflictModal() {
-  document.getElementById('conflict-modal').classList.remove('open');
-  currentConflictId = null;
-  currentConflictScope = null;
-}
-
 function renderConflictDetail(data) {
   const c = data.conflict;
-  const meta = `
-    <div class="conflict-meta">
-      Conflict #${c.id} — detected ${esc(c.detected_ago || '')}
-      — status <span class="badge badge-${c.status === 'open' ? 'warning' : 'success'}">${esc(c.status)}</span>
-      ${c.notes ? ' — <em>' + esc(c.notes) + '</em>' : ''}
-    </div>
-  `;
-
-  // Identify the keeper side — the one with status "active". When the same
-  // keeper fact is in conflict with multiple disputed facts (classic
-  // distiller-hallucination pattern), a bulk-reject action clears the
-  // backlog in one click.
   const canReject = c.status === 'open';
   const keeper = (data.fact_a && data.fact_a.status === 'active') ? data.fact_a
-    : (data.fact_b && data.fact_b.status === 'active') ? data.fact_b
-    : null;
-
+    : (data.fact_b && data.fact_b.status === 'active') ? data.fact_b : null;
   const bulk = (canReject && keeper) ? `
     <div style="margin-bottom: 12px; padding: 10px 12px; background: var(--surface2); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 12px;">
-      Fact #${keeper.id} (${esc(keeper.predicate)} = ${esc(keeper.object)}) may have other open conflicts against it.
+      Fact #${keeper.id} may have other open conflicts against it.
       <button class="btn-reject" style="margin-left: 8px;" onclick="rejectAllSimilar(${keeper.id})">Reject all similar</button>
-      <span style="color: var(--text-dim); margin-left: 6px;">— keeps #${keeper.id}, rejects every contradicting fact currently in open conflict with it.</span>
+    </div>` : '';
+  return `
+    <div style="font-size: 12px; color: var(--text-dim); padding: 8px 12px; background: var(--surface2); border-radius: 4px; margin-bottom: 12px;">
+      Conflict #${c.id} — detected ${esc(c.detected_ago || '')} — <span class="badge badge-${c.status === 'open' ? 'warning' : 'success'}">${esc(c.status)}</span>
     </div>
-  ` : '';
-
-  const pair = `
+    ${bulk}
     <div class="conflict-pair">
       ${renderConflictSide('A', data.fact_a, canReject)}
       ${renderConflictSide('B', data.fact_b, canReject)}
     </div>
   `;
-
-  return meta + bulk + pair;
 }
-
 function renderConflictSide(label, fact, canReject) {
-  if (!fact) return `<div class="conflict-side"><h4>Fact ${label}</h4><p class="modal-empty">(missing)</p></div>`;
-
+  if (!fact) return `<div class="conflict-side"><h4>Fact ${label}</h4><p style="color: var(--text-dim);">missing</p></div>`;
   const sideKey = label.toLowerCase();
   const provList = (fact.provenance || []).length
     ? `<ul class="conflict-prov-list">${fact.provenance.map(p => `
         <li>
-          <div>${esc(p.strength || 'stated')} — session ${p.session_id ? esc(p.session_id.slice(0, 8)) + '…' : '(unknown)'}${p.occurred_at ? ' on ' + esc(p.occurred_at.slice(0, 10)) : ''}</div>
-          ${p.quote ? '<span class="quote">' + esc(p.quote) + '</span>' : ''}
+          <div>${esc(p.strength || 'stated')} — session ${p.session_id ? esc(p.session_id.slice(0,8)) : '(unknown)'}${p.occurred_at ? ' on ' + esc(p.occurred_at.slice(0,10)) : ''}</div>
+          ${p.quote ? `<span class="quote">${esc(p.quote)}</span>` : ''}
         </li>`).join('')}</ul>`
-    : '<p class="modal-empty">No provenance recorded.</p>';
-
+    : '<p style="color: var(--text-dim); font-size: 11px;">No provenance.</p>';
   return `
     <div class="conflict-side">
       <h4>Fact ${label} (#${fact.id})</h4>
       <div><strong>${esc(fact.subject)}</strong> <span class="badge badge-purple">${esc(fact.predicate)}</span></div>
       <div class="conflict-fact-object">${esc(fact.object)}</div>
-      <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
-        ${fact.confidence ? (fact.confidence * 100).toFixed(0) + '% confidence · ' : ''}
-        scope <span class="badge badge-info">${esc(fact.scope)}</span> ·
-        status <span class="badge badge-${fact.status === 'active' ? 'success' : 'warning'}">${esc(fact.status)}</span> ·
-        created ${esc(fact.created_ago || '')}
+      <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 8px;">
+        ${fact.confidence ? (fact.confidence * 100).toFixed(0) + '% · ' : ''}
+        <span class="badge badge-${fact.status === 'active' ? 'success' : 'warning'}">${esc(fact.status)}</span>
       </div>
       ${provList}
       ${canReject ? `
       <div class="conflict-actions">
         <textarea class="conflict-reason" id="conflict-reason-${sideKey}" placeholder="Reason (optional)" rows="1"></textarea>
-        <button class="btn-reject" onclick="rejectConflictFact('${sideKey}', this)">Reject fact ${label}</button>
+        <button class="btn-reject" onclick="rejectConflictFact('${sideKey}', this)">Reject ${label}</button>
       </div>` : ''}
-    </div>
-  `;
+    </div>`;
 }
-
-async function rejectAllSimilar(keeperFactId) {
-  if (!confirm(`Reject every fact currently in open conflict with fact #${keeperFactId}? This cannot be undone.`)) return;
-
+async function rejectAllSimilar(keeper) {
+  if (!confirm(`Reject every fact currently in open conflict with fact #${keeper}?`)) return;
   try {
     const res = await fetch('/api/conflicts/reject_similar', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        keeper_fact_id: keeperFactId,
-        reason: 'bulk reject via dashboard',
-        scope: currentConflictScope || 'project'
-      })
+      body: JSON.stringify({keeper_fact_id: keeper, reason: 'bulk reject via dashboard', scope: currentConflictScope || 'project'})
     });
     const data = await res.json();
-    if (data.error) {
-      showToast('Error: ' + data.error, true);
-      return;
-    }
-    if (!Array.isArray(data.rejected_fact_ids)) {
-      // The server returned an unexpected shape — usually means the
-      // dashboard process predates the reject_similar route. Surface a
-      // concrete hint instead of a cryptic property-access crash.
-      showToast('Bulk reject unavailable — restart the dashboard and hard-refresh the browser.', true);
-      return;
-    }
-    showToast(`Kept #${data.keeper_fact_id} · rejected ${data.rejected_fact_ids.length} fact(s) · resolved ${data.conflicts_resolved} conflict(s)`);
-    closeConflictModal();
-    loadConflicts();
-    loadStats();
-  } catch (err) {
-    showToast('Request failed: ' + err.message, true);
-  }
+    if (data.error) return showToast('Error: ' + data.error, true);
+    showToast(`Kept #${data.keeper_fact_id} · rejected ${(data.rejected_fact_ids || []).length} fact(s)`);
+    closeModal('conflict-modal');
+    loadConflicts(); loadTrust();
+  } catch (e) { showToast('Failed: ' + e.message, true); }
 }
-
 async function rejectConflictFact(side, btn) {
   if (currentConflictId == null) return;
-  const reasonEl = document.getElementById('conflict-reason-' + side);
-  const reason = reasonEl ? reasonEl.value.trim() : '';
-
-  btn.disabled = true;
-  btn.textContent = 'Rejecting…';
-
+  const reason = document.getElementById('conflict-reason-' + side)?.value?.trim();
+  btn.disabled = true; btn.textContent = 'Rejecting…';
   try {
     const res = await fetch('/api/conflicts/' + currentConflictId + '/reject', {
       method: 'POST',
@@ -1381,131 +2372,39 @@ async function rejectConflictFact(side, btn) {
       body: JSON.stringify({side, reason, scope: currentConflictScope || 'project'})
     });
     const data = await res.json();
-    if (data.error) {
-      showToast('Error: ' + data.error, true);
-      btn.disabled = false;
-      btn.textContent = 'Reject fact ' + side.toUpperCase();
-      return;
-    }
+    if (data.error) { showToast('Error: ' + data.error, true); btn.disabled = false; btn.textContent = 'Reject ' + side.toUpperCase(); return; }
     showToast(`Fact #${data.rejected_fact_id} rejected — ${data.conflicts_resolved} conflict(s) resolved`);
-    closeConflictModal();
-    loadConflicts();
-    loadStats();
-  } catch (err) {
-    showToast('Request failed: ' + err.message, true);
-    btn.disabled = false;
-    btn.textContent = 'Reject fact ' + side.toUpperCase();
-  }
+    closeModal('conflict-modal');
+    loadConflicts(); loadTrust();
+  } catch (e) { showToast('Failed: ' + e.message, true); btn.disabled = false; btn.textContent = 'Reject ' + side.toUpperCase(); }
 }
 
-function showToast(msg, isError) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.toggle('error', !!isError);
-  toast.classList.add('visible');
-  clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => toast.classList.remove('visible'), 4000);
-}
-
-document.getElementById('conflict-modal').addEventListener('click', closeConflictModal);
-
-function formatDetails(type, details) {
-  switch(type) {
-    case 'hook_ingest':
-      if (details.bytes_read) return `${details.bytes_read} bytes, content_id: ${details.content_id}`;
-      return details.reason || '';
-    case 'hook_context':
-      if (details.context_length) return `${details.context_length} chars injected`;
-      return details.error || 'no context';
-    case 'hook_sweep':
-      return `${details.elapsed_seconds?.toFixed(2) || '?'}s, budget: ${details.budget_honored}`;
-    case 'recall':
-      return `${details.tool}: "${details.query || '?'}" -> ${details.result_count || 0} results`;
-    case 'store_extraction':
-      return `${details.facts_created || 0} facts, ${details.entities_created || 0} entities`;
-    default:
-      return JSON.stringify(details).slice(0, 80);
-  }
-}
-
-async function loadFacts(params = {}) {
-  const data = await api('facts', params);
-  const tbody = document.getElementById('facts-tbody');
-  const empty = document.getElementById('facts-empty');
-
-  if (!data.facts || data.facts.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
-    return;
-  }
-  empty.style.display = 'none';
-
-  tbody.innerHTML = data.facts.map(f => `
-    <tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.source)}')" title="Click for details">
-      <td><code>${f.docid || f.id}</code></td>
-      <td>${esc(f.subject)}</td>
-      <td><span class="badge badge-purple">${esc(f.predicate)}</span></td>
-      <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-          title="${esc(f.object)}">${esc(f.object)}</td>
-      <td>${f.confidence ? (f.confidence * 100).toFixed(0) + '%' : '-'}</td>
-      <td><span class="badge badge-info">${esc(f.scope || '')}</span></td>
-      <td><span class="badge ${f.source === 'global' ? 'badge-purple' : 'badge-info'}" style="opacity: 0.8;">${esc(f.source || '')}</span></td>
-      <td title="${f.created_at}">${f.created_ago || f.created_at || '-'}</td>
-    </tr>
-  `).join('');
-}
-
-let currentFactId = null;
-let currentFactScope = null;
-
+// ==================== Fact modal ====================
 async function openFactModal(id, scope) {
-  currentFactId = id;
-  currentFactScope = scope;
-  const modal = document.getElementById('fact-modal');
+  currentFactId = id; currentFactScope = scope;
   const body = document.getElementById('fact-modal-body');
-  body.innerHTML = '<p class="modal-empty">Loading…</p>';
-  modal.classList.add('open');
-
+  body.innerHTML = '<p style="color: var(--text-dim);">Loading…</p>';
+  openModal('fact-modal');
   try {
     const data = await api('facts/' + id, {scope});
-    if (data.error) {
-      body.innerHTML = `<p class="modal-empty">${esc(data.error)}</p>`;
-      return;
-    }
+    if (data.error) { body.innerHTML = `<p style="color: var(--text-dim);">${esc(data.error)}</p>`; return; }
     body.innerHTML = renderFactDetail(data);
-  } catch (err) {
-    body.innerHTML = `<p class="modal-empty">Failed to load: ${esc(err.message)}</p>`;
+  } catch (e) {
+    body.innerHTML = `<p style="color: var(--text-dim);">Failed: ${esc(e.message)}</p>`;
   }
 }
-
-function closeFactModal() {
-  document.getElementById('fact-modal').classList.remove('open');
-  currentFactId = null;
-  currentFactScope = null;
-}
-
 function renderFactDetail(f) {
   const provList = (f.provenance || []).length
     ? `<ul class="conflict-prov-list">${f.provenance.map(p => `
         <li>
-          <div>${esc(p.strength || 'stated')} — session ${p.session_id ? esc(p.session_id.slice(0, 8)) + '…' : '(unknown)'}${p.occurred_at ? ' on ' + esc(p.occurred_at.slice(0, 10)) : ''}</div>
-          ${p.quote ? '<span class="quote">' + esc(p.quote) + '</span>' : ''}
+          <div>${esc(p.strength || 'stated')} — session ${p.session_id ? esc(p.session_id.slice(0,8)) : '(unknown)'}${p.occurred_at ? ' on ' + esc(p.occurred_at.slice(0,10)) : ''}</div>
+          ${p.quote ? `<span class="quote">${esc(p.quote)}</span>` : ''}
         </li>`).join('')}</ul>`
-    : '<p class="modal-empty">No provenance recorded.</p>';
-
+    : '<p style="color: var(--text-dim); font-size: 11px;">No provenance.</p>';
   const canReject = f.status === 'active' || f.status === 'disputed';
   const canPromote = f.source === 'project' && f.status === 'active';
-
-  const actions = canReject ? `
-    <div class="conflict-actions" style="margin-top: 16px;">
-      <textarea class="conflict-reason" id="fact-reason" placeholder="Reason (optional)" rows="1"></textarea>
-      <button class="btn-reject" onclick="rejectFactFromModal(this)">Reject fact</button>
-      ${canPromote ? '<button class="btn-reject" style="border-color: var(--accent); color: var(--accent);" onclick="promoteFactFromModal(this)">Promote to global</button>' : ''}
-    </div>
-  ` : '';
-
   return `
-    <div class="conflict-side" style="margin-bottom: 16px;">
+    <div class="conflict-side" style="background: transparent; border: none; padding: 0;">
       <h4>Fact #${f.id} · <code>${esc(f.docid || '')}</code></h4>
       <div><strong>${esc(f.subject)}</strong> <span class="badge badge-purple">${esc(f.predicate)}</span></div>
       <div class="conflict-fact-object">${esc(f.object)}</div>
@@ -1514,357 +2413,175 @@ function renderFactDetail(f) {
         <dt>scope</dt><dd><span class="badge badge-info">${esc(f.scope)}</span> (${esc(f.source)})</dd>
         <dt>confidence</dt><dd>${f.confidence ? (f.confidence * 100).toFixed(0) + '%' : '-'}</dd>
         <dt>created</dt><dd>${esc(f.created_at || '')} (${esc(f.created_ago || '')})</dd>
-        <dt>valid_from</dt><dd>${esc(f.valid_from || '—')}</dd>
-        <dt>valid_to</dt><dd>${esc(f.valid_to || '—')}</dd>
       </dl>
-      <div class="modal-section">
-        <h3>Provenance</h3>
-        ${provList}
-      </div>
-      ${actions}
+      <div class="modal-section"><h3>Provenance</h3>${provList}</div>
+      ${canReject ? `
+        <div class="conflict-actions" style="margin-top: 16px;">
+          <textarea class="conflict-reason" id="fact-reason" placeholder="Reason (optional)" rows="1"></textarea>
+          <button class="btn-reject" onclick="rejectFactFromModal(this)">Reject</button>
+          ${canPromote ? '<button class="btn-reject btn-promote" onclick="promoteFactFromModal(this)">Promote to global</button>' : ''}
+        </div>` : ''}
     </div>
   `;
 }
-
 async function rejectFactFromModal(btn) {
   if (currentFactId == null) return;
-  const reasonEl = document.getElementById('fact-reason');
-  const reason = reasonEl ? reasonEl.value.trim() : '';
-
-  btn.disabled = true;
-  btn.textContent = 'Rejecting…';
+  const reason = document.getElementById('fact-reason')?.value?.trim();
+  btn.disabled = true; btn.textContent = 'Rejecting…';
   try {
     const res = await fetch('/api/facts/' + currentFactId + '/reject', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({reason, scope: currentFactScope || 'project'})
     });
     const data = await res.json();
-    if (data.error) { showToast('Error: ' + data.error, true); btn.disabled = false; btn.textContent = 'Reject fact'; return; }
-    showToast(`Fact #${data.fact_id} rejected${data.conflicts_resolved ? ' · ' + data.conflicts_resolved + ' conflict(s) resolved' : ''}`);
-    closeFactModal();
-    loadFacts(currentFactParams());
-    loadStats();
-    loadConflicts();
-  } catch (err) {
-    showToast('Request failed: ' + err.message, true);
-    btn.disabled = false;
-    btn.textContent = 'Reject fact';
-  }
+    if (data.error) { showToast('Error: ' + data.error, true); btn.disabled = false; btn.textContent = 'Reject'; return; }
+    showToast(`Fact #${data.fact_id} rejected`);
+    closeModal('fact-modal'); loadFacts(); loadTrust();
+  } catch (e) { showToast('Failed: ' + e.message, true); btn.disabled = false; btn.textContent = 'Reject'; }
 }
-
 async function promoteFactFromModal(btn) {
   if (currentFactId == null) return;
-  if (!confirm(`Promote fact #${currentFactId} from project to global memory?`)) return;
-  btn.disabled = true;
-  btn.textContent = 'Promoting…';
+  if (!confirm(`Promote fact #${currentFactId} to global memory?`)) return;
+  btn.disabled = true; btn.textContent = 'Promoting…';
   try {
     const res = await fetch('/api/facts/' + currentFactId + '/promote', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({})
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'
     });
     const data = await res.json();
     if (data.error) { showToast('Error: ' + data.error, true); btn.disabled = false; btn.textContent = 'Promote to global'; return; }
     showToast(`Fact #${data.project_fact_id} promoted → global #${data.global_fact_id}`);
-    closeFactModal();
-    loadFacts(currentFactParams());
-    loadStats();
-  } catch (err) {
-    showToast('Request failed: ' + err.message, true);
-    btn.disabled = false;
-    btn.textContent = 'Promote to global';
-  }
+    closeModal('fact-modal'); loadFacts(); loadTrust();
+  } catch (e) { showToast('Failed: ' + e.message, true); btn.disabled = false; btn.textContent = 'Promote to global'; }
 }
 
-document.getElementById('fact-modal').addEventListener('click', closeFactModal);
-
+// ==================== Explore ====================
 async function runExplore() {
   const query = document.getElementById('explore-query').value.trim();
   const scope = document.getElementById('explore-scope').value;
   const limit = document.getElementById('explore-limit').value;
   const meta = document.getElementById('explore-meta');
   const tbody = document.getElementById('explore-tbody');
-  const empty = document.getElementById('explore-empty');
-
-  if (!query) {
-    meta.textContent = 'Enter a query.';
-    return;
-  }
-
+  if (!query) { meta.textContent = 'Enter a query.'; return; }
   meta.textContent = 'Querying…';
   tbody.innerHTML = '';
-  empty.style.display = 'none';
-
   try {
     const data = await api('recall', {query, scope, limit});
     if (data.error) {
-      const hintHtml = data.hint ? `<div style="margin-top: 6px; color: var(--text-dim); font-size: 12px;">${esc(data.hint)}</div>` : '';
-      meta.innerHTML = `<span class="json-error">${esc(data.error)}</span>${hintHtml}`;
-      empty.style.display = 'block';
+      meta.innerHTML = renderRecallError(data, scope);
       return;
     }
-
-    meta.textContent = `${data.count} result(s) in ${data.duration_ms}ms · scope=${data.scope} · limit=${data.limit}`;
-
-    if (!data.facts || data.facts.length === 0) {
-      empty.innerHTML = '<p>No facts matched this query.</p><p>This is a "memory gap" — consider whether the knowledge exists in another form (different phrasing, different scope), or whether it needs to be added.</p>';
-      empty.style.display = 'block';
-      return;
-    }
-
+    meta.textContent = `${data.count} result(s) in ${data.duration_ms}ms · scope=${data.scope}`;
+    if (!(data.facts || []).length) { tbody.innerHTML = '<tr><td colspan="7" style="color: var(--text-dim);">No facts matched.</td></tr>'; return; }
     tbody.innerHTML = data.facts.map((f, i) => `
-      <tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.source || f.scope)}')" title="Click for detail">
-        <td style="color: var(--text-dim); font-size: 12px;">${i + 1}</td>
-        <td>${esc(f.subject || '—')}</td>
+      <tr class="row-clickable" onclick="openFactModal(${f.id}, '${esc(f.source || f.scope)}')">
+        <td style="color: var(--text-faint);">${i+1}</td>
+        <td>${esc(f.subject || '')}</td>
         <td><span class="badge badge-purple">${esc(f.predicate || '')}</span></td>
-        <td style="max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(f.object || '')}">${esc(f.object || '')}</td>
+        <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(f.object || '')}">${esc(f.object || '')}</td>
         <td><span class="badge badge-info">${esc(f.scope || '')}</span></td>
-        <td><span class="badge ${f.source === 'global' ? 'badge-purple' : 'badge-info'}" style="opacity: 0.8;">${esc(f.source || '')}</span></td>
         <td style="font-size: 11px; color: var(--text-dim);">${f.receipts_count != null ? f.receipts_count : '—'}</td>
         <td style="font-size: 11px; color: var(--text-dim);">${f.score ? f.score.toFixed(3) : '—'}</td>
       </tr>
     `).join('');
-  } catch (err) {
-    meta.innerHTML = `<span class="json-error">Request failed: ${esc(err.message)}</span>`;
-    empty.style.display = 'block';
-  }
+  } catch (e) { meta.innerHTML = `<span class="json-error">Failed: ${esc(e.message)}</span>`; }
 }
-
 document.getElementById('explore-btn').addEventListener('click', runExplore);
-document.getElementById('explore-query').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') runExplore();
-});
+document.getElementById('explore-query').addEventListener('keydown', e => { if (e.key === 'Enter') runExplore(); });
 
-let currentTimeframe = '7d';
-let currentSessionId = null;
-
-function efficacyParams() {
-  const params = {};
-  if (currentTimeframe === '7d') {
-    params.since = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
-  } else if (currentTimeframe === 'session' && currentSessionId) {
-    params.session_id = currentSessionId;
-  }
-  return params;
-}
-
-async function loadEfficacy() {
-  const cards = document.getElementById('efficacy-cards');
-  const tbody = document.getElementById('efficacy-trace-tbody');
-  const empty = document.getElementById('efficacy-empty');
-  const data = await api('efficacy', efficacyParams());
-
-  cards.innerHTML = [
-    efficacyCard(data.hit_rate + '%', 'Hit rate', `${data.successful_recalls} of ${data.recall_events} returned results`),
-    efficacyCard(data.recall_events, 'Recalls', data.timeframe.session_id ? 'this session' : currentTimeframe === '7d' ? 'last 7 days' : 'all time'),
-    efficacyCard(data.median_results_per_query, 'Median results', 'per recall'),
-    efficacyCard((data.median_latency_ms || 0) + 'ms', 'Median latency', 'p50 tool roundtrip')
-  ].join('');
-
-  renderBarChart('efficacy-tool-mix', (data.tool_mix || []).map(t => ({
-    label: (t.tool || '—').replace('memory.', ''),
-    count: t.count
-  })));
-  renderBarChart('efficacy-source-contribution', (data.source_contribution || []).map(s => ({
-    label: s.scope,
-    count: s.count
-  })));
-
-  const gaps = document.getElementById('efficacy-gaps');
-  if (!data.memory_gaps || data.memory_gaps.length === 0) {
-    gaps.innerHTML = '<div style="color: var(--text-dim); font-size: 13px;">No missed queries in this timeframe.</div>';
-  } else {
-    gaps.innerHTML = data.memory_gaps.map(g => `
-      <div style="padding: 6px 0; border-bottom: 1px solid var(--surface2); font-size: 13px;">
-        <span style="color: var(--text-dim); font-size: 11px;" title="${g.occurred_at}">${g.occurred_ago}</span>
-        &nbsp;<span class="badge badge-info">${(g.tool || '').replace('memory.', '')}</span>
-        &nbsp;<code style="color: var(--text);">${esc(g.query || '')}</code>
+function renderRecallError(data, scope) {
+  const msg = data.error || 'Recall failed';
+  // FTS5 'disk image is malformed' on ORDER BY rank is almost always the
+  // auxiliary-index artifact that claude-memory compact fixes. Detect and
+  // turn the error into an actionable card rather than a raw error line.
+  const isFts5Corruption = /disk image is malformed/i.test(msg);
+  if (isFts5Corruption) {
+    const targetScope = (scope === 'all' || !scope) ? 'project' : scope;
+    const cmd = `claude-memory compact --scope ${targetScope}`;
+    return `
+      <div class="recall-error-card">
+        <h4>Search index is out of sync</h4>
+        <p>The FTS5 auxiliary index for the <strong>${esc(targetScope)}</strong> database fell out of sync — usually a harmless leftover from a prior <code>sqlite3 .recover</code> or an interrupted write. The database itself is fine; just the search index needs rebuilding.</p>
+        <div class="cmd-row">
+          <span class="cmd">${esc(cmd)}</span>
+          <button class="copy-btn" onclick="copyCmd(this, '${esc(cmd)}')">Copy</button>
+        </div>
+        <div class="retry-hint">Run that in a terminal, then click <strong>Recall</strong> again.</div>
       </div>
-    `).join('');
+    `;
   }
-
-  if (!data.recall_trace || data.recall_trace.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
-    return;
-  }
-  empty.style.display = 'none';
-
-  tbody.innerHTML = data.recall_trace.map(r => `
-    <tr class="row-clickable" onclick="openActivityModal(${r.id})" title="Click for details">
-      <td title="${r.occurred_at}">${r.occurred_ago}</td>
-      <td><span class="badge badge-info">${(r.tool || '').replace('memory.', '')}</span></td>
-      <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(r.query || '')}">${esc(r.query || '—')}</td>
-      <td>${r.result_count}</td>
-      <td>${r.duration_ms != null ? r.duration_ms + 'ms' : '-'}</td>
-      <td style="color: var(--text-dim); font-size: 12px;">${r.session_id ? esc(r.session_id.slice(0, 8)) + '…' : '-'}</td>
-    </tr>
-  `).join('');
+  const hint = data.hint ? `<div style="margin-top: 6px; font-size: 12px; color: var(--text-dim);">${esc(data.hint)}</div>` : '';
+  return `<span class="json-error">${esc(msg)}</span>${hint}`;
 }
 
-async function loadTimeline() {
-  const data = await api('timeline');
-  const container = document.getElementById('timeline-chart');
-
-  if (!data.days || data.days.length === 0) {
-    container.innerHTML = '<div class="empty-state"><p>No timeline data yet.</p></div>';
-    return;
-  }
-
-  const maxVal = Math.max(...data.days.map(d => d.facts_created + d.content_ingested + d.recalls), 1);
-
-  container.innerHTML = data.days.map(d => {
-    const total = d.facts_created + d.content_ingested + d.recalls;
-    const pct = (total / maxVal * 100).toFixed(1);
-    return `<div class="timeline-bar" style="height: ${Math.max(pct, 2)}%">
-      <div class="tooltip">${d.date}<br>${d.facts_created} facts, ${d.content_ingested} ingested, ${d.recalls} recalls</div>
-    </div>`;
-  }).join('');
+function copyCmd(btn, cmd) {
+  navigator.clipboard.writeText(cmd).then(() => {
+    const prev = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = prev; }, 1500);
+  }).catch(() => showToast('Copy failed — select and copy manually', true));
 }
 
-// Helpers
-function metricCard(title, value, sub, onclick) {
-  const attrs = onclick ? ` style="cursor: pointer;" onclick="${onclick}" title="Click to open"` : '';
-  return `<div class="card"${attrs}>
-    <h3>${title}</h3>
-    <div class="value">${typeof value === 'number' ? value.toLocaleString() : value}</div>
-    <div class="sub">${sub}</div>
-  </div>`;
-}
-
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
-}
-
-function efficacyCard(value, title, sub) {
-  return `<div class="card efficacy-card">
-    <div class="big-number">${typeof value === 'number' ? value.toLocaleString() : value}</div>
-    <div class="label">${title}</div>
-    <div class="sub" style="color: var(--text-dim); font-size: 12px; margin-top: 4px;">${sub}</div>
-  </div>`;
-}
-
-function renderBarChart(containerId, data) {
-  const container = document.getElementById(containerId);
-  if (!data.length) {
-    container.innerHTML = '<div style="color: var(--text-dim); font-size: 13px;">No data</div>';
-    return;
-  }
+// ==================== Utilities ====================
+function renderBarChart(id, data) {
+  const el = document.getElementById(id);
+  if (!data.length) { el.innerHTML = '<div style="color: var(--text-dim); font-size: 12px;">No data</div>'; return; }
   const max = Math.max(...data.map(d => d.count), 1);
-  container.innerHTML = data.map(d => `
+  el.innerHTML = data.map(d => `
     <div class="bar-row">
       <span class="bar-label" title="${esc(d.label)}">${esc(d.label)}</span>
-      <div class="bar-track"><div class="bar-fill" style="width: ${(d.count / max * 100).toFixed(1)}%"></div></div>
+      <div class="bar-track"><div class="bar-fill" style="width: ${(d.count/max*100).toFixed(1)}%"></div></div>
       <span class="bar-value">${d.count}</span>
-    </div>
-  `).join('');
+    </div>`).join('');
+}
+function statusBadge(s) { return s === 'success' ? 'success' : s === 'error' ? 'error' : s === 'skipped' ? 'warning' : 'info'; }
+function esc(s) { if (s == null) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('error', !!isError);
+  t.classList.add('visible');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.remove('visible'), 4000);
 }
 
-function statusBadge(status) {
-  switch(status) {
-    case 'success': return 'success';
-    case 'skipped': return 'warning';
-    case 'error': return 'error';
-    default: return 'info';
-  }
-}
-
-function esc(s) {
-  if (!s) return '';
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-// Syntax-highlighted JSON with graceful handling of:
-// - Already-parsed objects (pretty-print + colorize).
-// - Single-document JSON strings (parse + pretty + colorize).
-// - Newline-delimited JSON (JSONL) — transcripts are JSONL, so each line
-//   is parsed independently; a malformed line doesn't poison the others.
-// - Truncated tails — known via the `truncated` opt (from the API's
-//   content_item flag) or inferred when only the last line fails to parse.
-//   Partial lines still get token-regex highlighting even without a
-//   successful parse, so keys/strings/numbers stay readable.
-// - Plain text fallback — when nothing parses, show with error hint.
+// JSON pretty-printer (transcript-aware — JSONL-safe).
 function formatJson(input, {fallbackLabel = null, truncated = false} = {}) {
   if (input == null || input === '') return '<span class="json-null">(empty)</span>';
-
-  // Already-parsed object — straightforward.
-  if (typeof input !== 'string') {
-    return colorizeJson(JSON.stringify(input, null, 2));
-  }
-
-  // Attempt 1: the whole string is a single JSON document.
-  try {
-    return colorizeJson(JSON.stringify(JSON.parse(input), null, 2));
-  } catch (_) {}
-
-  // Attempt 2: JSONL — each non-empty line is its own JSON value.
+  if (typeof input !== 'string') return colorizeJson(JSON.stringify(input, null, 2));
+  try { return colorizeJson(JSON.stringify(JSON.parse(input), null, 2)); } catch (_) {}
   const lines = input.split(/\r?\n/);
   const parseable = [];
   const pieces = [];
   let lastLineFailed = false;
-
   lines.forEach((line, i) => {
-    if (line.trim() === '') {
-      pieces.push('');
-      return;
-    }
-    try {
-      const obj = JSON.parse(line);
-      pieces.push(colorizeJson(JSON.stringify(obj, null, 2)));
-      parseable.push(i);
-    } catch (_) {
-      // Tokenize even without a successful parse so partial lines stay
-      // readable (keys/strings/numbers still get highlighted).
-      pieces.push(colorizeJson(line));
-      if (i === lines.length - 1) lastLineFailed = true;
-    }
+    if (line.trim() === '') { pieces.push(''); return; }
+    try { pieces.push(colorizeJson(JSON.stringify(JSON.parse(line), null, 2))); parseable.push(i); }
+    catch (_) { pieces.push(colorizeJson(line)); if (i === lines.length - 1) lastLineFailed = true; }
   });
-
-  // JSONL path — more than one non-empty line, at least one parsed.
-  if (lines.filter((l) => l.trim()).length > 1 && parseable.length > 0) {
-    const hint = (truncated || lastLineFailed)
-      ? `<span class="json-error">Last record appears truncated — remaining fields may be cut off</span>`
-      : '';
+  if (lines.filter(l => l.trim()).length > 1 && parseable.length > 0) {
+    const hint = (truncated || lastLineFailed) ? '<span class="json-error">Last record appears truncated</span>' : '';
     return hint + pieces.join('\n');
   }
-
-  // Single unparseable string — probably a truncated mid-document chunk.
   const hint = truncated
-    ? `<span class="json-error">Content truncated — showing partial tokens</span>`
-    : fallbackLabel
-      ? `<span class="json-error">${esc(fallbackLabel)}</span>`
-      : `<span class="json-error">Partial or non-JSON content — showing tokenized</span>`;
+    ? '<span class="json-error">Content truncated</span>'
+    : fallbackLabel ? `<span class="json-error">${esc(fallbackLabel)}</span>`
+    : '<span class="json-error">Non-JSON content — tokenized</span>';
   return hint + colorizeJson(input);
 }
-
-// Pure token colorizer. Accepts any string — doesn't require valid JSON.
-// Escapes HTML entities first, then wraps keys / strings / numbers /
-// booleans / null in span tags. Unmatched prefixes/suffixes (e.g. a
-// truncated half-string with no closing quote) survive uncolored, which
-// is acceptable output for partial content.
 function colorizeJson(text) {
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return escaped.replace(
     /("(?:\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-    (match) => {
+    m => {
       let cls = 'json-number';
-      if (/^"/.test(match)) {
-        cls = /:$/.test(match) ? 'json-key' : 'json-string';
-      } else if (/true|false/.test(match)) {
-        cls = 'json-bool';
-      } else if (/null/.test(match)) {
-        cls = 'json-null';
-      }
-      return `<span class="${cls}">${match}</span>`;
-    }
-  );
+      if (/^"/.test(m)) cls = /:$/.test(m) ? 'json-key' : 'json-string';
+      else if (/true|false/.test(m)) cls = 'json-bool';
+      else if (/null/.test(m)) cls = 'json-null';
+      return `<span class="${cls}">${m}</span>`;
+    });
 }
 
-// Auto-refresh every 30s
+// ==================== Boot ====================
 loadAll();
 setInterval(loadAll, 30000);
 </script>

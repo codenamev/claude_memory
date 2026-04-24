@@ -19,6 +19,7 @@ RSpec.describe ClaudeMemory::Resolve::PredicatePolicy do
         "convention",
         "decision",
         "architecture",
+        "reference",
         "uses_framework",
         "uses_language",
         "uses_database",

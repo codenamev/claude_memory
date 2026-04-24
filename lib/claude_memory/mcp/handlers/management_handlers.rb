@@ -29,6 +29,13 @@ module ClaudeMemory
             signals: []
           )
 
+          # Guard against the LLM distiller labeling descriptions of external
+          # projects (LOC counts, star counts, "X is a plugin by …") as
+          # `convention`. Retag those as `reference` before resolution so
+          # they don't pollute the Knowledge-base conventions list or get
+          # returned by `memory.conventions`.
+          extraction = Distill::ReferenceMaterialDetector.new.reclassify(extraction)
+
           resolver = Resolve::Resolver.new(store)
           result = resolver.apply(
             extraction,

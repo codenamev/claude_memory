@@ -310,6 +310,70 @@ RSpec.describe ClaudeMemory::Dashboard::API do
       expect(detail[:linked_facts].first[:subject]).to eq("Rails")
       expect(detail[:linked_facts].first[:object]).to eq("Rails")
     end
+
+    context "recall trigger resolution" do
+      it "finds the preceding ingest and extracts a user prompt as the trigger" do
+        store = manager.project_store
+        user_text = "what conventions should I follow here?"
+        transcript = {parentUuid: nil, type: "user",
+                      message: {role: "user", content: [{type: "text", text: user_text}]}}.to_json
+        ci_id = store.upsert_content_item(
+          source: "claude_code",
+          text_hash: Digest::SHA256.hexdigest(transcript),
+          byte_len: transcript.bytesize,
+          session_id: "sess-xyz",
+          raw_text: transcript
+        )
+        ClaudeMemory::ActivityLog.record(store,
+          event_type: "hook_ingest", status: "success",
+          session_id: "sess-xyz",
+          details: {content_id: ci_id, bytes_read: transcript.bytesize})
+
+        sleep 1.1
+        recall_id = ClaudeMemory::ActivityLog.record(store,
+          event_type: "recall", status: "success",
+          details: {tool: "memory.conventions", result_count: 5, top_fact_ids: []})
+
+        detail = api.activity_detail(recall_id)
+        expect(detail[:trigger]).not_to be_nil
+        expect(detail[:trigger][:event_type]).to eq("hook_ingest")
+        expect(detail[:trigger][:user_prompt]).to eq(user_text)
+      end
+
+      it "filters out command-stdout and tool_result noise when finding the trigger" do
+        store = manager.project_store
+        noise_transcript = [
+          {message: {role: "user", content: [{type: "text", text: "<local-command-stdout>Bye!</local-command-stdout>"}]}}.to_json,
+          {message: {role: "user", content: [{type: "tool_result", content: "result text"}]}}.to_json
+        ].join("\n")
+        ci_id = store.upsert_content_item(
+          source: "claude_code",
+          text_hash: Digest::SHA256.hexdigest(noise_transcript),
+          byte_len: noise_transcript.bytesize,
+          raw_text: noise_transcript
+        )
+        ClaudeMemory::ActivityLog.record(store,
+          event_type: "hook_ingest", status: "success",
+          details: {content_id: ci_id})
+
+        sleep 1.1
+        recall_id = ClaudeMemory::ActivityLog.record(store,
+          event_type: "recall", status: "success",
+          details: {tool: "memory.recall", result_count: 1, top_fact_ids: []})
+
+        detail = api.activity_detail(recall_id)
+        expect(detail[:trigger][:user_prompt]).to be_nil
+      end
+
+      it "omits trigger for non-recall events" do
+        store = manager.project_store
+        event_id = ClaudeMemory::ActivityLog.record(store,
+          event_type: "hook_ingest", status: "success",
+          details: {bytes_read: 10})
+        detail = api.activity_detail(event_id)
+        expect(detail).not_to have_key(:trigger)
+      end
+    end
   end
 
   describe "#facts" do
@@ -353,6 +417,30 @@ RSpec.describe ClaudeMemory::Dashboard::API do
       result = api.facts({"q" => "uses_database"})
 
       expect(result[:total]).to eq(1)
+    end
+
+    it "filters to stale facts (active but not referenced by recent recalls)" do
+      store = manager.project_store
+      # The existing PostgreSQL fact and a second 'Rails' fact. Simulate a
+      # recent recall that returned only the PostgreSQL fact, so the second
+      # fact is the only stale one.
+      pg_fact_id = store.facts.where(object_literal: "PostgreSQL").first[:id]
+      rails_entity = store.find_or_create_entity(type: "framework", name: "Rails")
+      store.insert_fact(
+        subject_entity_id: rails_entity,
+        predicate: "uses_framework",
+        object_literal: "Rails",
+        status: "active",
+        confidence: 0.9,
+        scope: "project"
+      )
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "recall", status: "success",
+        details: {query: "db", result_count: 1, top_fact_ids: [pg_fact_id]})
+
+      result = api.facts({"stale" => "true"})
+      expect(result[:stale]).to be true
+      expect(result[:facts].map { |f| f[:object] }).to eq(["Rails"])
     end
   end
 

@@ -25,7 +25,12 @@ module ClaudeMemory
       # call. Both are empty until `generate_context` has been invoked. Populated
       # in call order (decisions → conventions → architecture) so benchmark
       # harnesses can attribute sections if they care.
-      attr_reader :emitted_fact_ids, :emitted_subjects
+      #
+      # emitted_facts_by_scope groups the IDs by the DB they came from
+      # ({"project" => [...], "global" => [...]}) so telemetry can resolve
+      # each fact from the correct store. Fact IDs autoincrement per-DB,
+      # so a bare ID without scope is ambiguous.
+      attr_reader :emitted_fact_ids, :emitted_subjects, :emitted_facts_by_scope
 
       def initialize(manager, source: nil, auto_memory_mirror: nil)
         @manager = manager
@@ -34,11 +39,13 @@ module ClaudeMemory
         @auto_memory_mirror = auto_memory_mirror
         @emitted_fact_ids = []
         @emitted_subjects = []
+        @emitted_facts_by_scope = Hash.new { |h, k| h[k] = [] }
       end
 
       def generate_context
         @emitted_fact_ids = []
         @emitted_subjects = []
+        @emitted_facts_by_scope = Hash.new { |h, k| h[k] = [] }
         sections = []
 
         decisions = fetch(:decisions, MAX_DECISIONS)
@@ -80,7 +87,11 @@ module ClaudeMemory
           next unless fact
           formatted = format_fact(fact)
           next unless formatted
-          @emitted_fact_ids << fact[:id] if fact[:id]
+          if fact[:id]
+            @emitted_fact_ids << fact[:id]
+            scope_key = (r[:source] || fact[:scope] || "project").to_s
+            @emitted_facts_by_scope[scope_key] << fact[:id]
+          end
           subject = fact[:subject_name] || fact[:subject_entity_id]
           @emitted_subjects << subject.to_s if subject
           formatted
