@@ -260,6 +260,37 @@
     color: var(--text-dim);
     line-height: 1.45;
   }
+  .utilization {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--surface2);
+  }
+  .utilization-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .utilization-n {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .utilization-n.good { color: var(--green); }
+  .utilization-n.ok { color: var(--yellow); }
+  .utilization-n.low { color: var(--red); }
+  .utilization-label {
+    font-size: 11px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .utilization-breakdown {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
 
   .review-rows { display: flex; flex-direction: column; gap: 6px; }
   .review-row {
@@ -1077,6 +1108,13 @@
       <div class="reuse-empty" id="reuse-empty" style="display:none;">
         No memory recalls in the last 7 days. When Claude calls memory.recall / memory.conventions / memory.decisions, the top facts returned will appear here.
       </div>
+      <div class="utilization" id="utilization" style="display:none;">
+        <div class="utilization-stat">
+          <span class="utilization-n" id="utilization-pct">—</span>
+          <span class="utilization-label">utilization (30d)</span>
+        </div>
+        <div class="utilization-breakdown" id="utilization-breakdown"></div>
+      </div>
     </div>
 
     <div class="panel" id="panel-moments">
@@ -1429,6 +1467,25 @@ function renderFix(t) {
 
 async function loadTrust() {
   const data = await api('trust');
+
+  // Utilization (ROI diagnostic) — extracted vs used over 30d window.
+  // Cheap to render; shows even when reuse list is empty so a user can
+  // see "50 extracted, 0 used" with the right color cue.
+  const util = data.utilization || {};
+  const utilBox = document.getElementById('utilization');
+  const utilPct = document.getElementById('utilization-pct');
+  const utilBreak = document.getElementById('utilization-breakdown');
+  if ((util.extracted || 0) > 0 || (util.used || 0) > 0) {
+    utilBox.style.display = 'block';
+    const pct = util.ratio_pct ?? 0;
+    utilPct.textContent = pct + '%';
+    utilPct.classList.remove('good', 'ok', 'low');
+    utilPct.classList.add(pct >= 40 ? 'good' : pct >= 15 ? 'ok' : 'low');
+    utilBreak.textContent =
+      `${util.used_from_extracted || 0} of ${util.extracted || 0} facts extracted this month used · ${util.used || 0} total fact-uses across recalls and injections`;
+  } else {
+    utilBox.style.display = 'none';
+  }
 
   // Activity this week
   const moments = data.weekly_moments || {this_week: 0, last_week: 0, delta: 0, by_kind: {}};

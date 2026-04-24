@@ -19,6 +19,7 @@ module ClaudeMemory
     class Trust
       WEEK_SECONDS = 7 * 86_400
       STALE_DAYS = 30
+      UTILIZATION_DAYS = 30
       VALUE_EVENT_TYPES = %w[hook_context recall store_extraction].freeze
 
       def initialize(manager)
@@ -29,7 +30,8 @@ module ClaudeMemory
         {
           weekly_moments: weekly_moments,
           fingerprint: fingerprint,
-          needs_review: needs_review
+          needs_review: needs_review,
+          utilization: utilization
         }
       end
 
@@ -187,6 +189,77 @@ module ClaudeMemory
       rescue Sequel::DatabaseError, JSON::ParserError => e
         ClaudeMemory.logger.debug("Trust#count_stale_facts failed: #{e.message}")
         0
+      end
+
+      # The ROI signal: of the facts Claude has extracted into memory over the
+      # last UTILIZATION_DAYS, how many has Claude actually *used* (appeared
+      # in any recall or context injection's top_fact_ids)? Low ratios are
+      # themselves a signal — it means memory is accumulating knowledge but
+      # Claude isn't reaching for it. Anomalies worth surfacing honestly.
+      #
+      # Shape: {extracted: Int, used: Int, ratio_pct: Int, window_days: Int}
+      # Both counts are scope-union (project + global) so the headline number
+      # reflects everything memory did, not just one store.
+      def utilization
+        cutoff = (Time.now.utc - UTILIZATION_DAYS * 86_400).iso8601
+        extracted_pairs = extracted_fact_pairs(cutoff)
+        used_pairs = used_fact_pairs(cutoff)
+
+        extracted = extracted_pairs.size
+        # "Used" counted against the extracted set — a fact used but not
+        # extracted in this window (taught earlier, used now) is still
+        # re-use worth recognizing; count it too.
+        used_from_extracted = (used_pairs & extracted_pairs).size
+        used_total = used_pairs.size
+
+        ratio_pct = extracted.zero? ? 0 : ((used_from_extracted.to_f / extracted) * 100).round
+
+        {
+          extracted: extracted,
+          used: used_total,
+          used_from_extracted: used_from_extracted,
+          ratio_pct: ratio_pct,
+          window_days: UTILIZATION_DAYS
+        }
+      rescue Sequel::DatabaseError, JSON::ParserError => e
+        ClaudeMemory.logger.debug("Trust#utilization failed: #{e.message}")
+        {extracted: 0, used: 0, used_from_extracted: 0, ratio_pct: 0, window_days: UTILIZATION_DAYS}
+      end
+
+      # Facts that were extracted (distilled + stored) within the window.
+      # Returns (scope, id) pairs across both stores.
+      def extracted_fact_pairs(cutoff)
+        pairs = Set.new
+        %w[project global].each do |scope|
+          store = @manager.store_if_exists(scope)
+          next unless store
+          store.facts
+            .where(status: "active")
+            .where { created_at >= cutoff }
+            .select(:id)
+            .all
+            .each { |r| pairs << [scope, r[:id]] }
+        end
+        pairs
+      end
+
+      # Facts that appeared as top_fact_ids in any recall or context injection
+      # within the window. Returns (scope, id) pairs.
+      def used_fact_pairs(cutoff)
+        store = @manager.default_store(prefer: :project)
+        return Set.new unless store
+        pairs = Set.new
+        store.activity_events
+          .where(event_type: %w[recall hook_context], status: "success")
+          .where { occurred_at >= cutoff }
+          .select(:detail_json)
+          .all
+          .each do |row|
+            details = row[:detail_json] ? JSON.parse(row[:detail_json]) : {}
+            scoped = ScopedFactResolver.scoped_ids_from_details(details)
+            ScopedFactResolver.flat_pairs(scoped).each { |pair| pairs << pair }
+          end
+        pairs
       end
 
       def count_empty_recalls

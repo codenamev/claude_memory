@@ -127,5 +127,52 @@ RSpec.describe ClaudeMemory::Dashboard::Trust do
       )
       expect(trust.snapshot[:needs_review][:stale_facts]).to eq(0)
     end
+
+    it "reports utilization ratio across extracted-vs-used facts in the window" do
+      entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      # Extract 3 facts; only 1 will have been used by a recall.
+      fact_used = manager.project_store.insert_fact(
+        subject_entity_id: entity_id, predicate: "convention",
+        object_literal: "A", status: "active", scope: "project", confidence: 0.9
+      )
+      manager.project_store.insert_fact(
+        subject_entity_id: entity_id, predicate: "convention",
+        object_literal: "B", status: "active", scope: "project", confidence: 0.9
+      )
+      manager.project_store.insert_fact(
+        subject_entity_id: entity_id, predicate: "convention",
+        object_literal: "C", status: "active", scope: "project", confidence: 0.9
+      )
+      record_event(manager.project_store, "recall",
+        {result_count: 1, top_facts_by_scope: {project: [fact_used]}})
+
+      util = trust.snapshot[:utilization]
+      expect(util[:extracted]).to eq(3)
+      expect(util[:used_from_extracted]).to eq(1)
+      expect(util[:ratio_pct]).to eq(33)
+      expect(util[:window_days]).to eq(30)
+    end
+
+    it "reports 0% ratio when nothing has been extracted yet" do
+      util = trust.snapshot[:utilization]
+      expect(util[:extracted]).to eq(0)
+      expect(util[:ratio_pct]).to eq(0)
+    end
+
+    it "counts a fact used across global+project correctly" do
+      # Ensure the (scope, id) pair keying doesn't double-count or drop
+      # uses from a non-default scope.
+      ge = manager.global_store.find_or_create_entity(type: "repo", name: "user")
+      global_fact = manager.global_store.insert_fact(
+        subject_entity_id: ge, predicate: "convention",
+        object_literal: "global thing", status: "active", scope: "global", confidence: 0.9
+      )
+      record_event(manager.project_store, "recall",
+        {result_count: 1, top_facts_by_scope: {global: [global_fact]}})
+
+      util = trust.snapshot[:utilization]
+      expect(util[:extracted]).to eq(1)
+      expect(util[:used_from_extracted]).to eq(1)
+    end
   end
 end
