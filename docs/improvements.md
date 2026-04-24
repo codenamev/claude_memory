@@ -259,6 +259,80 @@ Source: QMD study (2026-03-02)
 - **Trade-off**: Process management complexity
 - **Recommendation**: DEFER — Only if MCP startup latency becomes an issue
 
+### 38. Dashboard: Dedupe conflicts at display layer
+
+Source: 2026-04-24 dashboard data audit
+
+- **Problem**: `/api/conflicts` shows "29 open" when the underlying rows are ~10 distinct contradicting pairs duplicated up to 11× (sqlite vs postgresql appears 11 times; aws vs docker 7; sqlite vs redis 7). Each re-extraction creates a new conflict row for the same logical contradiction.
+- **Value**: Users see honest counts — "sqlite vs postgresql (×11 detections)" instead of 11 separate rows that all resolve identically. The `Needs review` sidebar alert stops overstating the backlog.
+- **Implementation**: In `Dashboard::Conflicts#list`, group rows by `(predicate, canonicalized_object_a, canonicalized_object_b)` and aggregate counts. Preserve the ability to drill into individual rows (bulk-reject already exists).
+- **Effort**: Half a day
+- **Recommendation**: **CONSIDER** — Cosmetic but makes the `Needs review` number honest. Real fix is upstream (see #39).
+
+### ~~39. Resolver: Deduplicate conflict insertion~~ ✅ Implemented 2026-04-24
+
+Source: 2026-04-24 dashboard data audit. Root cause traced to `facts_for_slot` defaulting to `status="active"`, which made the existing disputed fact invisible to the re-extraction path. Fixed in `Resolver#apply_conflict`: before creating a new disputed fact + conflict row, look up disputed facts in the same (subject, predicate) slot and reinforce the matching one with provenance instead of duplicating. New spec `resolver_spec.rb` "does not duplicate a conflict when the same contradiction is re-extracted" locks in the behavior. Historical DB rows (e.g. 11× sqlite vs postgresql) stay until an optional cleanup pass runs.
+
+### 40. Cleanup: Prune historical rails-vs-react conflicts (data only — code already correct)
+
+Source: 2026-04-24 dashboard data audit
+
+- **Problem**: DB has 4 open conflict rows for `uses_framework: rails vs react`. The resolver code already routes multi-value predicates straight to `:insert` (verified by `resolver_spec.rb:239` "accumulates multiple uses_framework facts without supersession"), so these are historical stragglers from before `uses_framework` was reclassified as multi-value in policy v14.
+- **Value**: Cleans the `Needs review` count. A one-time cleanup — no code change needed since the issue can't recur under current code.
+- **Implementation**: SQL migration or a `claude-memory prune-multi-value-conflicts` one-shot command: `DELETE FROM conflicts WHERE predicate IN (SELECT predicate FROM …) AND predicate's policy is multi-value`. Needs a join; or easier, a Ruby script that iterates `conflicts`, loads both facts, checks `PredicatePolicy.exclusive?`, and resolves the conflict as obsolete when the predicate is multi-value.
+- **Effort**: Half a day (one-off CLI command + spec)
+- **Recommendation**: **LOW PRIORITY** — Cosmetic; only matters when the user opens the dashboard and sees the inflated count. Current code prevents new occurrences.
+
+### ~~41. Distiller: Guard against reference material mislabeled as convention~~ ✅ Implemented 2026-04-24
+
+Source: 2026-04-24 dashboard data audit. `Distill::ReferenceMaterialDetector` reclassifies convention facts whose object text matches any of: LOC counts (`~?\d+[,.]?\d*\s*(LOC|lines of code)`), star counts, `by Firstname Lastname` author attribution, or "is a (plugin|library|tool|gem|service|framework|extension|cli|mcp server)" templates. New predicate `reference` registered in `PredicatePolicy::POLICIES` (multi, non-exclusive) with its own section in `SECTION_MAP` → `:references`. Detector is applied in `ManagementHandlers#store_extraction` before the resolver runs, so mislabeling can't persist. New `References` section in `Dashboard::Knowledge`. 8 new specs lock in behavior. Historical mislabeled facts (project facts #1, #3) remain until manual reject or cleanup pass.
+
+### 42. Dashboard: ROI diagnostic — extracted vs recalled
+
+Source: 2026-04-24 dashboard data audit
+
+- **Problem**: Project DB shows 46 active project facts + 8 global but only 2 recalls in 30 days — most extracted knowledge sits unused. Users can't tell this at a glance.
+- **Value**: A single diagnostic line — "Extracted 37 facts this month, Claude has used 2 of them" — makes the ROI honest. If it's low, we can guide users toward MCP-tool adoption or smaller recall queries.
+- **Implementation**: `Dashboard::Trust#snapshot` already counts both; surface as a new `utilization_ratio` in the response and render as a sidebar line.
+- **Effort**: Half a day
+- **Recommendation**: **MEDIUM PRIORITY** — Adds an honest ROI number to the sidebar.
+
+### 43. Dashboard: 👍/👎 feedback on moments
+
+Source: 2026-04-22 dashboard exploration
+
+- **Value**: Trust calibration signal. Over time, ratio of positive moments → genuine ROI metric.
+- **Implementation**: New `moment_feedback` table keyed by (event_id, verdict, note), minimal schema migration. Buttons on each moment card.
+- **Effort**: 1-2 days
+- **Recommendation**: **MEDIUM PRIORITY** — Deferred from 2026-04-22 round because of schema cost.
+
+### 44. Dashboard: Universal search box
+
+Source: 2026-04-22 dashboard exploration
+
+- **Value**: One input spans facts / sessions / conflicts / moments with typed results — removes the drawer-tab nav for power users.
+- **Implementation**: New `/api/search?q=` endpoint fanning out across stores + activity_events. Alfred-style typed result list.
+- **Effort**: 2 days
+- **Recommendation**: **LOW PRIORITY** — Nice-to-have; existing Knowledge/Facts drawer covers primary needs.
+
+### 45. Dashboard: Live feed via SSE or WebSocket
+
+Source: 2026-04-22 dashboard exploration
+
+- **Value**: New moments animate in as hooks fire rather than waiting for 30s polling. Enables the "watch this" onboarding demo.
+- **Implementation**: WEBrick doesn't support WebSockets cleanly; would need `async-websocket` or ServerSentEvents via `rack-sse`. 30s polling stays as fallback.
+- **Effort**: 2-3 days
+- **Recommendation**: **LOW PRIORITY** — Polling is adequate; SSE/WS is cosmetic polish.
+
+### 46. Dashboard + CLI: Weekly digest
+
+Source: 2026-04-22 dashboard exploration
+
+- **Value**: Users don't need to visit the dashboard daily. A Sunday-night summary ("This week memory surfaced 12 facts across 8 sessions, captured 3 new conventions, flagged 2 conflicts") drives retention and closes the feedback loop for invisible value.
+- **Implementation**: `claude-memory digest [--since 7d]` CLI command producing a markdown report; optional cron integration for users who want auto-email.
+- **Effort**: 2 days
+- **Recommendation**: **LOW PRIORITY** — Deferred from 2026-04-22 round.
+
 ### ~~7. MCP Discovery Tools~~ ✅ Implemented 2026-03-02
 
 Added `memory.list_projects` MCP tool. Shows global DB, current project, and discovers other projects from promoted facts/global fact paths with stats.
@@ -358,4 +432,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-21 - #36 Auto-Memory Mirror partial landing (core + ContextInjector integration; dashboard indicator deferred).*
+*Last updated: 2026-04-24 - Added #38–#46 from dashboard data-integrity audit. #39 (conflict-insertion dedupe) and #41 (ReferenceMaterialDetector) landed in this session. #40 is data-cleanup only; code was already correct.*
