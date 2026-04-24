@@ -2302,6 +2302,8 @@ async function loadConflicts() {
   if (!(data.conflicts || []).length) { tbody.innerHTML = '<tr><td colspan="5" style="color: var(--text-dim);">No conflicts.</td></tr>'; return; }
   tbody.innerHTML = data.conflicts.map(c => {
     const a = c.fact_a_preview || {}, b = c.fact_b_preview || {};
+    const size = c.group_size || 1;
+    const sizeBadge = size > 1 ? ` <span class="badge badge-info" title="Group: ${size} duplicate detections resolve together">×${size}</span>` : '';
     return `<tr class="row-clickable" onclick="openConflictModal(${c.id}, '${esc(c.source)}')">
       <td title="${c.detected_at}">${c.detected_ago}</td>
       <td style="max-width: 240px;">
@@ -2313,7 +2315,7 @@ async function loadConflicts() {
         <span class="badge badge-purple">${esc(b.predicate || '?')}</span>
         <div style="font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(b.object || '')}">${esc(b.object || '—')}</div>
       </td>
-      <td><span class="badge badge-${c.status === 'open' ? 'warning' : 'success'}">${esc(c.status)}</span></td>
+      <td><span class="badge badge-${c.status === 'open' ? 'warning' : 'success'}">${esc(c.status)}</span>${sizeBadge}</td>
     </tr>`;
   }).join('');
 }

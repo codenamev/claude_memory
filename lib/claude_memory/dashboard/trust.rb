@@ -143,13 +143,7 @@ module ClaudeMemory
       end
 
       def count_open_conflicts
-        counts = {project: 0, global: 0}
-        %w[project global].each do |scope|
-          store = @manager.store_if_exists(scope)
-          next unless store
-          counts[scope.to_sym] = store.conflicts.where(status: "open").count
-        end
-        counts.merge(total: counts.values.sum)
+        Conflicts.new(@manager).distinct_open_counts
       rescue Sequel::DatabaseError
         {project: 0, global: 0, total: 0}
       end

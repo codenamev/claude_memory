@@ -87,6 +87,37 @@ RSpec.describe ClaudeMemory::Dashboard::Conflicts do
       expect(result[:conflicts].size).to eq(2)
     end
 
+    it "collapses duplicate conflicts and reports a group_size" do
+      3.times { seed_conflict(manager.project_store, object_a: "PostgreSQL", object_b: "MySQL") }
+      seed_conflict(manager.project_store, object_a: "Redis", object_b: "Memcached")
+
+      result = conflicts.list
+
+      expect(result[:total]).to eq(2)
+      row = result[:conflicts].find { |r| r[:fact_a_preview][:object] == "PostgreSQL" }
+      expect(row[:group_size]).to eq(3)
+      expect(row[:group_member_ids].size).to eq(3)
+    end
+
+    it "treats order-swapped object pairs as the same group" do
+      seed_conflict(manager.project_store, object_a: "A", object_b: "B")
+      seed_conflict(manager.project_store, object_a: "b", object_b: "a ")
+
+      result = conflicts.list
+
+      expect(result[:total]).to eq(1)
+      expect(result[:conflicts].first[:group_size]).to eq(2)
+    end
+
+    it "exposes raw counts alongside deduped counts" do
+      3.times { seed_conflict(manager.project_store, object_a: "PostgreSQL", object_b: "MySQL") }
+
+      result = conflicts.list
+
+      expect(result[:counts][:project][:open]).to eq(1)
+      expect(result[:raw_counts][:project][:open]).to eq(3)
+    end
+
     it "reports counts across both scopes regardless of filter" do
       seed_conflict(manager.project_store, object_a: "A", object_b: "B")
       seed_conflict(manager.global_store, object_a: "G1", object_b: "G2")
@@ -95,6 +126,17 @@ RSpec.describe ClaudeMemory::Dashboard::Conflicts do
 
       expect(result[:counts][:project][:total]).to eq(1)
       expect(result[:counts][:global][:total]).to eq(1)
+    end
+
+    it "answers distinct_open_counts for the sidebar" do
+      3.times { seed_conflict(manager.project_store, object_a: "PostgreSQL", object_b: "MySQL") }
+      seed_conflict(manager.global_store, object_a: "G1", object_b: "G2")
+
+      counts = conflicts.distinct_open_counts
+
+      expect(counts[:project]).to eq(1)
+      expect(counts[:global]).to eq(1)
+      expect(counts[:total]).to eq(2)
     end
 
     it "filters by status=all when requested" do

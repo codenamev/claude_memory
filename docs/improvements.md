@@ -259,15 +259,9 @@ Source: QMD study (2026-03-02)
 - **Trade-off**: Process management complexity
 - **Recommendation**: DEFER — Only if MCP startup latency becomes an issue
 
-### 38. Dashboard: Dedupe conflicts at display layer
+### ~~38. Dashboard: Dedupe conflicts at display layer~~ ✅ Implemented 2026-04-24
 
-Source: 2026-04-24 dashboard data audit
-
-- **Problem**: `/api/conflicts` shows "29 open" when the underlying rows are ~10 distinct contradicting pairs duplicated up to 11× (sqlite vs postgresql appears 11 times; aws vs docker 7; sqlite vs redis 7). Each re-extraction creates a new conflict row for the same logical contradiction.
-- **Value**: Users see honest counts — "sqlite vs postgresql (×11 detections)" instead of 11 separate rows that all resolve identically. The `Needs review` sidebar alert stops overstating the backlog.
-- **Implementation**: In `Dashboard::Conflicts#list`, group rows by `(predicate, canonicalized_object_a, canonicalized_object_b)` and aggregate counts. Preserve the ability to drill into individual rows (bulk-reject already exists).
-- **Effort**: Half a day
-- **Recommendation**: **CONSIDER** — Cosmetic but makes the `Needs review` number honest. Real fix is upstream (see #39).
+`Dashboard::Conflicts#list` now groups rows by `(source, status, predicate, sorted-normalized-object-pair)` and returns each group as one row with a `group_size` count plus `group_member_ids`. `total` and the `counts` field reflect the distinct-contradiction count; a new `raw_counts` field preserves the underlying row totals for the Advanced drawer. `Trust#count_open_conflicts` delegates to a new `Conflicts#distinct_open_counts` helper so the `Needs review` sidebar alert stops overstating the backlog. Frontend renders a `×N` badge on the status cell when a group has more than one detection. Covered by new specs (`group_size`, order-swapped pair collapse, raw vs distinct counts, sidebar helper).
 
 ### ~~39. Resolver: Deduplicate conflict insertion~~ ✅ Implemented 2026-04-24
 
@@ -432,4 +426,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-24 - Added #38–#46 from dashboard data-integrity audit. #39 (conflict-insertion dedupe) and #41 (ReferenceMaterialDetector) landed in this session. #40 is data-cleanup only; code was already correct.*
+*Last updated: 2026-04-24 - #38 (display-layer conflict dedupe) landed in this session on top of #39/#41 from the earlier 2026-04-24 round.*
