@@ -274,6 +274,44 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore do
     end
   end
 
+  describe "#upsert_moment_feedback" do
+    it "inserts a new feedback row" do
+      row = store.upsert_moment_feedback(event_id: 42, verdict: "up", note: "nice")
+
+      expect(row[:event_id]).to eq(42)
+      expect(row[:verdict]).to eq("up")
+      expect(row[:note]).to eq("nice")
+      expect(store.moment_feedback.count).to eq(1)
+    end
+
+    it "overwrites on repeat clicks for the same event" do
+      store.upsert_moment_feedback(event_id: 42, verdict: "up")
+      store.upsert_moment_feedback(event_id: 42, verdict: "down", note: "changed mind")
+
+      rows = store.moment_feedback.where(event_id: 42).all
+      expect(rows.size).to eq(1)
+      expect(rows.first[:verdict]).to eq("down")
+      expect(rows.first[:note]).to eq("changed mind")
+    end
+
+    it "rejects invalid verdicts" do
+      expect { store.upsert_moment_feedback(event_id: 1, verdict: "maybe") }
+        .to raise_error(ArgumentError, /'up' or 'down'/)
+    end
+  end
+
+  describe "#clear_moment_feedback" do
+    it "deletes the feedback row for an event" do
+      store.upsert_moment_feedback(event_id: 42, verdict: "up")
+      expect(store.clear_moment_feedback(42)).to eq(1)
+      expect(store.moment_feedback.where(event_id: 42).count).to eq(0)
+    end
+
+    it "is a no-op when nothing is recorded" do
+      expect(store.clear_moment_feedback(42)).to eq(0)
+    end
+  end
+
   describe "PRAGMA persistence across reconnection" do
     it "preserves busy_timeout after disconnect and reconnect" do
       # Verify PRAGMA is set initially

@@ -31,7 +31,8 @@ module ClaudeMemory
           weekly_moments: weekly_moments,
           fingerprint: fingerprint,
           needs_review: needs_review,
-          utilization: utilization
+          utilization: utilization,
+          feedback: feedback_summary
         }
       end
 
@@ -146,6 +147,33 @@ module ClaudeMemory
         Conflicts.new(@manager).distinct_open_counts
       rescue Sequel::DatabaseError
         {project: 0, global: 0, total: 0}
+      end
+
+      # User-supplied thumbs on feed moments. The ratio answers "when Claude
+      # surfaces something from memory, is the user signaling it was helpful?"
+      # Only moments recorded in the last UTILIZATION_DAYS count toward the
+      # ratio so old clicks don't distort an active week's signal.
+      #
+      # Shape: {up: Int, down: Int, net: Int, ratio_pct: Int, window_days: Int}
+      # ratio_pct = up / (up + down) × 100, or nil when there's no feedback.
+      def feedback_summary
+        store = @manager.default_store(prefer: :project)
+        return feedback_zero unless store
+
+        cutoff = (Time.now.utc - UTILIZATION_DAYS * 86_400).iso8601
+        rows = store.moment_feedback.where { recorded_at >= cutoff }.all
+        up = rows.count { |r| r[:verdict] == "up" }
+        down = rows.count { |r| r[:verdict] == "down" }
+        total = up + down
+        ratio_pct = total.zero? ? nil : ((up.to_f / total) * 100).round
+
+        {up: up, down: down, net: up - down, ratio_pct: ratio_pct, window_days: UTILIZATION_DAYS}
+      rescue Sequel::DatabaseError
+        feedback_zero
+      end
+
+      def feedback_zero
+        {up: 0, down: 0, net: 0, ratio_pct: nil, window_days: UTILIZATION_DAYS}
       end
 
       # "Stale" = active facts not referenced by a recall in the last STALE_DAYS.

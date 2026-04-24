@@ -174,5 +174,24 @@ RSpec.describe ClaudeMemory::Dashboard::Trust do
       expect(util[:extracted]).to eq(1)
       expect(util[:used_from_extracted]).to eq(1)
     end
+
+    it "summarizes moment feedback for the sidebar" do
+      manager.project_store.upsert_moment_feedback(event_id: 1, verdict: "up")
+      manager.project_store.upsert_moment_feedback(event_id: 2, verdict: "up")
+      manager.project_store.upsert_moment_feedback(event_id: 3, verdict: "down")
+
+      feedback = trust.snapshot[:feedback]
+      expect(feedback[:up]).to eq(2)
+      expect(feedback[:down]).to eq(1)
+      expect(feedback[:net]).to eq(1)
+      expect(feedback[:ratio_pct]).to eq(67)
+    end
+
+    it "returns nil ratio when no feedback exists yet" do
+      feedback = trust.snapshot[:feedback]
+      expect(feedback[:up]).to eq(0)
+      expect(feedback[:down]).to eq(0)
+      expect(feedback[:ratio_pct]).to be_nil
+    end
   end
 end

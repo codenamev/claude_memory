@@ -145,5 +145,22 @@ RSpec.describe ClaudeMemory::Dashboard::Moments do
       # but the call must not raise.
       expect(result).to have_key(:moments)
     end
+
+    it "attaches feedback verdicts to moments when present" do
+      record("recall", {tool: "memory.recall", query: "foo", result_count: 1, top_fact_ids: []})
+      event_id = project_store.activity_events.first[:id]
+      project_store.upsert_moment_feedback(event_id: event_id, verdict: "up", note: "helpful")
+
+      moment = moments.list[:moments].first
+      expect(moment[:feedback][:verdict]).to eq("up")
+      expect(moment[:feedback][:note]).to eq("helpful")
+    end
+
+    it "omits feedback for moments that haven't been rated" do
+      record("recall", {tool: "memory.recall", query: "foo", result_count: 1, top_fact_ids: []})
+
+      moment = moments.list[:moments].first
+      expect(moment[:feedback]).to be_nil
+    end
   end
 end

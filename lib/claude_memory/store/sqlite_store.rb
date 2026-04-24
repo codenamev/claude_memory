@@ -108,6 +108,46 @@ module ClaudeMemory
       # @return [Sequel::Dataset]
       def activity_events = @db[:activity_events]
 
+      # @return [Sequel::Dataset]
+      def moment_feedback = @db[:moment_feedback]
+
+      # Upsert a thumbs-up/down verdict for a moment. One row per event_id
+      # (unique constraint on the column) — repeat clicks overwrite. Returns
+      # the persisted row.
+      #
+      # @param event_id [Integer] activity_events row id
+      # @param verdict [String] "up" or "down"
+      # @param note [String, nil] optional freeform note
+      # @param recorded_at [String, nil] ISO 8601 timestamp (defaults to now UTC)
+      # @return [Hash] row after upsert
+      def upsert_moment_feedback(event_id:, verdict:, note: nil, recorded_at: nil)
+        raise ArgumentError, "verdict must be 'up' or 'down'" unless %w[up down].include?(verdict)
+
+        ts = recorded_at || Time.now.utc.iso8601
+        with_retry do
+          @db.transaction do
+            existing = moment_feedback.where(event_id: event_id).first
+            if existing
+              moment_feedback.where(id: existing[:id]).update(
+                verdict: verdict, note: note, recorded_at: ts
+              )
+              moment_feedback.where(id: existing[:id]).first
+            else
+              id = moment_feedback.insert(
+                event_id: event_id, verdict: verdict, note: note, recorded_at: ts
+              )
+              moment_feedback.where(id: id).first
+            end
+          end
+        end
+      end
+
+      # Remove the verdict for a moment, if any.
+      # @return [Integer] number of rows deleted (0 or 1)
+      def clear_moment_feedback(event_id)
+        with_retry { moment_feedback.where(event_id: event_id).delete }
+      end
+
       # Record a single MCP tool invocation for telemetry.
       # Inserts synchronously; callers wrap in with_retry at the call site
       # if needed.

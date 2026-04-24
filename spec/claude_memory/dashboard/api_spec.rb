@@ -748,6 +748,50 @@ RSpec.describe ClaudeMemory::Dashboard::API do
     end
   end
 
+  describe "moment feedback" do
+    def record_event
+      ClaudeMemory::ActivityLog.record(manager.project_store,
+        event_type: "recall", status: "success", session_id: "s1", duration_ms: 10,
+        details: {tool: "memory.recall", result_count: 1})
+      manager.project_store.activity_events.first[:id]
+    end
+
+    it "records an up verdict" do
+      id = record_event
+
+      result = api.moment_feedback(id, verdict: "up", note: "useful")
+
+      expect(result[:success]).to be true
+      expect(result[:feedback][:verdict]).to eq("up")
+      expect(result[:feedback][:note]).to eq("useful")
+    end
+
+    it "rejects invalid verdicts" do
+      id = record_event
+
+      result = api.moment_feedback(id, verdict: "maybe")
+
+      expect(result[:error]).to match(/Invalid verdict/)
+    end
+
+    it "returns an error when the event does not exist" do
+      result = api.moment_feedback(999_999, verdict: "up")
+
+      expect(result[:error]).to match(/not found/)
+    end
+
+    it "clears a previously recorded verdict" do
+      id = record_event
+      api.moment_feedback(id, verdict: "up")
+
+      result = api.clear_moment_feedback(id)
+
+      expect(result[:success]).to be true
+      expect(result[:deleted]).to eq(1)
+      expect(manager.project_store.moment_feedback.count).to eq(0)
+    end
+  end
+
   describe "#timeline" do
     it "returns daily buckets" do
       store = manager.project_store

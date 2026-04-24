@@ -98,6 +98,24 @@ module ClaudeMemory
         Conflicts.new(@manager).reject_similar(keeper_fact_id, reason: reason, scope: scope)
       end
 
+      def moment_feedback(event_id, verdict:, note: nil)
+        store = default_store
+        return {error: "No project store"} unless store
+        return {error: "Invalid verdict (must be 'up' or 'down')"} unless %w[up down].include?(verdict)
+        event = store.activity_events.where(id: event_id.to_i).first
+        return {error: "Moment #{event_id} not found"} unless event
+
+        row = store.upsert_moment_feedback(event_id: event_id.to_i, verdict: verdict, note: note)
+        {success: true, feedback: serialize_feedback(row)}
+      end
+
+      def clear_moment_feedback(event_id)
+        store = default_store
+        return {error: "No project store"} unless store
+        deleted = store.clear_moment_feedback(event_id.to_i)
+        {success: true, deleted: deleted}
+      end
+
       def session_summary(session_id)
         store = default_store
         return {session_id: session_id, events: 0} unless store && session_id
@@ -506,6 +524,17 @@ module ClaudeMemory
       private
 
       CONTENT_ITEM_PREVIEW_BYTES = 8000
+
+      def serialize_feedback(row)
+        return nil unless row
+        {
+          event_id: row[:event_id],
+          verdict: row[:verdict],
+          note: row[:note],
+          recorded_at: row[:recorded_at],
+          recorded_ago: Core::RelativeTime.format(row[:recorded_at])
+        }
+      end
 
       # Recall returns results in the shape {fact:, receipts:, source:} —
       # the fact sub-hash carries the actual fields (subject_name, predicate,

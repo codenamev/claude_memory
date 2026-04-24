@@ -284,14 +284,9 @@ Source: 2026-04-24 dashboard data audit. `Distill::ReferenceMaterialDetector` re
 
 Shipped in commit `3906c23`. `Dashboard::Trust#snapshot` now returns a `utilization` section with `extracted` (active facts created in the last 30 days across both stores), `used` ((scope, id) pairs Claude has recalled or injected over the window), `used_from_extracted` (intersection), and `ratio_pct`. Rendered as a stat on the Most-used-this-week panel, color-coded (green ≥40%, yellow ≥15%, red below). Panel hides itself on fresh installs where there's no extraction or use yet. Covered by new `dashboard/trust_spec.rb` assertions.
 
-### 43. Dashboard: 👍/👎 feedback on moments
+### ~~43. Dashboard: 👍/👎 feedback on moments~~ ✅ Implemented 2026-04-24
 
-Source: 2026-04-22 dashboard exploration
-
-- **Value**: Trust calibration signal. Over time, ratio of positive moments → genuine ROI metric.
-- **Implementation**: New `moment_feedback` table keyed by (event_id, verdict, note), minimal schema migration. Buttons on each moment card.
-- **Effort**: 1-2 days
-- **Recommendation**: **MEDIUM PRIORITY** — Deferred from 2026-04-22 round because of schema cost.
+Schema migration v16 adds a `moment_feedback` table with a unique index on `event_id` so repeat clicks upsert. `SQLiteStore#upsert_moment_feedback` and `#clear_moment_feedback` own the writes; `Dashboard::API` exposes `POST /api/moments/:id/feedback` (with `{verdict, note}`) and `DELETE /api/moments/:id/feedback` to clear. `Moments#list` now batch-attaches the current verdict to each moment. `Trust#snapshot` gains a `feedback` section (`up`, `down`, `net`, `ratio_pct`) windowed to the last 30 days, rendered inline on the Most-used-this-week panel whenever any feedback exists. Frontend adds 👍/👎 buttons on each moment card with active-state styling; repeat-click clears. Covered by store, API, Moments attach, and Trust ratio specs.
 
 ### 44. Dashboard: Universal search box
 
@@ -419,4 +414,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-24 - Marked #40 (historical cleanup CLI, shipped in 22eeaf1) and #42 (utilization ratio, shipped in 3906c23) as implemented. #38 display-layer conflict dedupe also landed today.*
+*Last updated: 2026-04-24 - #38 (display-layer conflict dedupe) and #43 (moment feedback) landed today; #40 and #42 marked as implemented to reflect earlier-shipped commits.*

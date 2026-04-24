@@ -63,7 +63,7 @@ module ClaudeMemory
         @server.mount_proc("/api/timeline") { |_req, res| with_fresh_connections { json_response(res, api.timeline) } }
         @server.mount_proc("/api/recall") { |req, res| with_fresh_connections { json_response(res, api.recall(req.query)) } }
         @server.mount_proc("/api/conflicts") { |req, res| with_fresh_connections { handle_conflicts(api, req, res) } }
-        @server.mount_proc("/api/moments") { |req, res| with_fresh_connections { json_response(res, api.moments(req.query)) } }
+        @server.mount_proc("/api/moments") { |req, res| with_fresh_connections { handle_moments(api, req, res) } }
         @server.mount_proc("/api/trust") { |_req, res| with_fresh_connections { json_response(res, api.trust) } }
         @server.mount_proc("/api/knowledge") { |req, res| with_fresh_connections { json_response(res, api.knowledge(req.query)) } }
         @server.mount_proc("/api/reuse") { |req, res| with_fresh_connections { json_response(res, api.reuse(req.query)) } }
@@ -88,6 +88,24 @@ module ClaudeMemory
         @manager.project_store&.db&.disconnect
       rescue Sequel::DatabaseError, Extralite::Error
         # Best-effort; next call will reopen.
+      end
+
+      def handle_moments(api, req, res)
+        feedback_id = moment_feedback_id_from_path(req.path)
+
+        if feedback_id && req.request_method == "POST"
+          body = parse_json_body(req)
+          json_response(res, api.moment_feedback(feedback_id, verdict: body["verdict"], note: body["note"]))
+        elsif feedback_id && req.request_method == "DELETE"
+          json_response(res, api.clear_moment_feedback(feedback_id))
+        else
+          json_response(res, api.moments(req.query))
+        end
+      end
+
+      def moment_feedback_id_from_path(path)
+        match = path.match(%r{\A/api/moments/(\d+)/feedback\z})
+        match && match[1]
       end
 
       def handle_conflicts(api, req, res)

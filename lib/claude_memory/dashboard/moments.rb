@@ -66,6 +66,7 @@ module ClaudeMemory
         moments = moments.select { |m| kinds.include?(m[:kind]) } unless kinds.empty?
         has_more = moments.size > limit
         moments = moments.first(limit)
+        attach_feedback(store, moments)
 
         {
           moments: moments,
@@ -208,6 +209,23 @@ module ClaudeMemory
         }
       rescue Sequel::DatabaseError
         nil
+      end
+
+      def attach_feedback(store, moments)
+        return if moments.empty?
+        ids = moments.map { |m| m[:id] }
+        feedback_by_event = store.moment_feedback.where(event_id: ids).all.each_with_object({}) do |row, h|
+          h[row[:event_id]] = {
+            verdict: row[:verdict],
+            note: row[:note],
+            recorded_at: row[:recorded_at]
+          }
+        end
+        moments.each do |m|
+          m[:feedback] = feedback_by_event[m[:id]]
+        end
+      rescue Sequel::DatabaseError
+        # Table missing on older DBs — skip silently.
       end
 
       def extracted_facts(store, content_item_id)

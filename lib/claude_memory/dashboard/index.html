@@ -414,6 +414,27 @@
   }
   .moment-meta .dotsep::before { content: "·"; margin: 0 4px; color: var(--text-faint); }
 
+  .moment-feedback {
+    margin-top: 8px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .moment-feedback button {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-faint);
+    padding: 2px 6px;
+    font-size: 13px;
+    line-height: 1;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .moment-feedback button:hover { color: var(--text); border-color: var(--surface3); }
+  .moment-feedback button.active-up { color: var(--green); border-color: var(--green-dim); background: var(--green-dim); }
+  .moment-feedback button.active-down { color: var(--red); border-color: var(--red-dim); background: var(--red-dim); }
+
   .moment-detail {
     margin-top: 10px;
     padding: 10px 12px;
@@ -1481,8 +1502,14 @@ async function loadTrust() {
     utilPct.textContent = pct + '%';
     utilPct.classList.remove('good', 'ok', 'low');
     utilPct.classList.add(pct >= 40 ? 'good' : pct >= 15 ? 'ok' : 'low');
-    utilBreak.textContent =
+    let breakdown =
       `${util.used_from_extracted || 0} of ${util.extracted || 0} facts extracted this month used · ${util.used || 0} total fact-uses across recalls and injections`;
+    const fb = data.feedback || {};
+    if ((fb.up || 0) + (fb.down || 0) > 0) {
+      breakdown += ` · 👍 ${fb.up || 0} / 👎 ${fb.down || 0}` +
+        (fb.ratio_pct != null ? ` (${fb.ratio_pct}% positive)` : '');
+    }
+    utilBreak.textContent = breakdown;
   } else {
     utilBox.style.display = 'none';
   }
@@ -1573,8 +1600,40 @@ function renderMoment(m) {
   const def = map[m.kind] || {icon: '•', cls: 'sweep', render: renderGenericMoment};
   return `<div class="moment" onclick="openMomentModal(${m.id})">
     <div class="moment-icon ${def.cls}">${def.icon}</div>
-    <div class="moment-body">${def.render(m)}</div>
+    <div class="moment-body">${def.render(m)}${renderMomentFeedback(m)}</div>
   </div>`;
+}
+
+// Thumbs up/down on each moment (improvements.md #43). Stops click propagation
+// so rating doesn't open the modal. Clicking the same verdict twice clears it.
+function renderMomentFeedback(m) {
+  const verdict = m.feedback && m.feedback.verdict;
+  const upClass = verdict === 'up' ? 'active-up' : '';
+  const downClass = verdict === 'down' ? 'active-down' : '';
+  return `<div class="moment-feedback" onclick="event.stopPropagation()">
+    <button class="${upClass}" title="Helpful" onclick="rateMoment(${m.id}, 'up', event)">👍</button>
+    <button class="${downClass}" title="Not helpful" onclick="rateMoment(${m.id}, 'down', event)">👎</button>
+  </div>`;
+}
+
+async function rateMoment(id, verdict, ev) {
+  ev.stopPropagation();
+  const btn = ev.currentTarget;
+  const wasActive = btn.classList.contains(verdict === 'up' ? 'active-up' : 'active-down');
+  try {
+    if (wasActive) {
+      await fetch('/api/moments/' + id + '/feedback', {method: 'DELETE'});
+    } else {
+      await fetch('/api/moments/' + id + '/feedback', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({verdict})
+      });
+    }
+    loadMoments();
+  } catch (e) {
+    showToast('Feedback failed: ' + e.message);
+  }
 }
 
 function renderContextMoment(m) {
