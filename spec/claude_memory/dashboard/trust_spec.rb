@@ -119,13 +119,26 @@ RSpec.describe ClaudeMemory::Dashboard::Trust do
       expect(trust.snapshot[:needs_review][:empty_recalls]).to eq(2)
     end
 
-    it "does not flag stale facts when no recalls have happened" do
+    it "respects the grace window for never-recalled fresh facts" do
       entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "app")
       manager.project_store.insert_fact(
         subject_entity_id: entity_id, predicate: "convention",
         object_literal: "foo", status: "active", scope: "project", confidence: 0.9
       )
+      # Created today, never recalled — within grace window so not stale yet.
       expect(trust.snapshot[:needs_review][:stale_facts]).to eq(0)
+    end
+
+    it "flags facts past the threshold whose last_recalled_at is also stale" do
+      entity_id = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      fact_id = manager.project_store.insert_fact(
+        subject_entity_id: entity_id, predicate: "convention",
+        object_literal: "old", status: "active", scope: "project", confidence: 0.9
+      )
+      old_ts = (Time.now.utc - 30 * 86_400).iso8601
+      manager.project_store.facts.where(id: fact_id).update(created_at: old_ts, last_recalled_at: old_ts)
+
+      expect(trust.snapshot[:needs_review][:stale_facts]).to eq(1)
     end
 
     it "reports utilization ratio across extracted-vs-used facts in the window" do

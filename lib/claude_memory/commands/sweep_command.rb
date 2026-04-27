@@ -19,12 +19,14 @@ module ClaudeMemory
 
         stdout.puts "Running sweep on #{opts[:scope]} database with #{opts[:budget]}s budget..."
         stats = sweeper.run!(budget_seconds: opts[:budget])
+        refresh_counts = ClaudeMemory::Sweep::RecallTimestampRefresher.new(manager).refresh!
 
         stdout.puts "Sweep complete:"
         stdout.puts "  Proposed facts expired: #{stats[:proposed_facts_expired]}"
         stdout.puts "  Disputed facts expired: #{stats[:disputed_facts_expired]}"
         stdout.puts "  Orphaned provenance deleted: #{stats[:orphaned_provenance_deleted]}"
         stdout.puts "  Old content pruned: #{stats[:old_content_pruned]}"
+        stdout.puts "  Recall timestamps refreshed: project=#{refresh_counts[:project]}, global=#{refresh_counts[:global]}"
         stdout.puts "  Elapsed: #{stats[:elapsed_seconds].round(2)}s"
         stdout.puts "  Budget honored: #{stats[:budget_honored]}"
 

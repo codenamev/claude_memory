@@ -203,16 +203,22 @@ Still deferred:
 - Dashboard "N auto-memory entries awaiting mirror" indicator — not wired until it's clear from real usage whether a visible backlog adds value beyond the SessionStart nudge.
 - Scope-hint inference per file. The current emission is the raw file content; Claude decides subject/predicate/scope in the normal extraction review. A future upgrade could parse filename prefixes (`feedback_*`, `gotcha_*`, `reference_*`) into predicate hints.
 
-### 35. Access-Based Staleness Scoring — **Deferred, pending concrete signal**
+### ~~35. Access-Based Staleness Scoring~~ ✅ Implemented 2026-04-27
 
-Source: Reflection 2026-04-17 (Theory 2: decisions have half-lives)
+Triggered by the digest (#46) surfacing 11% utilization with no way to point at the dead weight. Built as **Path B (sweep-derived from activity_events)** rather than the originally-proposed Path A (per-recall update buffer) — the v15 activity_events table eliminated the WAL-contention concern that drove Path A, since the (scope, fact_id) data already exists. No new hot-path writes.
 
-**Prior context that makes this a harder call than it looks:** the 0.9.0 telemetry design deliberately dropped `query_text` / `query_hash` from `mcp_tool_calls` (CHANGELOG 0.9.0; memory `decisions`: *"deliberately no query_text or query_hash. YAGNI — hashes are write-only without the raw text, and raw text adds privacy concerns without clear value beyond existing shortcut tools"*). Adding per-fact access timestamps reopens the same privacy/value tension — we'd be recording "this user looked at this fact at this time," which is telemetry shaped roughly like what we already rejected.
+- Migration v17 adds nullable `last_recalled_at` to `facts`.
+- `Sweep::RecallTimestampRefresher.new(manager).refresh!` scans both stores' activity_events (event_type IN recall, hook_context) within a 90-day lookback, projects the most recent occurrence per (scope, fact_id) via `Dashboard::ScopedFactResolver`, and bulk-UPDATEs `last_recalled_at` across both DBs. Cross-DB by design — project events touching global facts update global rows.
+- Wired into `Hook::Handler#sweep` and `Commands::SweepCommand` so every sweep cycle freshens timestamps.
+- `Configuration#stale_days` reads `CLAUDE_MEMORY_STALE_DAYS` (default **14**, falls back on garbage / non-positive input).
+- `Recall::StaleDetector.stale_facts(manager, threshold_days:)` and `.stale_count(manager, ...)` return active facts where `(last_recalled_at < cutoff OR last_recalled_at IS NULL) AND created_at < cutoff` — the AND-on-created_at is the grace window so freshly extracted facts don't surface as stale on day one.
+- `claude-memory stats --stale [--stale-days N]` prints the list grouped by scope.
+- `Dashboard::Trust#count_stale_facts` now reads through `StaleDetector#stale_count`, replacing the old "active facts minus seen-in-recall pairs" approximation that couldn't distinguish a never-touched 6-month-old fact from a freshly stored one.
+- No auto-deletion. Staleness is informational; users decide what to reject.
 
-- **Value (if the signal materializes)**: Today `valid_from`/`valid_to` gate facts binarily; nothing tracks whether a fact is *used*. Access-based decay would turn staleness from passive (wait for supersession) into measurable (facts untouched in N sessions flagged as sweep candidates).
-- **Trigger to revisit**: a `memory.stats --stale` or similar report that *without* access data shows facts nobody is touching but nobody has superseded either — i.e. concrete dead weight we can't diagnose with current telemetry. If stats show the problem, the trade-off shifts.
-- **If built**: `last_recalled_at` column on `facts`, updated via an update-buffer (not per-recall writes — WAL contention on a 100-writes-per-session pattern is real, not hand-wavy). Flags surface via `memory.stats`; no auto-deletion. Effort ~3 days with the write-buffer honestly scoped.
-- **For now**: deferred. The gap this would close (stale-but-not-superseded facts) is not yet a documented pain — we have plenty of hallucination-driven conflict pain which a separate, already-listed improvement addresses. Revisit after #32 (repeat-correction benchmark) produces data on whether stale facts are actually hurting.
+Privacy posture: timestamps don't carry user content (different shape from the rejected `query_text` capture). Same posture as `mcp_tool_calls.called_at` — load-bearing but not content-revealing.
+
+Specs cover: refresher updates from both stores including cross-DB project→global, lookback bound, latest-wins on multiple touches, stale detection grace window, scope-spanning, status filtering, limits, CLI flag output, Configuration env knob fallbacks.
 
 ### ~~27. Usage Stats / ROI Tracking~~ ✅ Implemented 2026-04-15
 
@@ -409,4 +415,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-24 - #38, #43, and #46 (weekly digest) landed today; #40 and #42 marked as implemented to reflect earlier-shipped commits.*
+*Last updated: 2026-04-27 - #35 (access-based staleness, sweep-derived) landed for the next major release. Paths from earlier sessions (#38, #43, #46) carry forward.*

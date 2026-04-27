@@ -18,7 +18,6 @@ module ClaudeMemory
     #    count; the feed surfaces the individual items.
     class Trust
       WEEK_SECONDS = 7 * 86_400
-      STALE_DAYS = 30
       UTILIZATION_DAYS = 30
       VALUE_EVENT_TYPES = %w[hook_context recall store_extraction].freeze
 
@@ -176,38 +175,17 @@ module ClaudeMemory
         {up: 0, down: 0, net: 0, ratio_pct: nil, window_days: UTILIZATION_DAYS}
       end
 
-      # "Stale" = active facts not referenced by a recall in the last STALE_DAYS.
-      # Uses scoped (scope, id) pairs so a project recall of fact #5 doesn't
-      # incidentally mark global fact #5 as "seen recently."
+      # "Stale" = active facts whose last_recalled_at is older than the
+      # configured threshold (or never set, with a grace window so freshly
+      # extracted facts don't show up as stale on day one).
+      #
+      # Backed by Recall::StaleDetector, which reads the column populated by
+      # Sweep::RecallTimestampRefresher. Replaces the older "active facts
+      # minus seen-in-recalls" approximation, which couldn't distinguish a
+      # never-touched 6-month-old fact from a freshly stored one.
       def count_stale_facts
-        store = @manager.default_store(prefer: :project)
-        return 0 unless store
-
-        cutoff = (Time.now.utc - STALE_DAYS * 86_400).iso8601
-        seen_pairs = Set.new
-        store.activity_events
-          .where(event_type: "recall", status: "success")
-          .where { occurred_at >= cutoff }
-          .select(:detail_json)
-          .all
-          .each do |row|
-            details = row[:detail_json] ? JSON.parse(row[:detail_json]) : {}
-            scoped = ScopedFactResolver.scoped_ids_from_details(details)
-            ScopedFactResolver.flat_pairs(scoped).each { |pair| seen_pairs << pair }
-          end
-
-        # No recalls yet → don't nag; the system hasn't had a chance to use
-        # anything. (Differs from "recalls happened but facts A, B, C weren't
-        # in any of them.")
-        return 0 if seen_pairs.empty?
-
-        total_active = 0
-        %w[project global].each do |scope|
-          s = @manager.store_if_exists(scope)
-          next unless s
-          total_active += s.facts.where(status: "active").count
-        end
-        [total_active - seen_pairs.size, 0].max
+        threshold = Configuration.new.stale_days
+        Recall::StaleDetector.stale_count(@manager, threshold_days: threshold)
       rescue Sequel::DatabaseError, JSON::ParserError => e
         ClaudeMemory.logger.debug("Trust#count_stale_facts failed: #{e.message}")
         0

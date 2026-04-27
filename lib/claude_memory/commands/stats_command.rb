@@ -13,19 +13,25 @@ module ClaudeMemory
       SCOPE_PROJECT = "project"
 
       def call(args)
-        opts = parse_options(args, {scope: SCOPE_ALL, tools: false, since_days: nil}) do |o|
+        opts = parse_options(args, {scope: SCOPE_ALL, tools: false, stale: false, since_days: nil, stale_days: nil}) do |o|
           OptionParser.new do |parser|
             parser.banner = "Usage: claude-memory stats [options]"
             parser.on("--scope SCOPE", ["all", "global", "project"],
               "Show stats for: all (default), global, or project") { |v| o[:scope] = v }
             parser.on("--tools", "Show MCP tool-call usage stats") { o[:tools] = true }
+            parser.on("--stale", "Show facts not recalled in CLAUDE_MEMORY_STALE_DAYS (default 14)") { o[:stale] = true }
             parser.on("--since DAYS", Integer, "Limit --tools to last N days") { |v| o[:since_days] = v }
+            parser.on("--stale-days N", Integer, "Override staleness threshold for --stale") { |v| o[:stale_days] = v }
           end
         end
         return 1 if opts.nil?
 
         if opts[:tools]
           return print_mcp_tool_call_stats(opts[:since_days])
+        end
+
+        if opts[:stale]
+          return print_stale_facts(opts[:stale_days])
         end
 
         manager = ClaudeMemory::Store::StoreManager.new
@@ -47,6 +53,37 @@ module ClaudeMemory
       end
 
       private
+
+      def print_stale_facts(override_days)
+        threshold = override_days || ClaudeMemory::Configuration.new.stale_days
+        manager = ClaudeMemory::Store::StoreManager.new
+        result = ClaudeMemory::Recall::StaleDetector.stale_facts(manager, threshold_days: threshold)
+
+        stdout.puts "Stale facts (last_recalled_at older than #{threshold} day#{"s" unless threshold == 1})"
+        stdout.puts "=" * 60
+
+        if result[:total].zero?
+          stdout.puts "No stale facts."
+          stdout.puts ""
+          stdout.puts "Run `claude-memory sweep` to refresh last_recalled_at from activity_events."
+        else
+          stdout.puts "Total: #{result[:total]} (project=#{result[:project].size}, global=#{result[:global].size})"
+          stdout.puts ""
+          %i[project global].each do |scope|
+            rows = result[scope]
+            next if rows.empty?
+            stdout.puts "## #{scope.to_s.upcase}"
+            rows.each do |row|
+              last = row[:last_recalled_at] || "never"
+              stdout.puts "  ##{row[:id]} [#{row[:predicate]}] #{row[:object_literal]&.slice(0, 80)} (last: #{last})"
+            end
+            stdout.puts ""
+          end
+        end
+
+        manager.close
+        0
+      end
 
       def open_readonly(db_path)
         Sequel.connect("extralite://#{db_path}")

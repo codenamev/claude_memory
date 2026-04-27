@@ -81,4 +81,47 @@ RSpec.describe ClaudeMemory::Commands::StatsCommand do
       expect(stdout.string).to include("last 7 days")
     end
   end
+
+  describe "--stale" do
+    def seed_stale_fact(scope:, days_ago:)
+      store_path = (scope == "project") ? project_db_path : global_db_path
+      store = ClaudeMemory::Store::SQLiteStore.new(store_path)
+      entity = store.find_or_create_entity(type: "repo", name: "app")
+      fact_id = store.insert_fact(
+        subject_entity_id: entity, predicate: "convention", object_literal: "old thing-#{rand(1_000_000)}",
+        status: "active", scope: scope, confidence: 0.9
+      )
+      ts = (Time.now.utc - days_ago * 86_400).iso8601
+      store.facts.where(id: fact_id).update(created_at: ts, last_recalled_at: ts)
+      store.close
+      fact_id
+    end
+
+    it "reports zero when nothing is stale" do
+      ClaudeMemory::Store::SQLiteStore.new(project_db_path).close
+
+      exit_code = command.call(["--stale", "--stale-days", "14"])
+
+      expect(exit_code).to eq(0)
+      expect(stdout.string).to include("No stale facts.")
+    end
+
+    it "lists stale facts with their last_recalled_at" do
+      seed_stale_fact(scope: "project", days_ago: 30)
+
+      command.call(["--stale", "--stale-days", "14"])
+
+      expect(stdout.string).to include("Stale facts (last_recalled_at older than 14 days)")
+      expect(stdout.string).to include("Total: 1")
+      expect(stdout.string).to include("convention")
+    end
+
+    it "respects an explicit --stale-days override" do
+      seed_stale_fact(scope: "project", days_ago: 20)
+
+      command.call(["--stale", "--stale-days", "30"])
+
+      expect(stdout.string).to include("No stale facts.")
+    end
+  end
 end

@@ -136,4 +136,23 @@ RSpec.describe ClaudeMemory::Configuration do
       expect(config.transcript_path).to be_nil
     end
   end
+
+  describe "#stale_days" do
+    it "defaults to 14 when env is empty" do
+      expect(described_class.new({}).stale_days).to eq(14)
+    end
+
+    it "reads CLAUDE_MEMORY_STALE_DAYS when valid" do
+      expect(described_class.new("CLAUDE_MEMORY_STALE_DAYS" => "30").stale_days).to eq(30)
+    end
+
+    it "falls back to default on non-numeric input" do
+      expect(described_class.new("CLAUDE_MEMORY_STALE_DAYS" => "abc").stale_days).to eq(14)
+    end
+
+    it "falls back to default when set to zero or negative" do
+      expect(described_class.new("CLAUDE_MEMORY_STALE_DAYS" => "0").stale_days).to eq(14)
+      expect(described_class.new("CLAUDE_MEMORY_STALE_DAYS" => "-5").stale_days).to eq(14)
+    end
+  end
 end

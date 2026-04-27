@@ -50,6 +50,22 @@ module ClaudeMemory
       env["CLAUDE_TRANSCRIPT_PATH"]
     end
 
+    # Default staleness threshold (in days) for #35 access-based staleness.
+    # Active facts whose last_recalled_at is older than this — or never set,
+    # for facts created earlier than the same window — are flagged as
+    # candidates for review. Override via CLAUDE_MEMORY_STALE_DAYS.
+    DEFAULT_STALE_DAYS = 14
+
+    # @return [Integer] staleness threshold in days
+    def stale_days
+      raw = env["CLAUDE_MEMORY_STALE_DAYS"]
+      return DEFAULT_STALE_DAYS if raw.nil? || raw.empty?
+      parsed = Integer(raw, 10)
+      (parsed > 0) ? parsed : DEFAULT_STALE_DAYS
+    rescue ArgumentError
+      DEFAULT_STALE_DAYS
+    end
+
     private
 
     def resolve_project_dir

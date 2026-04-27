@@ -57,12 +57,24 @@ module ClaudeMemory
         budget = payload.fetch("budget", DEFAULT_SWEEP_BUDGET).to_i
         sweeper = Sweep::Sweeper.new(@store)
         stats = sweeper.run!(budget_seconds: budget)
+        stats[:recall_timestamps_refreshed] = refresh_recall_timestamps
 
         log_activity("hook_sweep", status: "success", t0: t0,
           details: {elapsed_seconds: stats[:elapsed_seconds],
                     budget_honored: stats[:budget_honored]})
 
         {stats: stats}
+      end
+
+      # Sweep-derived staleness data. Skips silently if the sweep was given a
+      # store-only handler (no manager); the cross-DB refresher requires the
+      # manager because project events can touch global facts and vice versa.
+      def refresh_recall_timestamps
+        return {project: 0, global: 0} unless @manager
+        Sweep::RecallTimestampRefresher.new(@manager).refresh!
+      rescue Sequel::DatabaseError => e
+        ClaudeMemory.logger.debug("recall timestamp refresh failed: #{e.message}")
+        {project: 0, global: 0, error: e.message}
       end
 
       def publish(payload)
