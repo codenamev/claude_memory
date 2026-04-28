@@ -163,7 +163,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Each command is a separate class (HelpCommand, DoctorCommand, etc.)
   - All commands inherit from BaseCommand
   - Dependency injection for I/O (stdout, stderr, stdin)
-  - 28 commands total, each focused on single responsibility
+  - 32 commands total, each focused on single responsibility
 
 - **`Configuration`**: Centralized ENV access (`configuration.rb`)
   - Single source of truth for paths and environment variables
@@ -226,7 +226,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Modes: shared (repo), local (uncommitted), home (user directory)
 
 - **`MCP`**: Model Context Protocol server and tools (`mcp/`)
-  - Exposes memory tools to Claude Code (24 tools total)
+  - Exposes memory tools to Claude Code (25 tools total)
   - `Telemetry`: Records tool invocations to `mcp_tool_calls` table for usage stats
   - Dual content/structuredContent responses with compact mode
 
@@ -340,14 +340,14 @@ Also update `SECTION_MAP` if the predicate should appear in a specific snapshot 
 
 The gem includes an MCP server (`claude-memory serve-mcp`) that exposes memory operations as tools. Configuration should be in `.mcp.json` at project root.
 
-Available MCP tools (24 total):
+Available MCP tools (25 total):
 - **Query & Recall**: `memory.recall`, `memory.recall_index`, `memory.recall_details`, `memory.recall_semantic`, `memory.search_concepts`
 - **Provenance**: `memory.explain`, `memory.fact_graph`
 - **Shortcuts**: `memory.decisions`, `memory.conventions`, `memory.architecture`
 - **Context**: `memory.facts_by_tool`, `memory.facts_by_context`
 - **Management**: `memory.promote`, `memory.reject_fact`, `memory.store_extraction`
 - **Distillation**: `memory.undistilled`, `memory.mark_distilled`
-- **Monitoring**: `memory.status`, `memory.stats`, `memory.changes`, `memory.conflicts`
+- **Monitoring**: `memory.status`, `memory.stats`, `memory.changes`, `memory.conflicts`, `memory.activity`
 - **Maintenance**: `memory.sweep_now`
 - **Discovery**: `memory.check_setup`, `memory.list_projects`
 

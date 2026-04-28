@@ -140,6 +140,7 @@ File-searchable questions ("what version is this?") and one-shot code generation
 - **Claude-Powered**: Uses Claude's intelligence to extract facts (no API key needed)
 - **Token Efficient**: 10x reduction in memory queries with progressive disclosure
 - **Database Maintenance**: Compact, export, and backup commands
+- **Built-in Observability** (0.10.0+): `claude-memory dashboard` opens a local web UI with feed, trust panel, conflicts, moments, 👍/👎 feedback, and utilization ratio. `claude-memory digest` writes a weekly markdown report; `claude-memory census` audits the predicate vocabulary across projects.
 
 ## Privacy Control
 
@@ -241,7 +242,7 @@ The uninstall command removes:
 
 - 📖 [Getting Started](docs/GETTING_STARTED.md) - Step-by-step onboarding
 - 💡 [Examples](docs/EXAMPLES.md) - Use cases and workflows
-- 🔧 [Plugin Setup](docs/PLUGIN.md) - Claude Code integration
+- 🔧 [Plugin Setup](docs/plugin.md) - Claude Code integration
 - 🏗️ [Architecture](docs/architecture.md) - Technical deep dive
 - 📝 [Changelog](CHANGELOG.md) - Release notes
 
@@ -292,7 +293,7 @@ The benchmark dataset draws from real CLAUDE.md patterns and is designed specifi
 
 - **Language:** Ruby 3.2+
 - **Storage:** SQLite3 (no external services)
-- **Testing:** 1477 examples (1375 unit/integration + 102 benchmarks/evals), 100% core coverage
+- **Testing:** 1964 examples (~1700 unit/integration + ~250 benchmarks/evals), 100% core coverage
 - **Code Style:** Standard Ruby
 
 ```bash

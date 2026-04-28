@@ -133,18 +133,25 @@ Unlike traditional approaches that require a separate API key, ClaudeMemory uses
 
 ### MCP Server
 
-The plugin exposes these tools to Claude:
+The plugin exposes 25 tools to Claude. Highlights:
 
 | Tool | Description |
 |------|-------------|
-| `memory.recall` | Search facts by query |
+| `memory.recall` | Search facts by query (lexical + semantic + hybrid) |
+| `memory.recall_semantic` | Vector-search facts with optional `explain:` score traces |
+| `memory.search_concepts` | Multi-concept intersection search |
+| `memory.decisions` / `memory.conventions` / `memory.architecture` | Predicate-shortcut readers |
 | `memory.explain` | Get fact details with provenance |
-| `memory.store_extraction` | Store extracted facts |
-| `memory.promote` | Promote project fact to global |
-| `memory.status` | Check database health |
-| `memory.changes` | Recent fact updates |
+| `memory.fact_graph` | Walk supersession + conflict edges around a fact |
+| `memory.store_extraction` | Store extracted facts (used by /distill-transcripts) |
+| `memory.undistilled` / `memory.mark_distilled` | Distillation pipeline tracking |
+| `memory.promote` / `memory.reject_fact` | Manage fact lifecycle |
+| `memory.status` / `memory.stats` / `memory.activity` / `memory.changes` | Observability surfaces |
 | `memory.conflicts` | Open contradictions |
 | `memory.sweep_now` | Run maintenance |
+| `memory.check_setup` / `memory.list_projects` | Discovery |
+
+See `lib/claude_memory/mcp/tool_definitions.rb` for the full schema of every tool, including arguments, return shapes, and tool annotations (`readOnlyHint`, `idempotentHint`, `destructiveHint`).
 
 ### Hooks
 

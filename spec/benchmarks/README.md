@@ -30,7 +30,7 @@ Developer-domain facts across 6 predicate types and 5 simulated projects:
 | Category | Count | Predicates |
 |----------|-------|------------|
 | Tech Stack (databases) | ~12 | `uses_database` (single-value) |
-| Tech Stack (frameworks) | ~15 | `uses_framework` (single-value) |
+| Tech Stack (frameworks) | ~15 | `uses_framework` (multi-value) |
 | Conventions | ~50 | `convention` (multi-value) |
 | Decisions | ~25 | `decision` (multi-value) |
 | Auth methods | ~7 | `auth_method` (single-value) |

@@ -4,8 +4,11 @@ require "json"
 
 module ClaudeMemory
   module Dashboard
-    # JSON API backend for the dashboard.
-    # Reads from global and project SQLite databases.
+    # JSON API backend for the dashboard. Routes/delegates to dedicated
+    # collaborator classes (Conflicts, Moments, Trust, Knowledge, Reuse,
+    # Timeline, Health, FactPresenter) for non-trivial logic; this class
+    # holds HTTP-shape concerns and the long-tail per-endpoint formatting
+    # that hasn't yet been extracted.
     class API
       def initialize(manager)
         @manager = manager

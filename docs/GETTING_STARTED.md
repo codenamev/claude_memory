@@ -19,7 +19,7 @@ gem install claude_memory
 Verify installation:
 ```bash
 claude-memory --version
-# => claude_memory 0.2.0
+# => claude_memory 0.10.0
 ```
 
 ### Step 2: Install the Plugin
@@ -283,13 +283,13 @@ ClaudeMemory Doctor Report
 ==========================
 
 ✓ Global database: ~/.claude/memory.sqlite3
-  - Schema version: 6
+  - Schema version: 17
   - Facts: 12
   - Entities: 8
   - Status: Healthy
 
 ✓ Project database: .claude/memory.sqlite3
-  - Schema version: 6
+  - Schema version: 17
   - Facts: 23
   - Entities: 15
   - Status: Healthy

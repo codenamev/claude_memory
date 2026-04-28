@@ -9,7 +9,7 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Layer                         │
-│  CLI (Router) → Commands (20 classes) → Configuration       │
+│  CLI (Router) → Commands (32 classes) → Configuration       │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
@@ -27,7 +27,7 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 Infrastructure Layer                         │
-│  Store (SQLite v6 + WAL) → FileSystem → Index (FTS5+Vector) │
+│  Store (SQLite v17 + WAL) → FileSystem → Index (FTS5+Vector)│
 │  Templates                                                   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -40,7 +40,7 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
 
 **Components:**
 - **CLI** (`cli.rb`): Thin router that dispatches to command classes
-- **Commands** (`commands/`): 20 command classes, each handling one CLI command
+- **Commands** (`commands/`): 32 command classes, each handling one CLI command
 - **Configuration** (`configuration.rb`): Centralized ENV access and path calculation
 
 **Key Principles:**
@@ -179,7 +179,7 @@ end
 **Components:**
 
 #### Store (`store/`)
-- **SQLiteStore**: Direct database access via Sequel (schema v6)
+- **SQLiteStore**: Direct database access via Sequel (schema v17)
 - **StoreManager**: Manages dual databases (global + project)
 - **Transaction safety**: Atomic multi-step operations
 - **WAL mode**: Write-Ahead Logging for better concurrency
@@ -346,10 +346,10 @@ FileSystem (write)
 - Value objects (SessionId, TranscriptPath, FactId)
 - Centralized Configuration
 - 4 domain models with business logic
-- 20 command classes
-- 19 MCP tools
+- 32 command classes
+- 25 MCP tools
 - Semantic search with local embeddings (FastEmbed + TF-IDF fallback)
-- Schema v6 with WAL mode
+- Schema v17 with WAL mode
 
 ## Future Improvements
 

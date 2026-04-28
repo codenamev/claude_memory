@@ -5,6 +5,8 @@
 **Last Quality Update:** 2026-04-22 (4 items completed — LLMCache + MetricsAggregator extractions, Publish DRY, Dashboard specs)
 **Codebase Growth:** 17,014 → 19,025 LOC (+2,011, +12% in 6 days)
 
+> **Post-review update (2026-04-28, same session):** Items #34, #32, #35, #36 (quick wins + missing command specs) and the first two of the six proposed `Dashboard::API` extractions (#31: `Dashboard::Timeline` + `Dashboard::Health`) landed before the v0.10.0 release commit. `dashboard/api.rb` dropped 807 → 607 LOC (-200, -25%), reversing the regression and bringing it back under the 2026-04-22 baseline (627). The remaining four extractions (`RecallQuery`, `RecallTriggerFinder`, `UserPromptExtractor`, `FactsQuery`) are deferred to 0.10.1. Findings below describe the *pre-update* state captured at review time.
+
 ---
 
 ## Executive Summary
