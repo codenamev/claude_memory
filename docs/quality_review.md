@@ -1,44 +1,38 @@
 # Code Quality Review - Ruby Best Practices
 
-**Review Date:** 2026-04-22
-**Previous Review:** 2026-03-19
-**Last Quality Update:** 2026-04-22 (4 items completed — #27 LLMCache extraction, #27 MetricsAggregator extraction, #18/#26 publish section DRY, #29 dashboard specs)
-**Codebase Growth:** 12,239 → 17,014 LOC (+4,775, +39%)
+**Review Date:** 2026-04-28
+**Previous Review:** 2026-04-22 (6 days ago)
+**Last Quality Update:** 2026-04-22 (4 items completed — LLMCache + MetricsAggregator extractions, Publish DRY, Dashboard specs)
+**Codebase Growth:** 17,014 → 19,025 LOC (+2,011, +12% in 6 days)
 
 ---
 
 ## Executive Summary
 
-The codebase has grown ~39% in five weeks, driven primarily by three additions:
+Six days, +2,011 LOC. The headline finding: **the watch-list item from 2026-04-22 (#28 — extract per-endpoint helpers from `Dashboard::API`) was not just deferred, it actively regressed.** `dashboard/api.rb` grew from 627 → 807 LOC (+180, +29%), is now the only file in `lib/` over 750 lines, and gained four new methods all exceeding 15 lines. Method-size pressure increased: the previous worst case (`recall` at 39 lines) is now `timeline` at 52 lines, and the file has 11 methods over 15 lines (vs 11 last review) but with a higher mean.
 
-1. **Dashboard subsystem** (new, ~1,247 LOC across 5 files) — JSON API, WEBrick server, conflict helpers, fact presenter, efficacy scoring
-2. **SQLiteStore regrowth** (386 → 683 LOC) — table accessors re-added, LLM cache methods, ingestion metric aggregation
-3. **MCP/command expansion** — new handlers, new command variants, expanded tool definitions
+The codebase is otherwise healthy. Five **new dashboard subsystems** (`moments.rb`, `reuse.rb`, `trust.rb`, `scoped_fact_resolver.rb`, plus `efficacy.rb` carried over) shipped with **direct spec files**. Three new schema migrations (v15/v16/v17) all wrap DDL with idempotent `create_table?` / `add_column` and have **per-migration specs plus round-trip specs from v12, v13, and v14 forward to v17** (a deliberate process improvement noted in `feedback_round_trip_migration_specs.md`). Four new sweep operations (`dedupe_open_conflicts`, `reclassify_references`) gained spec coverage in `sweep/maintenance_spec.rb`.
 
-Two files now exceed the 500-line threshold (up from 0 in March). The test-to-code ratio dropped from 1.84:1 to 1.65:1 as tests didn't keep pace with library growth. Three dashboard modules (`conflicts.rb`, `fact_presenter.rb`, `server.rb`) shipped without direct specs, though `api_spec.rb` exercises them transitively through API responses.
+**What regressed:**
+- `dashboard/api.rb` 627 → 807 LOC (+180). Watch-list item not addressed.
+- `sweep/maintenance.rb` 334 → 456 LOC (+122). Two of the four new methods are 50+ lines (`dedupe_open_conflicts` 58, `restore_multi_value_supersessions` 57).
+- Sleep-based test latency grew. `dashboard/moments_spec.rb` and `dashboard/api_spec.rb` add 4 more `sleep 1.1` calls (+4.4s wall). Total sleep-based test cost in suite is now ~8.4s, up from ~4s.
+- One new code smell: `digest_command.rb:128` calls `Dashboard::Trust.new(manager).send(:utilization)` — reaches into a private method instead of exposing `utilization` on the public Trust API.
 
-No new correctness bugs. No hot-path N+1 patterns. All bare rescues are defensive/optional (return `false` or `nil` in boolean or skip contexts). No new raw SQL outside of FTS5/vec0 DDL and schema introspection.
+**What was resolved or improved since 2026-04-22:**
+- Round-trip migration specs from v12/v13/v14 → v17 added (release-blocker per `feedback_round_trip_migration_specs.md`).
+- Per-migration specs for v13–v17 added under `spec/claude_memory/store/migrations/`.
+- New dashboard subsystems shipped *with* specs (good pattern — Reuse, Moments, Trust, Knowledge, ScopedFactResolver all have direct specs).
+- `lib/claude_memory/store/sqlite_store.rb` only grew 40 LOC (544 → 584); regrowth controlled.
 
-**Resolved since last review:** None of the 12 carried-forward items were addressed. All are still non-critical (thin CLI wrappers, DRY tweaks, test ergonomics).
-
-**New this review:** 5 medium-priority items tied to the dashboard and SQLiteStore regrowth. 3 low-priority items for test coverage gaps.
-
-**Resolved in 2026-04-22 quality-update session:** 4 items
-- **#27** SQLiteStore regrowth — extracted `LLMCache` module (-55 LOC) and `MetricsAggregator` module (-84 LOC). sqlite_store.rb: 683 → 544 LOC (back under 550 LOC watch-line)
-- **#18/#26** Publish section generator repetition — extracted shared `generate_section` helper; three methods collapsed from ~30 LOC to ~9 LOC
-- **#29** Dashboard test coverage — added `fact_presenter_spec.rb` (14 examples) and `conflicts_spec.rb` (15 examples). Suite: 1756 → 1785 examples. Only `server.rb` remains uncovered (HTTP glue, lower priority)
+**New this review:** 4 items. 1 high-priority (Dashboard::API extraction, now urgent), 1 medium (`sweep/maintenance.rb` size), 1 low (`Time.parse` duplication across dashboard files), 1 quick win (`.send(:utilization)` smell in digest).
 
 ### Current Strengths
 
-- Functional core: 25+ pure logic classes with zero I/O
-- Dashboard architecture is sound — `API` delegates to `Conflicts`, `FactPresenter`, `Efficacy` rather than becoming a god object
-- Domain objects remain frozen and self-validating (Fact, Entity, Provenance, Conflict)
-- 100% `frozen_string_literal: true` compliance (148 lib files)
-- Zero N+1 query patterns in hot paths; dashboard uses batch `as_hash(:id)` loading
-- Proper transaction wrapping in `Resolver` and `Maintenance`
-- Clean duck-typed embedding provider contract with shared RSpec examples
-- Handler module decomposition from March still holding (no handler >215 LOC)
-- Consistent dependency injection across commands and dashboard modules
+- Migrations now ship with per-migration specs **and** cross-version round-trip specs — a deliberate release-readiness improvement that landed during this window
+- New dashboard subsystems all have direct specs; spec count grew 156 → 188 files (+32)
+- Domain objects, frozen string literals, transaction wrapping, no raw SQL, no N+1 in hot paths — all preserved
+- Five files >300 LOC last review; eight now, but mostly because of new modules carrying single responsibilities (Moments 244, Trust 284, Conflicts 285), not god-object regrowth
 
 ---
 
@@ -46,59 +40,140 @@ No new correctness bugs. No hot-path N+1 patterns. All bare rescues are defensiv
 
 ### What's Been Fixed ✅
 
-Items resolved before this review (from Mar 19 session) remain in good shape:
-- `Tools` god object still ~249 LOC thin dispatcher; handlers stayed focused
-- `Recall` still a 94-line facade delegating to engine strategies
-- `SnippetExtractor` DRY extraction still in place
-- Embedding provider contract (duck typing, shared examples) unchanged
+- `SQLiteStore` regrowth held steady at 584 LOC after the 2026-04-22 LLMCache + MetricsAggregator extractions; only +40 LOC over 6 days, and that's adding two new tables (`moment_feedback`, `activity_events`) with their CRUD wrappers
+- New dashboard subsystems each landed under 300 LOC with focused responsibilities
+  - `Moments` (244 LOC) — feed-shape construction, no DB writes
+  - `Trust` (284 LOC) — sidebar aggregations, all reads
+  - `Reuse` (97 LOC) — top-N "most-used" panel
+  - `Knowledge` (136 LOC) — fact summary panel
+  - `ScopedFactResolver` (95 LOC) — pure helper
+- Round-trip migration specs (`round_trip_v12_to_v17_spec.rb` etc.) — Sandi-style "test the contract, not the implementation"
 
 ### Critical Issues 🔴
 
-None remaining.
+#### A. `Dashboard::API` regressed: 627 → 807 LOC (+29%) — **carried-forward item became urgent**
 
-### High Priority Issues
+`lib/claude_memory/dashboard/api.rb` was the watch-list item at the close of the 2026-04-22 review (#28). Six days later, instead of shrinking via per-endpoint extraction, it absorbed:
 
-#### A. SQLiteStore regrew from 386 → 683 LOC (+77%) — ✅ RESOLVED 2026-04-22
+- `find_recall_trigger` (lib/claude_memory/dashboard/api.rb:193) — 32 lines, 5 SQL constructions, calls 3 helpers, JSON-parses event details
+- `extract_user_prompt` (lib/claude_memory/dashboard/api.rb:237) — 29 lines, JSONL parsing, content type narrowing, plumbing-noise filtering
+- `facts` (lib/claude_memory/dashboard/api.rb:373) — 39 lines (was 26), now also handles `stale_only` filtering with cross-store exclusion
+- `facts_seen_in_recent_recalls` (lib/claude_memory/dashboard/api.rb:418) — 20 lines, scoped-pair aggregation
+- `efficacy` (lib/claude_memory/dashboard/api.rb:439) — 31 lines (was 23), now branches on session_id with time-window correlation
+- New micro-endpoints: `moments`, `trust`, `knowledge`, `reuse`, `moment_feedback`, `clear_moment_feedback`, `fact_detail`, `promote_fact`, `reject_fact`
 
-`lib/claude_memory/store/sqlite_store.rb` was the headline refactor of Mar 19 (from 547 down to 386). It had regrown past its original pre-refactor size but has since been decomposed again using the successful module-inclusion pattern:
+The class now has **42 methods** (up from ~31) and **8 methods over 20 lines**. The methods that delegate cleanly (`conflicts`, `moments`, `trust`, `knowledge`, `reuse` — all 1-liners) are the right pattern; the rest of the file should follow that pattern.
 
-- **`Store::LLMCache`** — extracted 4 methods (`llm_cache_lookup`, `llm_cache_store`, `llm_cache_key`, `llm_cache_prune`), -55 LOC
-- **`Store::MetricsAggregator`** — extracted 4 methods (`count_undistilled`, `record_ingestion_metrics`, `aggregate_ingestion_metrics`, `backfill_distillation_metrics!`), -84 LOC
+**Method size table (current state):**
 
-**Result:** sqlite_store.rb 683 → **544 LOC**. No file in lib/ exceeds 627 lines.
-
-**Remaining method-size issue:** `upsert_content_item` still has 11 keyword parameters and 26 lines (carried-forward #8). Not critical.
-
-#### B. Dashboard::API at 627 lines with multiple 20+ line methods
-
-`lib/claude_memory/dashboard/api.rb` is new (not in March review). Architecturally clean (delegates to `Conflicts`, `FactPresenter`, `Efficacy`), but the API itself has accumulated orchestration code.
-
-**Method sizes >15 lines (verified):**
-
-| Method | L | Size | Concern |
+| Method | Line | Size | Concern |
 |---|---|---|---|
-| `recall` | 186 | 39 | Query construction + dual-shape result flattening |
-| `timeline` | 302 | 29 | Activity event formatting |
-| `session_summary` | 85 | 28 | Multi-query aggregation |
-| `db_stats` | 467 | 27 | Predicate counts + entity counts + size stats |
-| `facts` | 242 | 26 | Pagination + filtering + presenter dispatch |
-| `efficacy` | 270 | 23 | Score computation delegated but wrapping is thick |
-| `activity_detail` | 115 | 22 | Event detail shape construction |
-| `load_content_item` | 423 | 20 | Joined fetch + shape |
+| `timeline` | 471 | 52 | 3 separate Sequel aggregations + Ruby-side merge — should be `Dashboard::Timeline` |
+| `vec_health` | 759 | 46 | Branchy status derivation over coverage stats |
+| `recall` | 315 | 41 | Result flattening + bare rescue + actionable-hint branching |
+| `facts` | 373 | 39 | Pagination + filter + cross-store stale exclusion |
+| `activity_detail` | 149 | 37 | Joined fetch + linked facts + recall-trigger correlation |
+| `hooks_health` | 704 | 32 | Multi-state status with fix messages |
+| `find_recall_trigger` | 193 | 32 | Time-window query with session_id fallback |
+| `efficacy` | 439 | 31 | Session-scope vs window-scope branching |
+| `extract_user_prompt` | 237 | 29 | JSONL reverse-walk + plumbing filter |
+| `session_summary` | 119 | 29 | Multi-event-type aggregation |
+| `db_stats` | 647 | 28 | Predicate counts + entity counts + size stats |
 
-**Proposed fix:** Extract query-construction helpers into a `Dashboard::QueryBuilder` or per-endpoint command objects. Example: a `Dashboard::RecallQuery.new(manager, params).call` would reduce `recall` to ~5 lines and be unit-testable without HTTP plumbing.
+**Proposed extractions** (each candidate is testable in isolation):
 
-**File:** `lib/claude_memory/dashboard/api.rb` (627 lines)
-**Effort:** 2–3 hours (5 methods to extract)
+```ruby
+# lib/claude_memory/dashboard/timeline.rb — pure aggregation
+class Timeline
+  def initialize(manager) = @manager = manager
+  def days = { days: build_days }
+  private
+  def build_days
+    return [] unless store
+    fact_rows, content_rows, event_rows = load_aggregations
+    merge_into_days(fact_rows, content_rows, event_rows)
+  end
+end
+
+# lib/claude_memory/dashboard/health.rb — already 4 health checks (db, hooks, vec, vectors)
+class Health
+  def report = { status: overall(checks), checks: checks, version: VERSION }
+  private
+  def checks = [db_health("global"), db_health("project"), hooks_health, vec_health]
+end
+
+# lib/claude_memory/dashboard/recall_query.rb — wraps live recall + actionable error mapping
+class RecallQuery
+  def call(params) = format_response(run(params))
+end
+
+# lib/claude_memory/dashboard/recall_trigger_finder.rb — pure time-window correlation
+# lib/claude_memory/dashboard/user_prompt_extractor.rb — pure JSONL parsing
+# lib/claude_memory/dashboard/facts_query.rb — pagination + stale exclusion
+```
+
+After these extractions `api.rb` should drop to **~250 LOC** of routing-and-delegation. The pattern was already proven by `Conflicts` / `Moments` / `Trust` / `Knowledge` / `Reuse`.
+
+**File:** `lib/claude_memory/dashboard/api.rb`
+**Effort:** 4–6 hours (5 extractions, each with a focused spec)
+**Priority:** 🔴 — was medium last review, escalates to high because the trend line points at 1,000+ LOC by next sprint if uncorrected
+**Expert principle:** Sandi Metz SRP; Bernhardt boundaries; Beck simple design
 
 ### Medium Issues 🟡
 
+#### B. `sweep/maintenance.rb` grew 334 → 456 LOC (+122, +37%)
+
+Last review noted maintenance.rb at 334 (after dropping from 456 earlier — see the review's appendix B). It's now back at 456. Two large methods landed:
+
+- `dedupe_open_conflicts` (lib/claude_memory/sweep/maintenance.rb:273) — 58 lines, multi-step transaction (group → resolve duplicates → reattach provenance → reject losers → mark conflicts resolved)
+- `reclassify_references` (lib/claude_memory/sweep/maintenance.rb:340) — 26 lines, transactional cleanup that requires `Distill::ReferenceMaterialDetector`
+
+Plus the pre-existing `restore_multi_value_supersessions` (line 185, 57 lines).
+
+These are all *one-shot historical cleanups* (per their docstrings). They don't belong in the regular sweep cycle — they're admin operations. Two options:
+
+1. **Extract to `Sweep::HistoricalCleanup`** — a separate module for one-shot data fixes
+2. **Keep in Maintenance but extract long methods** — e.g. `dedupe_open_conflicts` calls `pair_key`, but the inner per-group logic (lib/claude_memory/sweep/maintenance.rb:294-326) is 32 lines that could be `resolve_duplicate_group(keeper, duplicates)`
+
+**File:** `lib/claude_memory/sweep/maintenance.rb`
+**Effort:** 2 hours
+**Priority:** 🟡 Medium
+**Expert principle:** Sandi Metz SRP; Beck single level of abstraction
+
+#### C. `digest_command.rb:128` calls private API via `.send`
+
+```ruby
+# lib/claude_memory/commands/digest_command.rb:128
+util = Dashboard::Trust.new(manager).send(:utilization)
+```
+
+This is the only `.send` to a private method in `lib/`. Two paths forward:
+
+```ruby
+# Option 1: Promote utilization to public on Trust (it already returns a documented Hash shape)
+# lib/claude_memory/dashboard/trust.rb — remove `private` annotation above utilization
+
+# Option 2: Extract Dashboard::Utilization as its own object
+class Utilization
+  def initialize(manager) = @manager = manager
+  def report = { extracted:, used:, used_from_extracted:, ratio_pct:, window_days: }
+end
+```
+
+Option 2 is cleaner — Trust currently *also* exposes `utilization` indirectly through `snapshot`, so users have two paths to the same data. Extracting the calculator gives Digest, Trust, and any future caller one canonical interface.
+
+**File:** `lib/claude_memory/commands/digest_command.rb:128`
+**Effort:** 30 minutes
+**Priority:** 🟡 Medium (works correctly, but tells future readers "private is negotiable")
+**Expert principle:** Avdi Grimm tell-don't-ask; Sandi Metz dependency clarity
+
+### Low Issues
+
 | # | Issue | File:Line | Effort |
 |---|---|---|---|
-| 8 | `upsert_content_item` has 11 keyword params (carried) | `store/sqlite_store.rb:149-174` | 1 hour |
-| 26 | ~~`publish.rb` section generators repeat structure~~ — ✅ RESOLVED 2026-04-22 | `publish.rb:114-139` | done |
-
-Extracted shared `generate_section(facts, section:, title:, &formatter)` helper. Three methods (decisions/conventions/constraints) collapsed from ~30 LOC to ~9 LOC. publish.rb: 256 → 248 LOC.
+| 8 | `upsert_content_item` 11 keyword params (carried) | `store/sqlite_store.rb:193` | 1 hour |
+| 32 | `parse_timestamp` duplicated in `dashboard/api.rb:565` and `dashboard/conflicts.rb:278` | both | 15 min |
+| 33 | `stores_for(scope)` / `facts_stores_for(scope)` near-identical pattern | `dashboard/conflicts.rb:160`, `dashboard/api.rb:589` | 30 min |
 
 ---
 
@@ -106,46 +181,35 @@ Extracted shared `generate_section(facts, section:, title:, &formatter)` helper.
 
 ### What's Been Fixed ✅
 
-- Batch loading in `FactPresenter#list_summary` (L59-63): single `where(id: ids).as_hash(:id)` call
-- Transaction wrapping preserved in `Maintenance#restore_multi_value_supersessions` (L205)
-- Dashboard reuses tested `Recall` engine rather than issuing its own queries (`api.rb:199`)
+- Migrations v15, v16, v17 all wrap DDL in idempotent `create_table?` / `add_column` and provide `down` blocks (v14's down is intentionally a no-op with comment)
+- `Trust#extracted_fact_pairs` (lib/claude_memory/dashboard/trust.rb:231) and `used_fact_pairs` (line 248) batch via `select(:id)` + iteration — no per-row queries
+- `Conflicts#load_facts_for_rows` (lib/claude_memory/dashboard/conflicts.rb:235) batches with `where(id: ids).as_hash(:id)` — explicit N+1 prevention
 
 ### Raw SQL Audit
 
-All production raw SQL remains justified:
-
-| Location | Pattern | Verdict |
-|---|---|---|
-| `index/lexical_fts.rb:144-147` | `CREATE VIRTUAL TABLE ... USING fts5` | Required — Sequel has no FTS5 DDL |
-| `index/vector_index.rb:176-179` | `CREATE VIRTUAL TABLE ... USING vec0` | Required — sqlite-vec DDL |
-| `index/vector_index.rb:159-160` | `execute_with_params` via Extralite | Required — Sequel bind params don't work with vec0 |
-| `mcp/handlers/stats_handlers.rb:99` | `SELECT sql FROM sqlite_master` | Required — schema introspection |
-| `commands/stats_command.rb:236` | `SELECT sql FROM sqlite_master` | Required — schema introspection |
-
-**Verdict:** Zero inappropriate raw SQL.
+No new raw SQL. The handful of `Sequel.lit` calls in `dashboard/api.rb` are all `DATE(...)` group-by helpers (lines 479, 487, 494) — required because Sequel doesn't have a portable `DATE(timestamp_string)` extractor for SQLite.
 
 ### Transaction Safety
 
-Spot-checked:
-- `resolve/resolver.rb`: wraps supersession + conflict insert in `@store.db.transaction` ✅
-- `sweep/maintenance.rb:205`: wraps multi-value restoration ✅
-- `dashboard/conflicts.rb:84`: uses `store.reject_fact` which opens its own transaction ✅
+New transactional methods all wrap correctly:
+- `Sweep::Maintenance#dedupe_open_conflicts` — wraps in `@store.db.transaction` (line 289)
+- `Sweep::Maintenance#reclassify_references` — wraps in `@store.db.transaction` (line 349)
+- `SQLiteStore#upsert_moment_feedback` — wraps in `@db.transaction` (line 128)
 
-### N+1 Audit
+### N+1 Audit (new dashboard panels)
 
-New dashboard code checked:
-- `FactPresenter#list_summary` — batch loads all entities in one query ✅
-- `dashboard/api.rb#load_linked_facts` — single join query ✅
-- `dashboard/api.rb#load_facts_by_ids` — single `where(id: ids)` ✅
-- `dashboard/api.rb#recall` — delegates to production `Recall` pipeline (already batched) ✅
+- `Moments#build_moment` (lib/claude_memory/dashboard/moments.rb:125) calls `resolve_content` and `extracted_facts` per row. **Potential N+1 if a feed page surfaces 50 ingest moments.** `extracted_facts` runs `store.db[:facts].join(:provenance).where(content_item_id:)` per moment.
+- `Trust#count_open_conflicts` (lib/claude_memory/dashboard/trust.rb:145) → `Conflicts#distinct_open_counts` walks both stores. Acceptable (fixed cardinality of 2).
+- `Trust#used_fact_pairs` (lib/claude_memory/dashboard/trust.rb:248) loads up to N=500 events without limit. Could grow unbounded. Recommend explicit `.limit(...)` for safety.
 
-### Medium Issues 🟡
+**Recommendation:**
+- Batch `extracted_facts` in `Moments`: collect all `content_item_id`s up front, run one `where(content_item_id: ids)` join, group results in Ruby.
+- Add explicit `.limit` to `used_fact_pairs` (10,000 is a safe ceiling for a 30-day window).
 
-| # | Issue | File:Line | Effort |
-|---|---|---|---|
-| 8 | `upsert_content_item` 11-param signature (carried) | `store/sqlite_store.rb:149` | 1 hour |
-
-**Fix:** `ContentItemAttributes = Data.define(:source, :text_hash, ...)` value object. Would also enable `ContentItemAttributes.from_transcript_chunk(...)` factory methods.
+**File:** `lib/claude_memory/dashboard/moments.rb:125,231`
+**Effort:** 45 minutes
+**Priority:** 🟡 Medium (will only bite at scale; fix proactively)
+**Expert principle:** Jeremy Evans dataset hygiene
 
 ---
 
@@ -153,36 +217,74 @@ New dashboard code checked:
 
 ### What's Been Fixed ✅
 
-- `similarity.rb`, `metadata_extractor.rb`, `tool_extractor.rb`, `recover_command.rb`, `schema_validator.rb` specs added in March session — still green
-- `dashboard/api_spec.rb` (new) tests the API surface and exercises the delegate helpers transitively
-- **`dashboard/fact_presenter_spec.rb`** added 2026-04-22 — 14 examples covering summary/preview/with_provenance/list_summary shapes, batched entity resolution, nil handling
-- **`dashboard/conflicts_spec.rb`** added 2026-04-22 — 15 examples covering list pagination, cross-scope counts, detail resolution, reject/reject_similar cascades
+- **Migration spec coverage hit gold standard.** Per-migration specs for v13/v14/v15/v16/v17 + cross-version round-trips from v12, v13, and v14 all forward to v17. That's the canonical "test the seam" pattern. The lessons from `feedback_round_trip_migration_specs.md` are now codified in green tests.
+- New commands `digest_command.rb` and `census_command.rb` shipped with direct specs
+- New dashboard modules all have direct specs (`moments_spec.rb`, `reuse_spec.rb`, `trust_spec.rb`, `knowledge_spec.rb`, `scoped_fact_resolver_spec.rb`)
 
 ### High Priority Issues
 
-#### C. Dashboard test coverage gaps (new subsystem)
+#### D. Two new commands shipped without specs
 
-Four of five dashboard modules now have direct spec files. Only `server.rb` remains uncovered:
+| Command | LOC | Spec? |
+|---|---|---|
+| `commands/dedupe_conflicts_command.rb` | 55 | ❌ none |
+| `commands/reclassify_references_command.rb` | 56 | ❌ none |
 
-| File | LOC | Direct Spec? | Notes |
-|---|---|---|---|
-| `dashboard/api.rb` | 627 | ✅ `api_spec.rb` | — |
-| `dashboard/efficacy.rb` | 127 | ✅ `efficacy_spec.rb` | — |
-| `dashboard/conflicts.rb` | 195 | ✅ `conflicts_spec.rb` (new) | — |
-| `dashboard/fact_presenter.rb` | 109 | ✅ `fact_presenter_spec.rb` (new) | — |
-| `dashboard/server.rb` | 189 | ❌ | HTTP glue — lower priority |
+Both are thin wrappers over `Sweep::Maintenance` (which *is* tested), but the CLI-layer concerns — option parsing, scope routing, output format, dry-run flag flow-through — are uncovered.
 
-**Remaining effort:**
-- `server_spec.rb` — 1–1.5 hours
+The output format in particular has logic worth pinning:
+- `dedupe_conflicts_command.rb:38-52` decides `DRY RUN` vs `DEDUPE`, separator length, decisions header
+- `reclassify_references_command.rb:38-53` truncates objects to 100 chars + ellipsis
 
-### Medium Issues 🟡
+**Proposed:** Mirror `digest_command_spec.rb` (or `census_command_spec.rb`) — test option parsing, dry-run paths, and stdout shape via injected `StringIO`.
+
+**Effort:** 30 min each (60 min total)
+**Priority:** High — these are admin commands that mutate data; CLI ergonomics belong under test
+
+#### E. `dashboard/server.rb` still untested
+
+Carried over from 2026-04-22. The file has grown 189 → 211 LOC (+22) due to new endpoints (moments feedback POST/DELETE, conflict reject_similar). All branching is inside the request router (`handle_moments`, `handle_conflicts`).
+
+WEBrick HTTP testing is awkward but not impossible — `Rack::MockRequest` works against the API class directly. Alternatively, exercise the routing by injecting a stub WEBrick request object.
+
+**Effort:** 1.5 hours
+**Priority:** Medium-Low
+
+### Sleep-Based Test Latency Increased
+
+Total sleep-based test cost in `bundle exec rspec`:
+
+| Spec | sleep total | Notes |
+|---|---|---|
+| `spec/claude_memory/ingest/ingester_spec.rb` | 3.03s | mtime resolution, carried |
+| `spec/claude_memory/publish_spec.rb` | 1.1s | carried |
+| `spec/claude_memory/recall_spec.rb` | 0.01s | carried |
+| `spec/claude_memory/dashboard/moments_spec.rb` | 2.2s | **NEW** ordering of activity events |
+| `spec/claude_memory/dashboard/api_spec.rb` | 2.2s | **NEW** activity ordering tests |
+| **Total** | **~8.5s** | up from ~4s last review |
+
+The dashboard sleeps are because activity_events ordering depends on `occurred_at` ISO timestamps, and successive inserts in <1s produce the same timestamp. Two fixes:
+
+```ruby
+# Option 1: Inject explicit timestamps (already supported via insert column)
+store.activity_events.insert(occurred_at: Time.now.utc.iso8601, ...)
+store.activity_events.insert(occurred_at: (Time.now + 1).utc.iso8601, ...)
+
+# Option 2: Stub Time.now via Timecop or RSpec's allow(Time).to receive(:now)
+```
+
+Option 1 requires no extra dep. Either eliminates 4.4s of wall time.
+
+**File:** `spec/claude_memory/dashboard/moments_spec.rb:130,132`, `api_spec.rb:332,359`
+**Effort:** 30 minutes
+**Priority:** 🟡 Medium (test speed degrades CI loop)
+**Expert principle:** Kent Beck fast feedback
+
+### Carried-Forward Issues 🟡
 
 | # | Issue | File:Line | Effort |
 |---|---|---|---|
-| 10 | Sleep-based tests (~4s total) | `spec/ingest/ingester_spec.rb:43,65,81`, `spec/publish_spec.rb:222` | 1 hour |
 | 11 | No shared test factory | `spec/spec_helper.rb` | 1 hour |
-
-Both carried forward unchanged.
 
 ---
 
@@ -190,25 +292,28 @@ Both carried forward unchanged.
 
 ### What's Been Fixed ✅
 
-- `Core::Result` still used consistently in embedding paths
-- `ApiError < StandardError` intact
-- Resolver still parameter-threaded; no rediscovered mutable state
+- New code uses scoped rescues (`rescue Sequel::DatabaseError, JSON::ParserError`) over bare rescues by default. Of 18 new rescue clauses in dashboard files, **13 are scoped to specific exception types**, 5 are bare and all return safe defaults
+- `Result` pattern preserved in embeddings paths
+- `Core::RelativeTime.format` used consistently across new dashboard modules
 
-### Bare Rescue Audit (5 total, all defensive)
+### Bare Rescue Audit (full lib/, current count: 19 bare rescues)
 
-Every bare `rescue` in production code returns a safe default:
+The count grew from 5 → 19 because new dashboard code added 5 in `api.rb`. All are defensive (return safe shape):
 
 | Location | Context | Returns | Verdict |
 |---|---|---|---|
-| `mcp/handlers/stats_handlers.rb:102` | `fts_legacy?` introspection | `false` | Acceptable — boolean check |
-| `mcp/instructions_builder.rb:147` | `vec_available?` probe | `false` | Acceptable — capability check |
-| `sweep/maintenance.rb:140` | FTS entry remove in prune loop | skips row | Acceptable — prune-best-effort |
-| `commands/hook_command.rb:102` | Forked background handler | `nil` | Required — must not escape fork |
-| `commands/stats_command.rb:239` | `check_fts_format` helper | no-op | Acceptable — informational only |
+| `mcp/handlers/stats_handlers.rb:102` | `fts_legacy?` | `false` | Acceptable — boolean check |
+| `mcp/instructions_builder.rb:147` | `vec_available?` | `false` | Acceptable |
+| `sweep/maintenance.rb:140` | FTS prune | skips row | Acceptable |
+| `commands/hook_command.rb:102` | forked handler | `nil` | Required |
+| `commands/stats_command.rb:276` | `check_fts_format` | no-op | Acceptable |
+| **`dashboard/api.rb:340` (new)** | recall live query | error hash | Acceptable — wide net for unfamiliar errors from Recall pipeline |
+| **`dashboard/api.rb:672` (new)** | `db_stats` aggregation | `{exists:, error:}` | Acceptable |
+| **`dashboard/api.rb:693` (new)** | `db_health` introspection | error hash | Acceptable |
+| **`dashboard/api.rb:728` (new)** | `hooks_health` JSON read | error hash | Acceptable |
+| **`dashboard/api.rb:797` (new)** | `vec_health` | error hash | Acceptable |
 
-**Recommendation:** Add `rescue StandardError` explicitly to silence the only remaining lint concern (bare rescues catch `StandardError` in Ruby anyway, so this is purely stylistic). Or add a brief `# bare rescue: informational only` comment documenting intent.
-
-**Effort:** 10 minutes total; zero functional change.
+Verdict: per `Style/RescueStandardError` in Standard Ruby (rejected explicit-rescue change in last review), these are correct. **No action.**
 
 ### Carried-Forward Issues 🟡
 
@@ -216,7 +321,13 @@ Every bare `rescue` in production code returns a safe default:
 |---|---|---|---|
 | 13 | Inconsistent payload validation | `hook/handler.rb:53-82` | 30 min |
 
-Verified still present: `ingest` uses `payload.fetch("session_id")` (raises on missing), `sweep` uses `payload.fetch("budget", DEFAULT_SWEEP_BUDGET)`, `publish` uses `payload.fetch("mode", "shared")`, `context` uses `payload["source"]` (nil-allows). No consistent pattern.
+Verified still present.
+
+### New Concern
+
+#### F. `digest_command.rb:128` reaches into `Trust`'s private API
+
+Documented above (#C). Repeating here under the Avdi lens: the explicit `.send` is a public-API smell. Either the method shouldn't be private, or there should be a public wrapper. Choose.
 
 ---
 
@@ -224,21 +335,29 @@ Verified still present: `ingest` uses `payload.fetch("session_id")` (raises on m
 
 ### What's Been Fixed ✅
 
-- Dashboard keeps WEBrick I/O isolated to `Dashboard::Server` (functional core/imperative shell separation)
-- Dashboard `API` methods are pure transformations over store queries — return hashes, don't mutate
-- Dashboard helpers (`Conflicts`, `FactPresenter`, `Efficacy`) receive dependencies via constructor
-- `VectorIndex#clear!` still encapsulates vec0 destruction
+- New dashboard modules continue to honor the imperative-shell / functional-core split:
+  - `Trust` does only reads + transformation (no writes)
+  - `Moments` does reads + transformation
+  - `Reuse` does reads + transformation
+  - `Efficacy::Reporter` is **pure** (no DB) — takes events, returns a hash — Bernhardt's dream
+- `Knowledge#summary` returns shaped data; UI logic stays out of the model
+- New value-object-y data: `KIND_TO_EVENT_TYPES`, `FEED_EVENT_TYPES` are frozen module constants
 
-### Current Boundaries
-
-Dashboard layering is textbook functional-core/imperative-shell:
+### Boundaries
 
 ```
-HTTP layer:    Dashboard::Server (WEBrick mount_proc)      ← imperative shell
-JSON layer:    Dashboard::API (query → hash transformation) ← functional
-Query layer:   Recall engine + store datasets              ← impure but isolated
-Presentation:  FactPresenter, Conflicts, Efficacy          ← pure transformations
+HTTP layer:    Dashboard::Server (211 LOC, untested)         ← imperative shell
+JSON layer:    Dashboard::API (807 LOC ⚠ growing)            ← needs to shrink to routing
+Subsystems:    Conflicts, Moments, Trust, Knowledge, Reuse   ← functional core (good)
+Pure helpers:  Efficacy::Reporter, ScopedFactResolver        ← pure (excellent)
+Query layer:   Recall, store datasets                        ← impure but isolated
 ```
+
+`API` is the wrong layer to be doing JSONL parsing (`extract_user_prompt`), time-window correlation (`find_recall_trigger`), or 3-source aggregation (`timeline`). Each of those wants to be its own pure object.
+
+### Test Speed Regression
+
+Sleep-based tests are dollar-bills the suite is burning every CI run. Eliminating them is functional-core hygiene — the test should pin behavior, not wait for clock state.
 
 ### Carried-Forward Issues 🟡
 
@@ -247,180 +366,235 @@ Presentation:  FactPresenter, Conflicts, Efficacy          ← pure transformati
 | 15 | Sweeper mutable state | `sweep/sweeper.rb:16-17` | 20 min |
 | 16 | `Dir.chdir` in publish tests | `spec/publish_spec.rb:14` | 15 min |
 
-Both unchanged from March.
-
 ---
 
 ## 6. General Ruby Idioms
-
-### Carried-Forward Items
-
-| # | Issue | File:Line | Severity | Effort |
-|---|---|---|---|---|
-| 17 | ResponseFormatter duplication | `mcp/response_formatter.rb:27-280` | 🟡 Medium | 1 hour |
-| 18 | Publish section generator repetition | `publish.rb:114-165` | 🟢 Low | 30 min |
-
-Reviewed: `ResponseFormatter` has been split into ~12 focused static methods; further DRY extraction is possible but has diminishing return. Publish section generators are still textually repetitive (4 near-identical methods). Low priority.
 
 ### New Items
 
 | # | Issue | File:Line | Severity | Effort |
 |---|---|---|---|---|
-| 27 | ~~SQLiteStore regrowth past 500 LOC~~ — ✅ RESOLVED (544 LOC) | `store/sqlite_store.rb` | — | done |
-| 28 | Dashboard::API recall/timeline/db_stats methods >20 lines | `dashboard/api.rb:186,302,467` | 🟡 Medium | 2–3 hours |
-| 29 | ~~Dashboard untested modules~~ — ✅ RESOLVED for conflicts + fact_presenter; server.rb remains | `spec/claude_memory/dashboard/` | 🟢 Low | 1.5 hours |
-| 30 | ~~Bare rescue style~~ — ❌ WITHDRAWN: Standard Ruby's `Style/RescueStandardError` actively prefers bare `rescue`. Current code is correct per project style. | — | n/a |
+| 31 | `Dashboard::API` 807 LOC, 11 methods >15 lines (regression of #28) | `dashboard/api.rb` | 🔴 High | 4–6 hours |
+| 32 | `parse_timestamp(value)` duplicated verbatim in api.rb:565 and conflicts.rb:278 | both | 🟢 Low | 15 min |
+| 33 | `stores_for` / `facts_stores_for` near-identical between Conflicts and API | `conflicts.rb:160`, `api.rb:589` | 🟢 Low | 30 min |
+| 34 | `digest_command.rb:128` uses `.send(:utilization)` to call private | `digest_command.rb:128` | 🟡 Medium | 30 min |
+| 35 | Sleep-based dashboard tests add 4.4s to suite | `dashboard/{moments,api}_spec.rb` | 🟡 Medium | 30 min |
+| 36 | DedupeConflictsCommand and ReclassifyReferencesCommand untested | `commands/` | High | 60 min |
+| 37 | `sweep/maintenance.rb` regrew to 456 LOC; 3 methods >50 lines | `sweep/maintenance.rb` | 🟡 Medium | 2 hours |
+| 38 | `Moments#extracted_facts` per-moment join (potential N+1 at 50-row pages) | `moments.rb:231` | 🟡 Medium | 30 min |
+
+### Carried-Forward Items
+
+| # | Issue | File:Line | Severity | Effort |
+|---|---|---|---|---|
+| 17 | ResponseFormatter duplication | `mcp/response_formatter.rb` | 🟡 Medium | 1 hour |
+| 28 | ~~Dashboard::API method extraction~~ — **escalated to #31** | — | — | — |
+| 8 | `upsert_content_item` 11 keyword params | `store/sqlite_store.rb:193` | 🟢 Low | 1 hour |
+| 10 | Sleep-based ingester tests | `spec/ingest/ingester_spec.rb` | 🟢 Low | 1 hour |
+| 11 | No shared test factory | `spec/spec_helper.rb` | 🟢 Low | 1 hour |
 
 ---
 
 ## 7. Positive Observations
 
-- **Dashboard architecture is exemplary** — when a 1,247-LOC feature lands without creating any god objects or introducing any N+1 patterns, that's a healthy codebase
-- **`FactPresenter` batch loading** (`list_summary` L59-63) is a reusable pattern: `flat_map` + `uniq` + single `where(id:)` + `as_hash(:id)` lookup — better than N+1 in a presenter loop
-- **Delegation pattern in `API#conflicts`, `API#reject_fact`** — API doesn't know how conflicts are stored, it just asks `Conflicts` helper. Proper tell-don't-ask
-- **Transaction safety preserved** through the regrowth — new `reject_fact`, `llm_cache_store`, and aggregation methods all use proper transactions
-- **Handler module decomposition from March held** — no handler has regrown past 215 LOC despite the codebase growing 39%
-- **Zero new correctness bugs** across a 39% LOC expansion
+- **Migration discipline** — round-trip specs, per-migration specs, idempotent DDL. The "treat round-trip migration specs as a release blocker" lesson from `feedback_round_trip_migration_specs.md` got operationalized in 5 days
+- **New commands ship with specs** — DigestCommand and CensusCommand both got direct specs; the two that didn't (Dedupe + Reclassify) are 55-line wrappers over already-tested Maintenance methods, so the gap is small
+- **Dashboard subsystem decomposition** — when 5 new panels (Moments, Reuse, Trust, Knowledge, ScopedFactResolver) all land as their own classes with their own specs, the module-extraction muscle is strong
+- **`Efficacy::Reporter` purity** — 128 LOC, zero I/O, takes events and returns shape. Spec is fast and readable. This is the model the rest of dashboard/ should converge on
+- **No raw SQL added; no N+1 in hot paths; transaction safety maintained** — across +2,011 LOC in 6 days
 
 ---
 
 ## 8. Priority Refactoring Recommendations
 
-### High Priority (Next Week)
+### High Priority (This Week — pre-0.10.0 release)
 
-| # | Item | File:Line | Effort | Impact | Status |
-|---|---|---|---|---|---|
-| 27 | Extract `LLMCache` / `MetricsAggregator` from SQLiteStore | `store/sqlite_store.rb` | 1–1.5 hours | Regrowth control | ✅ DONE 2026-04-22 |
-| 29 | Add `fact_presenter_spec.rb` and `conflicts_spec.rb` | `spec/claude_memory/dashboard/` | 2 hours | Coverage | ✅ DONE 2026-04-22 |
+| # | Item | File:Line | Effort | Impact |
+|---|---|---|---|---|
+| 31 | Extract `Dashboard::Timeline` / `Health` / `RecallQuery` / `RecallTriggerFinder` / `UserPromptExtractor` / `FactsQuery` from API | `dashboard/api.rb` | 4–6 hours | API drops 807→~250 LOC; reverses regression |
+| 36 | Add `dedupe_conflicts_command_spec.rb` + `reclassify_references_command_spec.rb` | `spec/claude_memory/commands/` | 1 hour | CLI surface tested |
 
 ### Medium Priority (Next Sprint)
 
-| # | Item | Effort | Impact |
+| # | Item | File:Line | Effort |
 |---|---|---|---|
-| 28 | Extract `Dashboard::RecallQuery` / `SessionSummary` / `DbStats` helpers | 2–3 hours | Readability |
-| 8 | `ContentItemAttributes` value object (carried) | 1 hour | Param reduction |
-| 10 | Replace sleep-based tests with mocks (carried) | 1 hour | Test speed |
-| 11 | Shared test factory `spec/support/database_factory.rb` (carried) | 1 hour | DRY |
-| 17 | ResponseFormatter consolidation (carried) | 1 hour | DRY |
-| 29 | Add `server_spec.rb` | 1.5 hours | Coverage |
+| 34 | Promote `Trust#utilization` to public OR extract `Dashboard::Utilization` | `dashboard/trust.rb`, `digest_command.rb:128` | 30 min |
+| 35 | Replace sleep-based dashboard tests with explicit timestamps | `dashboard/{moments,api}_spec.rb` | 30 min |
+| 37 | Extract long methods from `sweep/maintenance.rb` (`dedupe_open_conflicts`, `restore_multi_value_supersessions`) OR move one-shot cleanups to `Sweep::HistoricalCleanup` | `sweep/maintenance.rb` | 2 hours |
+| 38 | Batch `Moments#extracted_facts` to avoid 50-row N+1 | `moments.rb:231` | 30 min |
+| 17 | ResponseFormatter consolidation (carried) | `mcp/response_formatter.rb` | 1 hour |
+| 13 | Payload validator for hook events (carried) | `hook/handler.rb` | 30 min |
+| E | `dashboard/server_spec.rb` (carried) | `spec/claude_memory/dashboard/` | 1.5 hours |
 
 ### Low Priority (Later)
 
-| # | Item | Effort | Status |
-|---|---|---|---|
-| 13 | Payload validator for hooks (carried) | 30 min | — |
-| 15 | Sweeper mutable state (carried) | 20 min | — |
-| 16 | `Dir.chdir` in tests (carried) | 15 min | — |
-| 26/18 | Publish section builder helper (carried) | 30 min | ✅ DONE 2026-04-22 |
-| 30 | Explicit `rescue StandardError` in 5 defensive rescues | 10 min | ❌ WITHDRAWN — violates `Style/RescueStandardError` |
-
-### Carried Forward (Low Priority from Earlier Reviews)
-
-| # | Item | Original # |
+| # | Item | Effort |
 |---|---|---|
-| 20 | DateTime migration (string timestamps) | Feb 4 #17 |
-| 21 | Command manager helper (`with_manager`) | Feb 4 #19 |
-| 22 | `release_connections` polymorphism | Feb 4 #20 |
-| 23 | Provenance batch insert (`multi_insert`) | Feb 4 #22 |
-| 25 | Result objects for all queries | Feb 4 #24 |
+| 32 | DRY `parse_timestamp` (`api.rb:565` ↔ `conflicts.rb:278`) | 15 min |
+| 33 | DRY `stores_for` / `facts_stores_for` | 30 min |
+| 8 | `ContentItemAttributes` value object | 1 hour |
+| 10 | Replace sleep-based ingester tests | 1 hour |
+| 11 | Shared test factory | 1 hour |
+| 15 | Sweeper mutable state | 20 min |
+| 16 | `Dir.chdir` in publish tests | 15 min |
+
+### Quick Wins (Today)
+
+| # | Item | Effort |
+|---|---|---|
+| 32 | Extract `parse_timestamp` to `Core::RelativeTime` (it already lives there as a value module) | 15 min |
+| 34 | Promote `Trust#utilization` to public | 5 min |
+| 35 | Inject timestamps into dashboard spec inserts | 30 min |
 
 ---
 
 ## 9. Conclusion
 
-The codebase absorbed 39% LOC growth (+4,775 LOC) over five weeks without introducing any correctness bugs, N+1 patterns, or god-object regressions in new code. The dashboard subsystem is particularly well-structured — it would have been easy to put all 1,247 LOC in `api.rb`, but the author correctly split it into five collaborators.
+In 6 days the codebase grew 12% (+2,011 LOC). Most of that growth was healthy — five new dashboard subsystems with specs, three migrations with both per-version and round-trip specs, two new admin commands wrapping already-tested maintenance methods. Migration discipline in particular leveled up: the lesson from `feedback_round_trip_migration_specs.md` shipped as actual release-blocking spec coverage.
 
-**Original two watch items — both resolved in the 2026-04-22 quality-update session:**
+**The headline regression is `Dashboard::API`.** Last review marked it medium-priority for per-endpoint extraction. Six days later it's gained 180 LOC, four new methods over 15 lines, and one method (`timeline`) that's now 52 lines. This is the file that most rewards extraction — it's already surrounded by collaborators (`Conflicts`, `Moments`, `Trust`, `Knowledge`, `Reuse`) that prove the per-endpoint pattern works. Doing the extraction now reverses the trend; deferring lets it accumulate another 200 LOC by next review.
 
-1. ✅ `SQLiteStore` regrew past its pre-March-refactor size (386 → 683). The successful pattern from March (`RetryHandler`, `SchemaManager` module inclusion) was reapplied — extracted `LLMCache` and `MetricsAggregator` modules. sqlite_store.rb now 544 LOC (-139).
-2. `Dashboard::API` is under 700 lines but has 8 methods over 15 lines. Extracting per-endpoint query objects would drop it to ~300 LOC. **Still open** — downgraded to medium priority.
+**Recommended next-action set, in order:**
 
-**Test coverage gaps** for dashboard modules were partially addressed: `fact_presenter.rb` and `conflicts.rb` now have direct specs (29 new examples). Only `server.rb` remains uncovered, and that's WEBrick HTTP glue with the lowest test ROI.
+1. **`/quality-update`** to apply #31 (Dashboard::API extraction) and #36 (missing command specs). Target: api.rb ≤ 300 LOC, all commands tested.
+2. Quick wins #32 + #34 + #35 in the same session (~75 min total).
+3. Schedule #37 and #38 for the next sprint — neither is urgent but both compound if left alone.
+4. After #31 lands, `/review-for-quality` again pre-0.10.0 release to confirm the regression closed.
 
-The remaining 12 carried-forward items from March are all low-priority and non-blocking. Item #30 (explicit `rescue StandardError`) was withdrawn after the project's own Standard Ruby linter rejected the change — the existing bare `rescue` style is correct per project convention.
+The 0.10.0 release should not ship with `dashboard/api.rb` at 807 LOC — the per-endpoint extraction is well-defined, well-precedented, and small-batch (5 extractions × ~1hr each). Doing it before tag is the difference between landing 0.10.0 with a healthy dashboard subsystem vs. burying tech debt in the headline feature of the release.
 
 ---
 
 ## Appendix A: Metrics Comparison
 
-| Metric | Jan 29 | Feb 4 | Mar 9 | Mar 19 | Apr 22 (review) | **Apr 22 (after update)** |
-|---|---|---|---|---|---|---|
-| Ruby files (lib) | ~85 | 104 | 112 | 117 | 148 | **150** (+2 extracted modules) |
-| LOC (lib) | ~8,000 | 9,982 | 11,392 | 12,239 | 17,014 | **17,031** (+17 from module headers) |
-| LOC (spec) | — | 17,693 | 21,632 | 22,563 | 28,074 | **28,490** (+416 dashboard specs) |
-| Pure logic classes | 17+ | 20+ | 20+ | 22+ | 25+ | **27+** (+LLMCache, +MetricsAggregator) |
-| Test files | 74+ | 98 | 128 | 122 | 154 | **156** |
-| Test-to-code ratio | ~1.5:1 | 1.77:1 | 1.90:1 | 1.84:1 | 1.65:1 | **1.67:1** ⬆️ |
-| Files >500 lines | 0 | 2 | 3 | **0** | 2 | **1** ⬇️ (only `dashboard/api.rb`) |
-| Files >300 lines | — | — | 9 | 9 | 10 | **8** ⬇️ |
-| Bare rescues (unsafe) | 0 | 0 | 1 | 0 | 0 | **0** ✅ |
-| Bare rescues (defensive, justified) | — | — | — | — | 5 | **5** |
-| N+1 patterns (hot paths) | 0 | 0 | 0 | 0 | 0 | **0** ✅ |
-| Untested dashboard modules | — | — | — | — | 3 of 5 | **1 of 5** ⬇️ |
-| Known correctness bugs | — | — | — | 0 | 0 | **0** ✅ |
+| Metric | Mar 9 | Mar 19 | Apr 22 (review) | Apr 22 (after update) | **Apr 28 (this review)** |
+|---|---|---|---|---|---|
+| Ruby files (lib) | 112 | 117 | 148 | 150 | **161** (+11 new modules) |
+| LOC (lib) | 11,392 | 12,239 | 17,014 | 17,031 | **19,025** (+2,011) |
+| LOC (spec) | 21,632 | 22,563 | 28,074 | 28,490 | **31,079** (+2,605) |
+| Spec files | 128 | 122 | 154 | 156 | **188** (+32) |
+| Test-to-code ratio | 1.90:1 | 1.84:1 | 1.65:1 | 1.67:1 | **1.63:1** ⬇️ |
+| Files >500 lines | 3 | 0 | 2 | 1 | **2** ⬆️ (api.rb 807, sqlite_store.rb 584) |
+| Files >300 lines | 9 | 9 | 10 | 8 | **8** (same count, different mix) |
+| Bare rescues (justified) | 1 | 0 | 5 | 5 | **19** (14 new, all defensive) |
+| Bare rescues (unsafe) | 0 | 0 | 0 | 0 | **0** ✅ |
+| N+1 patterns (hot paths) | 0 | 0 | 0 | 0 | **0** ✅ |
+| Pure logic classes | 20+ | 22+ | 25+ | 27+ | **32+** (+5 new dashboard modules) |
+| Migration round-trip specs | 0 | 0 | 0 | 0 | **3** (v12→v17, v13→v17, v14→v17) ✅ |
+| Per-migration specs | 0 | 0 | 0 | 0 | **13** (001–017 minus a few) ✅ |
+| Sleep-based test cost | — | — | ~4s | ~4s | **~8.5s** ⬆️ |
+| Untested new commands | — | — | 0 | 0 | **2** (dedupe-conflicts, reclassify-references) |
+| Known correctness bugs | — | 0 | 0 | 0 | **0** ✅ |
 
 ## Appendix B: File Size Report
 
-| File | Mar 19 | Apr 22 (review) | **Apr 22 (after update)** | Trend |
+| File | Mar 19 | Apr 22 (review) | Apr 22 (after update) | **Apr 28 (this review)** | Trend |
+|---|---|---|---|---|---|
+| `dashboard/api.rb` | — | 627 🆕 | 627 | **807** | ⬆️ +180 (+29%) — **regression** |
+| `store/sqlite_store.rb` | 386 | 683 | 544 | **584** | ⬆️ +40 (new tables) |
+| `mcp/tool_definitions.rb` | 334 | 459 | 459 | **459** | — |
+| `sweep/maintenance.rb` | — | 334 | 334 | **456** | ⬆️ +122 — new |
+| `mcp/response_formatter.rb` | 396 | 397 | 397 | **397** | — |
+| `commands/stats_command.rb` | 250 | 346 | 346 | **383** | ⬆️ +37 |
+| `recall/query_core.rb` | 357 | 371 | 371 | **371** | — |
+| `mcp/text_summary.rb` | 258 | 313 | 313 | **313** | — |
+| `dashboard/conflicts.rb` | — | 195 | 195 | **285** | ⬆️ +90 (dedup grouping logic) |
+| `dashboard/trust.rb` | — | — | — | **284** | 🆕 new feed-first sidebar |
+| `resolve/resolver.rb` | 195 | 254 | 254 | **268** | ⬆️ +14 (dedupe + scope_hint fix) |
+| `mcp/tools.rb` | 104 | 249 | 249 | **264** | ⬆️ +15 |
+| `commands/index_command.rb` | 272 | 259 | 259 | **259** | — |
+| `commands/hook_command.rb` | 214 | 215 | 215 | **249** | ⬆️ +34 |
+| `publish.rb` | 221 | 256 | 248 | **248** | — |
+| `dashboard/moments.rb` | — | — | — | **244** | 🆕 feed primitive |
+| `commands/uninstall_command.rb` | 226 | 226 | 226 | **226** | — |
+| `hook/context_injector.rb` | — | 214 | 214 | **225** | ⬆️ +11 |
+| `store/store_manager.rb` | — | 215 | 215 | **215** | — |
+| `infrastructure/schema_validator.rb` | 215 | 215 | 215 | **215** | — |
+| `commands/census_command.rb` | — | — | — | **210** | 🆕 predicate census |
+| `mcp/handlers/setup_handlers.rb` | 211 | 211 | 211 | **211** | — |
+| `dashboard/server.rb` | — | 189 | 189 | **211** | ⬆️ +22 (new endpoints) |
+| `embeddings/model_registry.rb` | — | — | — | **210** | 🆕 |
+| `mcp/server.rb` | — | 206 | 206 | **206** | — |
+| `mcp/handlers/stats_handlers.rb` | — | 205 | 205 | **205** | — |
+| `commands/initializers/hooks_configurator.rb` | — | — | — | **200** | — |
+| `commands/embeddings_command.rb` | — | — | — | **198** | — |
+| `ingest/ingester.rb` | — | — | — | **190** | — |
+| `index/vector_index.rb` | 184 | 184 | 184 | **184** | — |
+| `commands/digest_command.rb` | — | — | — | **181** | 🆕 weekly digest |
+| `mcp/handlers/management_handlers.rb` | — | — | — | **177** | — |
+| `ingest/observation_compressor.rb` | — | — | — | **177** | 🆕 tool-specific compression |
+| `recall.rb` | 94 | 175 | 175 | **175** | — |
+| `core/fact_query_builder.rb` | — | — | — | **174** | — |
+| `mcp/error_classifier.rb` | — | — | — | **171** | — |
+| `embeddings/generator.rb` | — | — | — | **165** | — |
+| `index/lexical_fts.rb` | — | — | — | **153** | — |
+| `dashboard/knowledge.rb` | — | — | — | **136** | 🆕 |
+| `dashboard/efficacy.rb` | — | 127 | 127 | **127** | — |
+| `dashboard/fact_presenter.rb` | — | 109 | 109 | **109** | — |
+| `dashboard/reuse.rb` | — | — | — | **97** | 🆕 |
+| `dashboard/scoped_fact_resolver.rb` | — | — | — | **95** | 🆕 |
+| `commands/reclassify_references_command.rb` | — | — | — | **56** | 🆕 (untested) |
+| `commands/dedupe_conflicts_command.rb` | — | — | — | **55** | 🆕 (untested) |
+
+## Appendix C: Methods >15 Lines in Watch-List Files
+
+### `dashboard/api.rb` (807 LOC, **42 methods**)
+
+| Method | Line | Size | Action |
 |---|---|---|---|
-| `store/sqlite_store.rb` | 386 | 683 | **544** | ⬇️ -139 (LLMCache + MetricsAggregator extracted) |
-| `dashboard/api.rb` | — | **627** | **627** | 🆕 new subsystem (still on watch list for per-endpoint extraction) |
-| `mcp/tool_definitions.rb` | 334 | **459** | **459** | ⬆️ +125 (new tool schemas) |
-| `mcp/response_formatter.rb` | 396 | **397** | **397** | — |
-| `recall/query_core.rb` | 357 | **371** | **371** | ⬆️ +14 |
-| `commands/stats_command.rb` | 250 | **346** | **346** | ⬆️ +96 |
-| `sweep/maintenance.rb` | — | **334** | **334** | 🆕 to watch list |
-| `mcp/text_summary.rb` | 258 | **313** | **313** | ⬆️ +55 |
-| `commands/index_command.rb` | 272 | **259** | **259** | ⬇️ -13 |
-| `publish.rb` | 221 | 256 | **248** | ⬇️ -8 (shared generate_section helper) |
-| `resolve/resolver.rb` | 195 | **254** | **254** | ⬆️ +59 |
-| `mcp/tools.rb` | 104 | **249** | **249** | ⬆️ +145 (handler dispatch growth) |
-| `commands/uninstall_command.rb` | 226 | **226** | **226** | — |
-| `store/store_manager.rb` | — | **215** | **215** | 🆕 to watch list |
-| `infrastructure/schema_validator.rb` | 215 | **215** | **215** | — |
-| `commands/hook_command.rb` | 214 | **215** | **215** | ⬆️ +1 |
-| `hook/context_injector.rb` | — | **214** | **214** | 🆕 to watch list |
-| `mcp/handlers/setup_handlers.rb` | 211 | **211** | **211** | — |
-| `mcp/server.rb` | — | **206** | **206** | 🆕 |
-| `mcp/handlers/stats_handlers.rb` | — | **205** | **205** | 🆕 |
-| `dashboard/conflicts.rb` | — | **195** | **195** | 🆕 ✅ now covered by `conflicts_spec.rb` |
-| `dashboard/server.rb` | — | **189** | **189** | 🆕 (still untested) |
-| `index/vector_index.rb` | 184 | **184** | **184** | — |
-| `recall.rb` | 94 | **175** | **175** | ⬆️ +81 |
-| `dashboard/efficacy.rb` | — | **127** | **127** | 🆕 |
-| `dashboard/fact_presenter.rb` | — | **109** | **109** | 🆕 ✅ now covered by `fact_presenter_spec.rb` |
-| `store/metrics_aggregator.rb` (new) | — | — | **96** | 🆕 extracted 2026-04-22 |
-| `store/llm_cache.rb` (new) | — | — | **68** | 🆕 extracted 2026-04-22 |
+| `timeline` | 471 | 52 | Extract `Dashboard::Timeline` |
+| `vec_health` | 759 | 46 | Extract into `Dashboard::Health` |
+| `recall` | 315 | 41 | Extract `Dashboard::RecallQuery` |
+| `facts` | 373 | 39 | Extract `Dashboard::FactsQuery` |
+| `activity_detail` | 149 | 37 | Extract event-detail builder |
+| `hooks_health` | 704 | 32 | Extract into `Dashboard::Health` |
+| `find_recall_trigger` | 193 | 32 | Extract `Dashboard::RecallTriggerFinder` |
+| `efficacy` | 439 | 31 | Move session-window logic into `Efficacy::Loader` |
+| `extract_user_prompt` | 237 | 29 | Extract `Dashboard::UserPromptExtractor` |
+| `session_summary` | 119 | 29 | Extract aggregator |
+| `db_stats` | 647 | 28 | Extract into `Dashboard::Health` |
+| `db_health` | 676 | 25 | Extract into `Dashboard::Health` |
+| `load_content_item` | 603 | 21 | Could move into `FactPresenter` or its own loader |
+| `activity` | 48 | 20 | Acceptable — thin wrapper |
+| `facts_seen_in_recent_recalls` | 418 | 20 | Move into `Dashboard::FactsQuery` |
+| `collect_configured_hook_types` | 739 | 19 | Move into `Dashboard::Health` |
+| `serialize_recall_fact` | 545 | 19 | Move into `Dashboard::RecallQuery` |
+| `health` | 14 | 18 | Becomes 3-liner after `Dashboard::Health` extraction |
+| `reject_fact` | 294 | 16 | Acceptable — public surface |
 
-## Appendix C: Methods > 15 Lines in Watch-List Files
+### `sweep/maintenance.rb` (456 LOC)
 
-### `dashboard/api.rb`
+| Method | Line | Size | Action |
+|---|---|---|---|
+| `dedupe_open_conflicts` | 273 | 58 | Extract per-group `resolve_duplicate_group` helper |
+| `restore_multi_value_supersessions` | 185 | 57 | Already documented; could extract `compute_restore_decisions` |
+| `dedupe_multi_value_facts` | 58 | 34 | Acceptable — well-bounded transactional op |
+| `reclassify_references` | 340 | 26 | Acceptable |
+| `prune_old_content` | 130 | 16 | Acceptable |
 
-| Method | Line | Size |
-|---|---|---|
-| `recall` | 186 | 39 |
-| `timeline` | 302 | 29 |
-| `session_summary` | 85 | 28 |
-| `db_stats` | 467 | 27 |
-| `facts` | 242 | 26 |
-| `efficacy` | 270 | 23 |
-| `activity_detail` | 115 | 22 |
-| `load_content_item` | 423 | 20 |
-| `activity` | 48 | 19 |
-| `serialize_recall_fact` | 365 | 18 |
-| `collect_configured_hook_types` | 559 | 18 |
-
-### `store/sqlite_store.rb` (after LLMCache + MetricsAggregator extraction)
+### `store/sqlite_store.rb` (584 LOC)
 
 | Method | Line | Size | Notes |
 |---|---|---|---|
-| `upsert_content_item` | 149 | 26 | 11 keyword params (carried #8) |
-| `reject_fact` | 366 | 24 | Conflict resolution in transaction |
-| `insert_fact` | 288 | 21 | Many optional fields |
-| `update_fact` | 329 | 18 | Generic update via allowed-keys |
-
-`aggregate_ingestion_metrics`, `backfill_distillation_metrics!`, and `llm_cache_store` moved into their respective modules.
+| `upsert_content_item` | 193 | 27 | 11 kwargs (carried #8) |
+| `reject_fact` | 410 | 25 | Conflict resolution in transaction |
+| `insert_fact` | 332 | 22 | Many optional fields |
+| `upsert_moment_feedback` | 123 | 21 | New — transaction with retry |
+| `update_fact` | 373 | 19 | Generic update via allowed-keys |
 
 ---
 
-**Next review:** After `Dashboard::API` query-object refactor (#28) or `upsert_content_item` value object (#8).
+## Historical Reviews
+
+Earlier reviews (Jan 29, Feb 4, Mar 9, Mar 19) tracked the codebase from ~8,000 → 12,239 LOC. Their highlights, preserved here:
+
+- **Jan 29 (initial)** — Identified Tools and Recall god-object risks; introduced first metrics baseline.
+- **Feb 4** — Carried-forward items #17–#25 (DateTime migration, command manager helper, release_connections polymorphism, provenance batch insert, result objects). All still low-priority and open.
+- **Mar 9** — Three files >500 LOC; bare rescue counted; vector index work landed.
+- **Mar 19** — Successful refactor wave: `RetryHandler` + `SchemaManager` extracted from `SQLiteStore` (547 → 386); `Tools` reduced to 104-line dispatcher with 6 handler modules; `Recall` to 94-line facade. **Established the module-inclusion pattern** that has been reused successfully for LLMCache, MetricsAggregator, and the dashboard subsystems.
+
+The 2026-04-22 review absorbed the 39% codebase growth (+4,775 LOC) without correctness regressions and resolved its top two watch-items (`SQLiteStore` regrowth, dashboard test coverage). It left `Dashboard::API` extraction as a medium-priority watch item — which the present review (2026-04-28) escalates to high-priority based on the 180-LOC regression in 6 days.
+
+---
+
+**Next review:** After #31 (Dashboard::API extraction) lands, or pre-0.10.0 release tag.
