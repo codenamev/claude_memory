@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-04-28 - Added two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28): provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 - Opened the 1.0 punchlist track (see `docs/1_0_punchlist.md`). High-priority entries below now include the must-have 1.0 items: token-budget telemetry (#47), hallucination-rate metric (#48), negative-fact harm benchmark (#49), CLAUDE.md baseline publication (#50), `claude-memory show` (#51), benchmark scoreboard diff (#52). Post-1.0 entries: first-week ROI nudge (#53), real-session repeat-correction detector (#54), token-cost growth tracking (#55), drift dashboard (#56). Earlier 2026-04-28 update added cq study (usefulness-focused). Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
+*Updated: 2026-04-28 (post-0.10.0) - Restructured 1.0 punchlist around milestone versions. **0.11.0 "Trust & Cost"** ships #47 (token budget), #48 (hallucination rate), #51 (claude-memory show), #53 (first-week ROI nudge — moved up from post-1.0), and a 3-scenario prototype of #49 (harm benchmark). **0.12.0 "Release Discipline"** ships #49 full corpus, #50 (CLAUDE.md baseline), #52 (benchmark scoreboard). **1.0.0** lands soak-validated #54/#55/#56 if time + new #59 API stability audit. See `docs/1_0_punchlist.md` for the full plan with calendar targets. Also added 2026-04-28: two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28) — provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 updates: opened the 1.0 punchlist track + added cq study. Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.6.3, re-studied 2026-03-30)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, re-studied 2026-03-30 — no changes)*
@@ -152,9 +152,13 @@ Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #2). Builds on 
 
 ---
 
-### 49. Negative-Fact Harm Benchmark
+### 49. Negative-Fact Harm Benchmark — *prototype in 0.11.0, full corpus in 0.12.0*
 
 Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #3). Parallels #32 (Repeat-Correction Benchmark) but inverts the goal.
+
+**Two-phase delivery (added 2026-04-28):**
+- **0.11.0 — 3-scenario prototype (~½d).** Three hand-written cases (one stale-tech, one mismatched-scope, one superseded-but-undetected) run against real Claude under `EVAL_MODE=real`. Smoke test: if even three cases produce >0% harm rate, the full benchmark in 0.12 will reveal a fundamental issue and we want to know early. No release gate yet — the prototype is diagnostic.
+- **0.12.0 — full 10-15 scenario corpus (~2d).** Adds the missing harm classes (reference-material-as-fact + remaining stale/mismatched/superseded cases) and wires the >1% harm-rate release gate.
 
 **Gap.** Every benchmark we run measures whether memory **helps** (Recall@k, MRR, e2e pass rate, repeat-correction prevention rate). Nothing measures whether memory **harms** — i.e. holds a wrong/stale fact and causes Claude to follow it. Without this, "memory helps" is unfalsifiable.
 
@@ -328,9 +332,9 @@ IndexCommand builds text→embedding cache from already-embedded facts before in
 
 In Ruby fallback path (`search_by_vector_fallback`), facts are grouped by `embedding_json` before cosine similarity computation. Unique embeddings scored once, results fanned out to all matching fact_ids. Native sqlite-vec path unaffected (handles own dedup).
 
-### 53. First-Week ROI Nudge
+### 53. First-Week ROI Nudge — *targeted for 0.11.0 (moved up from post-1.0)*
 
-Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #7). Closes the cold-start gap.
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #7). Closes the cold-start gap. **Moved up from post-1.0 to 0.11.0** in the 2026-04-28 path-to-1.0 restructure — fits the "Trust & Cost" theme since it's the user-visible proof that memory is doing work.
 
 **Gap.** New users install the gem, run a few sessions, and don't know whether memory is working. The dashboard exists but they have to know to look. The auto-memory mirror (#36) helps but isn't surfaced. We need a low-friction nudge in the first ~10 sessions that says "memory is working, here's what it did" — and then gets out of the way.
 
@@ -439,6 +443,43 @@ Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #10). Builds on
 **Effort.** ~1.5 days.
 
 **Why post-1.0.** Useful longitudinal signal but the must-have set already gives the headline confidence numbers. Drift is the "operate it long-term" question.
+
+---
+
+### 59. API Stability Audit (1.0 release blocker)
+
+Source: 2026-04-28 path-to-1.0 review (`docs/1_0_punchlist.md` #11). Added after 0.10.0 ship. *(Renumbered from #57 to #59 during rebase against origin/main on 2026-04-28 — Mercury-article PR #5 had already taken #57 and #58.)*
+
+**Gap.** "1.0 commits to semver" is meaningless without an explicit public/internal split. Many of the surfaces touched in 0.9.0 / 0.10.0 (MCP tool schemas, hook payload shapes, CLI flags, dashboard endpoints) have evolved organically and aren't formally documented as stable vs. internal. Without this audit, future "regression" complaints become un-arbitrable — was that flag/method/tool *promised*? We don't know.
+
+**Implementation.**
+
+- **New `docs/api_stability.md`** as the authoritative public-API reference. Sections:
+  1. *Public CLI surface*: every `claude-memory <subcommand>` registered in `Commands::Registry::COMMANDS`, every documented flag, with stability tier per command (`stable` / `experimental` / `internal`).
+  2. *Public MCP tools*: every entry in `MCP::ToolDefinitions.all` with its argument schema, return shape, and tool-annotation hints (`readOnlyHint`, `idempotentHint`, `destructiveHint`). Stability tier per tool.
+  3. *Public hook contract*: payload field names accepted by `Hook::Handler` and `Commands::HookCommand`, return shapes (`hookSpecificOutput`, exit codes via `Hook::ExitCodes`), stability tier per hook event.
+  4. *Public Ruby API*: the surface external Ruby callers can rely on. Candidates: `ClaudeMemory::Recall`, `Configuration`, `Store::StoreManager`, `Domain::*`. Everything else (resolver internals, dashboard internals, sweep internals) marked internal.
+  5. *Schema stability*: column names, table names, predicate vocabulary in `PredicatePolicy::POLICIES`. Schema migrations remain forward-compatible per the round-trip-spec convention; column *removals* require deprecation cycle.
+- **Deprecation policy paragraph**: "we'll mark X deprecated in N.x.0 (with a runtime warning), keep it functional for ≥1 minor cycle, and remove no earlier than (N+1).0.0." Mirrors Ruby/Rails conventions.
+- **Deprecation-warning instrumentation**: tiny module `ClaudeMemory::Deprecations` with a `warn(name, replacement:, removed_in:)` helper. Anywhere we want to change a public surface in 1.x, we wrap with `Deprecations.warn` first.
+- **README + CLAUDE.md** add a top-level link: "Public API: see [docs/api_stability.md](docs/api_stability.md)".
+
+**Acceptance.**
+
+- `docs/api_stability.md` exists and lists every CLI command, MCP tool, hook event, and key Ruby class with a stability tier.
+- A reader of the doc can answer "is `claude-memory dashboard --port` stable?" / "will `Recall.new(manager).query(...)` keep its signature in 1.x?" in <30 seconds.
+- `ClaudeMemory::Deprecations.warn` is wired up and used at least once (e.g. for a soon-to-be-renamed flag) so the mechanism is exercised.
+- `/release` skill knows about `docs/api_stability.md` and reminds the operator to update it on any public-surface change.
+
+**Edge cases.**
+
+- We have to be honest about which Ruby surfaces are public. `Recall` and `Configuration` clearly are; `Sweep::Maintenance` clearly isn't; `Domain::Fact` is ambiguous (used by external benchmark adapters in `spec/benchmarks/`). Default to **internal** when ambiguous — easier to promote later than demote.
+- Schema column names are tricky. Migrations can rename safely; external SQL tools (e.g. cq) read the schema directly. Document the column names as "best-effort stable, no removal without deprecation cycle."
+- The dashboard JSON API is internal — explicitly call this out so users don't build scripts against it.
+
+**Effort.** ~2 days. The doc is the bulk of the time; the deprecation warning module is ~50 LOC.
+
+**Why 1.0 must-have.** Without this, the semver promise is vibes. Future regressions in non-listed areas can be argued away; future regressions in listed areas are bugs. Forces honesty about what we're committing to.
 
 ---
 
@@ -814,4 +855,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-28 - 1.0 punchlist track opened (`docs/1_0_punchlist.md`). High Priority entries #47-52 (must-have for 1.0): token-budget telemetry, hallucination rate, harm benchmark, CLAUDE.md baseline publication, `claude-memory show`, benchmark scoreboard. Medium Priority entries #53-56 (post-1.0): first-week ROI nudge, real-session repeat-correction detection, token-cost growth tracking, drift dashboard. Previously: 2026-04-27 - #35 (access-based staleness, sweep-derived) landed.*
+*Last updated: 2026-04-28 (post-0.10.0 release, post-rebase). 1.0 punchlist restructured around milestone versions per `docs/1_0_punchlist.md`. **0.11.0** = #47/#48/#51/#53 + #49 prototype. **0.12.0** = #49 full + #50/#52. **1.0.0** = #54/#55/#56/#59 (the new API stability audit). #59 added 2026-04-28 as a 1.0 release blocker (originally #57; renumbered after rebase brought in Mercury-article entries #57/#58). #53 (first-week ROI nudge) moved up from post-1.0 to 0.11.0. Previously: 2026-04-27 - #35 (access-based staleness, sweep-derived) landed.*
