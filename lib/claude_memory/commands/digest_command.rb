@@ -125,7 +125,7 @@ module ClaudeMemory
       end
 
       def utilization_section(manager)
-        util = Dashboard::Trust.new(manager).send(:utilization)
+        util = Dashboard::Trust.new(manager).utilization
         pct = util[:ratio_pct]
         <<~SECTION.strip
           ## Utilization

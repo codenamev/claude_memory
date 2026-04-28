@@ -225,6 +225,7 @@ module ClaudeMemory
         ClaudeMemory.logger.debug("Trust#utilization failed: #{e.message}")
         {extracted: 0, used: 0, used_from_extracted: 0, ratio_pct: 0, window_days: UTILIZATION_DAYS}
       end
+      public :utilization
 
       # Facts that were extracted (distilled + stored) within the window.
       # Returns (scope, id) pairs across both stores.
