@@ -469,56 +469,7 @@ module ClaudeMemory
       end
 
       def timeline
-        store = default_store
-        return {days: []} unless store
-
-        # Facts created per day (last 30 days)
-        cutoff = (Time.now - 30 * 86400).utc.iso8601
-        fact_rows = store.facts
-          .where { created_at >= cutoff }
-          .select_group(Sequel.lit("DATE(created_at)").as(:day))
-          .select_append { count(id).as(:count) }
-          .order(:day)
-          .all
-
-        content_rows = store.content_items
-          .where { ingested_at >= cutoff }
-          .select_group(Sequel.lit("DATE(ingested_at)").as(:day))
-          .select_append { count(id).as(:count) }
-          .order(:day)
-          .all
-
-        event_rows = if store.db.table_exists?(:activity_events)
-          store.activity_events
-            .where { occurred_at >= cutoff }
-            .select_group(Sequel.lit("DATE(occurred_at)").as(:day), :event_type)
-            .select_append { count(id).as(:count) }
-            .order(:day)
-            .all
-        else
-          []
-        end
-
-        # Merge into daily buckets
-        all_days = (fact_rows.map { |r| r[:day] } +
-                    content_rows.map { |r| r[:day] } +
-                    event_rows.map { |r| r[:day] }).uniq.sort
-
-        days = all_days.map { |day|
-          fact_count = fact_rows.find { |r| r[:day] == day }&.dig(:count) || 0
-          content_count = content_rows.find { |r| r[:day] == day }&.dig(:count) || 0
-          day_events = event_rows.select { |r| r[:day] == day }
-
-          {
-            date: day,
-            facts_created: fact_count,
-            content_ingested: content_count,
-            hook_events: day_events.sum { |r| r[:count] },
-            recalls: day_events.select { |r| r[:event_type] == "recall" }.sum { |r| r[:count] }
-          }
-        }
-
-        {days: days}
+        Timeline.new(@manager).days
       end
 
       private
