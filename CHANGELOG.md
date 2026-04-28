@@ -4,9 +4,91 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-28
+
 ### Added
 
-- Repeat-correction benchmark harness (improvements.md #32). `spec/benchmarks/e2e/repeat_correction_spec.rb` loads each scenario's correction as a pre-existing memory fact, runs the prompt through real Claude under `EVAL_MODE=real`, and reports the pass rate — failures are corrections that had to be repeated. Starter set of 2 scenarios drawn from the project's own recurring gotchas (`Sequel.sqlite` adapter, `rake install` vs `git ls-files`). Metric is a trend signal, not a gate — no hard threshold until baseline data exists.
+**Dashboard — feed-first redesign with observability built in**
+
+- New feed-first dashboard UI with scope-aware moments, fact detail modal, query tester, and activity drilldown. Reuse, Trust, Knowledge, Conflicts, and Moments panels each backed by a dedicated module (`Dashboard::{Reuse, Trust, Knowledge, Conflicts, Moments}`) under unit tests, replacing the prior all-in-API-class layout.
+- 👍/👎 feedback on individual moments with persisted verdicts (schema v16, `moment_feedback` table). Trust panel surfaces a 30-day up/down ratio so the dashboard can answer "when memory surfaces something, are users marking it useful?".
+- Utilization ratio panel — of facts extracted in the last 30 days, how many has Claude actually used in a recall or context injection? Color-coded (green ≥40%, yellow ≥15%, red below). Hidden on fresh installs to avoid misleading zeros.
+- Conflict deduping at the display layer: identical (subject, predicate, object_pair) detections collapse into one row with a `×N` badge. Sidebar "Needs review" count now reflects distinct contradictions, not raw row count.
+- Activity events drilldown: each moment opens a payload modal with prettified JSONL, recall trigger correlation (which user prompt motivated this lookup), and linked-fact resolution scoped per database.
+- Vector index health threshold and clickable remediation hints in the health dashboard.
+
+**CLI — observability surfaces and one-shot cleanups**
+
+- `claude-memory digest [--since DAYS] [--output FILE]` — weekly markdown report. Sections: Activity, New knowledge by predicate, Utilization (extracted vs used), Conflicts, Feedback. No new schema; renders from existing aggregates.
+- `claude-memory census [--root DIR]` — privacy-safe cross-project vocabulary scan. Aggregates per-DB predicate × status counts, novel predicates, synonym candidates. Suppresses object literals, entity names, and paths; per-DB IDs are SHA256-prefixed.
+- `claude-memory dedupe-conflicts [--scope SCOPE] [--dry-run]` — one-shot cleanup for historical conflict-row duplication that predates the Resolver dedup fix (commit f571ba4). Groups by (subject, predicate, normalized object pair), keeps the earliest, migrates provenance to the keeper.
+- `claude-memory reclassify-references [--scope SCOPE] [--dry-run]` — retags active convention facts that the new `Distill::ReferenceMaterialDetector` flags as reference material (LOC counts, star counts, "X is a plugin..." templates, "by Firstname Lastname" attributions).
+
+**Memory quality**
+
+- Access-based staleness scoring (improvements.md #35). Schema v17 adds `last_recalled_at` to facts. `Sweep::RecallTimestampRefresher` derives the field periodically from activity_events; `claude-memory stats --stale [--stale-days N]` lists facts that haven't been recalled inside the threshold. Replaces the prior "active facts minus seen-in-recalls" approximation.
+- Auto-memory mirror (improvements.md #36). On fresh sessions, the SessionStart context hook scans `~/.claude/projects/<slug>/memory/*.md` and surfaces new or changed entries as extraction candidates so users can promote auto-memory observations into claude_memory without manual copy-paste.
+- Reasoning requirement enforced in distillation (improvements.md #34). The SessionStart prompt and the `/distill-transcripts` skill now require a why clause for `decision` and `convention` predicates ("because…", "so that…", etc.). Audit found ~75% of facts were bare conclusions before this change.
+- `Distill::ReferenceMaterialDetector` reclassifies convention facts whose object text matches reference patterns. New `reference` predicate registered in `PredicatePolicy` with its own `:references` snapshot section. Detector runs at write time in `ManagementHandlers#store_extraction` so mislabeling can't persist.
+- Predicate census command (#30) for cross-project vocabulary audits — see CLI section above.
+
+**Benchmarks and observability**
+
+- Repeat-correction benchmark harness (improvements.md #32). `spec/benchmarks/e2e/repeat_correction_spec.rb` pre-loads a past correction as a memory fact, runs the prompt through real Claude under `EVAL_MODE=real`, and reports pass rate (no violation patterns matched). Starter set of 2 scenarios drawn from this project's recurring gotchas.
+- Relevance ratio metric (improvements.md #31). `Hook::ContextInjector#emitted_subjects` exposes the subjects injected at SessionStart; `BenchmarkHelpers::RelevanceMetrics` measures whether they appear in Claude's response. Trend signal for memory-application quality, integrated into `devmemeval_spec.rb`.
+- MCP server embeds the V=R/C ("Verify before Recommend / Correct") mental model in agent instructions so memory recommendations come with built-in verification cues.
+
+**Schema v15 → v17 (additive only, automatic on first run)**
+
+- Migration 015: adds `activity_events` table for hook/recall/context/sweep telemetry. Powers the dashboard timeline, moments feed, and efficacy reports.
+- Migration 016: adds `moment_feedback` table (unique on event_id) for the dashboard 👍/👎 surface.
+- Migration 017: adds nullable `facts.last_recalled_at` for access-based staleness scoring.
+
+**1.0 readiness track**
+
+- New `docs/1_0_punchlist.md` opens the path to 1.0: token-budget telemetry, hallucination-rate metric, negative-fact harm benchmark, CLAUDE.md baseline publication, `claude-memory show`, benchmark scoreboard. Ten entries (#47-56) added to `docs/improvements.md` with concrete file:line plumbing notes.
+
+### Changed
+
+- `Resolver#apply_conflict` no longer creates a duplicate disputed fact + conflict row when the same contradicting value is re-extracted. Looks up disputed facts in the same (subject, predicate) slot and reinforces with provenance instead.
+- `Resolver` no longer treats the distiller's `scope_hint` as a scope override. `scope_hint` is advisory metadata; `fact.scope` must match the DB the row lives in. Earlier behavior caused scope leakage where global-hinted distillations landed in the project DB.
+- `Hook::ContextInjector` adds `emitted_fact_ids` and `emitted_subjects` accessors so benchmark harnesses can attribute injection contributions per session.
+- `SQLiteStore` decomposed via module inclusion: `LLMCache` and `MetricsAggregator` extracted into `lib/claude_memory/store/`. SQLiteStore back under 600 LOC.
+- `Dashboard::API` decomposed: `FactPresenter`, `Conflicts`, `Efficacy::Reporter`, `Timeline`, `Health` extracted into dedicated classes following the boundary pattern. API now routes/delegates rather than aggregating.
+- Dashboard releases DB connections after each HTTP request (was holding connections open for the lifetime of the WEBrick session).
+- `Sweep::Maintenance` gains `dedupe_open_conflicts` and `reclassify_references` for the one-shot CLI commands above.
+- Round-trip migration specs from v12, v13, v14 → v17 (per-version migrations covered by `spec/claude_memory/store/migrations/`). Codifies the release-blocker convention: any schema bump must round-trip from each prior major-release boundary back ~3 releases.
+
+### Fixed
+
+- Dashboard surfaces an actionable hint when Recall hits FTS5 corruption (run `claude-memory compact` rather than a generic error).
+- Dashboard query tester unwraps the nested Recall result shape rather than printing the raw envelope.
+- Dashboard health checks correctly detect the claude-memory hook installation across the two-level Claude Code hooks structure (was reporting false negatives when hooks were installed under a matcher block).
+- Dashboard Efficacy "this session" correlation falls back to a time window when the recall event has no `session_id` (MCP tool calls don't thread session_id).
+- Bulk-reject in the Conflicts modal now retries with an actionable message when the server-side state is stale.
+
+### Upgrade Notes
+
+**Schema bump v14 → v17.** Three migrations run automatically on first launch after upgrade. All three are additive (no existing data is rewritten):
+
+1. Migration 015 creates `activity_events` (hook/recall telemetry).
+2. Migration 016 creates `moment_feedback` (dashboard verdicts).
+3. Migration 017 adds `facts.last_recalled_at` (NULL by default; `Sweep::RecallTimestampRefresher` populates it on the next sweep cycle from existing activity_events).
+
+The migration delta has round-trip spec coverage in `spec/claude_memory/store/migrations/`. Forward-compatibility: 0.10.0 databases cannot be opened by 0.9.x or earlier. Downgrade is destructive — back up `~/.claude/memory.sqlite3` and `.claude/memory.sqlite3` before downgrading.
+
+**Optional historical cleanups.** Two new admin commands address data tails left by earlier bugs that have since been fixed at the source:
+
+```bash
+claude-memory dedupe-conflicts --dry-run   # preview duplicate conflict rows
+claude-memory dedupe-conflicts             # consolidate them
+claude-memory reclassify-references --dry-run   # preview reference-material mislabels
+claude-memory reclassify-references             # retag them
+```
+
+Both are opt-in. Neither runs in the regular sweep cycle. Use `--scope global` to clean the global DB.
+
+**Telemetry footprint.** The `activity_events` table grows with hook activity. The dashboard surfaces this by default and powers the timeline/moments/efficacy panels. Retention pruning is not yet automatic (planned for a follow-up); manual cleanup via `DELETE FROM activity_events WHERE occurred_at < ?` is safe — the dashboard tolerates missing history.
 
 ## [0.9.1] - 2026-04-16
 
