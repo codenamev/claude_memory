@@ -324,15 +324,19 @@ RSpec.describe ClaudeMemory::Dashboard::API do
           session_id: "sess-xyz",
           raw_text: transcript
         )
-        ClaudeMemory::ActivityLog.record(store,
+        now = Time.now.utc
+        store.activity_events.insert(
           event_type: "hook_ingest", status: "success",
           session_id: "sess-xyz",
-          details: {content_id: ci_id, bytes_read: transcript.bytesize})
+          detail_json: {content_id: ci_id, bytes_read: transcript.bytesize}.to_json,
+          occurred_at: (now - 10).iso8601
+        )
 
-        sleep 1.1
-        recall_id = ClaudeMemory::ActivityLog.record(store,
+        recall_id = store.activity_events.insert(
           event_type: "recall", status: "success",
-          details: {tool: "memory.conventions", result_count: 5, top_fact_ids: []})
+          detail_json: {tool: "memory.conventions", result_count: 5, top_fact_ids: []}.to_json,
+          occurred_at: now.iso8601
+        )
 
         detail = api.activity_detail(recall_id)
         expect(detail[:trigger]).not_to be_nil
@@ -352,14 +356,18 @@ RSpec.describe ClaudeMemory::Dashboard::API do
           byte_len: noise_transcript.bytesize,
           raw_text: noise_transcript
         )
-        ClaudeMemory::ActivityLog.record(store,
+        now = Time.now.utc
+        store.activity_events.insert(
           event_type: "hook_ingest", status: "success",
-          details: {content_id: ci_id})
+          detail_json: {content_id: ci_id}.to_json,
+          occurred_at: (now - 10).iso8601
+        )
 
-        sleep 1.1
-        recall_id = ClaudeMemory::ActivityLog.record(store,
+        recall_id = store.activity_events.insert(
           event_type: "recall", status: "success",
-          details: {tool: "memory.recall", result_count: 1, top_fact_ids: []})
+          detail_json: {tool: "memory.recall", result_count: 1, top_fact_ids: []}.to_json,
+          occurred_at: now.iso8601
+        )
 
         detail = api.activity_detail(recall_id)
         expect(detail[:trigger][:user_prompt]).to be_nil

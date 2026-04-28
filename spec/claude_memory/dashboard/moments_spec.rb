@@ -26,10 +26,18 @@ RSpec.describe ClaudeMemory::Dashboard::Moments do
     FileUtils.rm_rf(tmpdir)
   end
 
-  def record(event_type, details, status: "success", session_id: "sess-1", duration_ms: 10)
-    ClaudeMemory::ActivityLog.record(project_store,
+  def record(event_type, details, status: "success", session_id: "sess-1", duration_ms: 10, occurred_at: nil)
+    if occurred_at.nil?
+      return ClaudeMemory::ActivityLog.record(project_store,
+        event_type: event_type, status: status,
+        session_id: session_id, duration_ms: duration_ms, details: details)
+    end
+
+    project_store.activity_events.insert(
       event_type: event_type, status: status,
-      session_id: session_id, duration_ms: duration_ms, details: details)
+      session_id: session_id, duration_ms: duration_ms,
+      detail_json: details&.to_json, occurred_at: occurred_at
+    )
   end
 
   def insert_fact(subject:, predicate:, object:)
@@ -124,13 +132,14 @@ RSpec.describe ClaudeMemory::Dashboard::Moments do
     end
 
     it "applies the before cursor to paginate older-than a timestamp" do
-      # occurred_at is stored at second precision, so we need distinct
-      # wall-clock seconds between the two events for the boundary to split them.
-      record("recall", {tool: "memory.recall", result_count: 1, top_fact_ids: []})
-      sleep 1.1
-      boundary = Time.now.utc.iso8601
-      sleep 1.1
-      record("recall", {tool: "memory.recall", result_count: 2, top_fact_ids: []})
+      # occurred_at is stored at second precision; injecting explicit
+      # timestamps avoids sleeping for distinct wall-clock seconds.
+      now = Time.now.utc
+      older_at = (now - 10).iso8601
+      boundary = (now - 5).iso8601
+      newer_at = now.iso8601
+      record("recall", {tool: "memory.recall", result_count: 1, top_fact_ids: []}, occurred_at: older_at)
+      record("recall", {tool: "memory.recall", result_count: 2, top_fact_ids: []}, occurred_at: newer_at)
 
       newer = moments.list
       expect(newer[:moments].size).to eq(2)
