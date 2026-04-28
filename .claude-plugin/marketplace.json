@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "claude-memory",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "source": "./",
       "description": "Long-term memory for Claude Code. Recalls architecture, conventions, and decisions across sessions — so Claude explains your codebase without file traversal, follows your patterns, and never re-asks what it already learned.",
       "repository": "https://github.com/codenamev/claude_memory"
