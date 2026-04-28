@@ -6,6 +6,14 @@
 #   conflict    - Single-value predicate, inferred contradicts stated
 #   accumulate  - Multi-value predicate, different values coexist
 #   corroborate - Same predicate+value, adds provenance
+#
+# Note (2026-04-28): As of 0.9.0 `uses_framework` is multi-value (real
+# projects use Rails+Turbo+Tailwind concurrently — see CHANGELOG #0.9.0).
+# Cases that previously expected supersede/conflict for `uses_framework`
+# now correctly expect accumulate. Single-value predicate coverage for
+# supersede/conflict comes from `uses_database`, `auth_method`, and
+# `deployment_platform` cases. Distribution post-migration:
+#   supersede ~18, conflict ~17, accumulate ~40, corroborate ~25.
 
 # ============================================================
 # SUPERSESSION - Single-value, stated replaces existing (~25 cases)
@@ -36,8 +44,8 @@
     predicate: uses_framework
     object: "Rails 7.1"
     strength: stated
-  expected_outcome: supersede
-  rationale: "Framework version upgrade, stated strength triggers supersession"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework (post-0.9.0) accumulates Rails versions; supersession requires single-value predicate"
 
 - id: r_sup_003
   existing_fact:
@@ -92,8 +100,8 @@
     predicate: uses_framework
     object: "Fastify"
     strength: stated
-  expected_outcome: supersede
-  rationale: "Node.js framework switch"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: Express + Fastify coexist as accumulated facts"
 
 - id: r_sup_007
   existing_fact:
@@ -148,8 +156,8 @@
     predicate: uses_framework
     object: "Vite"
     strength: stated
-  expected_outcome: supersede
-  rationale: "Build tool migration"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: build tools accumulate across stack moves"
 
 - id: r_sup_011
   existing_fact:
@@ -162,8 +170,8 @@
     predicate: uses_framework
     object: "Webpack 5"
     strength: stated
-  expected_outcome: supersede
-  rationale: "Bundler major version upgrade"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: bundler versions accumulate (no auto-supersede)"
 
 - id: r_sup_012
   existing_fact:
@@ -218,8 +226,8 @@
     predicate: uses_framework
     object: "React 18"
     strength: stated
-  expected_outcome: supersede
-  rationale: "Frontend framework major upgrade"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: React major versions accumulate"
 
 - id: r_sup_016
   existing_fact:
@@ -291,8 +299,8 @@
     object: "FastAPI"
     strength: inferred
     supersedes: true
-  expected_outcome: supersede
-  rationale: "Explicit supersedes flag on framework change"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: even with supersedes:true, accumulation is the canonical behavior post-0.9.0 (use uses_database for explicit-supersedes coverage)"
 
 - id: r_sup_021
   existing_fact:
@@ -333,8 +341,8 @@
     predicate: uses_framework
     object: "Vitest"
     strength: stated
-  expected_outcome: supersede
-  rationale: "Test framework migration"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: test frameworks accumulate (Mocha, Vitest can coexist)"
 
 - id: r_sup_024
   existing_fact:
@@ -393,8 +401,8 @@
     predicate: uses_framework
     object: "Sinatra"
     strength: inferred
-  expected_outcome: conflict
-  rationale: "Inferred framework contradicts stated framework"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: inferred-vs-stated does not conflict for accumulating predicates"
 
 - id: r_con_003
   existing_fact:
@@ -449,8 +457,8 @@
     predicate: uses_framework
     object: "Remix"
     strength: inferred
-  expected_outcome: conflict
-  rationale: "Inferred meta-framework contradicts stated"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: meta-frameworks coexist as accumulated facts"
 
 - id: r_con_007
   existing_fact:
@@ -505,8 +513,8 @@
     predicate: uses_framework
     object: "Pandas"
     strength: inferred
-  expected_outcome: conflict
-  rationale: "Inferred older DataFrame lib contradicts stated"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: DataFrame libs accumulate"
 
 - id: r_con_011
   existing_fact:
@@ -533,8 +541,8 @@
     predicate: uses_framework
     object: "Prefect"
     strength: inferred
-  expected_outcome: conflict
-  rationale: "Inferred orchestrator contradicts stated"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: orchestrators accumulate"
 
 - id: r_con_013
   existing_fact:
@@ -589,8 +597,8 @@
     predicate: uses_framework
     object: "REST with OpenAPI"
     strength: inferred
-  expected_outcome: conflict
-  rationale: "Inferred API style contradicts stated gRPC"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: API styles accumulate (real projects often expose both)"
 
 - id: r_con_017
   existing_fact:
@@ -645,8 +653,8 @@
     predicate: uses_framework
     object: "styled-components"
     strength: inferred
-  expected_outcome: conflict
-  rationale: "Inferred CSS approach contradicts Tailwind"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: CSS approaches accumulate (hybrid stacks are common)"
 
 - id: r_con_021
   existing_fact:
@@ -673,8 +681,8 @@
     predicate: uses_framework
     object: "ActiveRecord"
     strength: inferred
-  expected_outcome: conflict
-  rationale: "Inferred ORM contradicts stated Sequel"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: ORMs accumulate (legacy + new can coexist during migrations)"
 
 - id: r_con_023
   existing_fact:
@@ -715,8 +723,8 @@
     predicate: uses_framework
     object: "Minitest"
     strength: inferred
-  expected_outcome: conflict
-  rationale: "Inferred test framework contradicts RSpec"
+  expected_outcome: accumulate
+  rationale: "Multi-value uses_framework: test frameworks accumulate"
 
 # ============================================================
 # ACCUMULATION - Multi-value predicate, different values (~25 cases)
