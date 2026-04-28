@@ -576,7 +576,8 @@ sqlite3 .claude/memory.sqlite3 "SELECT * FROM facts LIMIT 5;"
 Now that you're up and running:
 
 - 📖 Read [Examples](EXAMPLES.md) for common use cases
-- 🔧 Explore [Plugin Documentation](PLUGIN.md) for advanced configuration
+- 📊 Open the [Dashboard](dashboard.md) for live inspection (0.10.0+)
+- 🔧 Explore [Plugin Documentation](plugin.md) for advanced configuration
 - 🏗️ Review [Architecture](architecture.md) for technical details
 - 💬 Join [Discussions](https://github.com/codenamev/claude_memory/discussions) to share feedback
 
@@ -588,8 +589,18 @@ Now that you're up and running:
 | `claude-memory doctor` | Check system health |
 | `claude-memory recall <query>` | Search for facts |
 | `claude-memory promote <fact_id>` | Make fact global |
+| `claude-memory reject <id_or_docid>` | Mark a fact as rejected |
 | `claude-memory changes` | Recent updates |
 | `claude-memory conflicts` | Show contradictions |
+| `claude-memory dashboard` | Open the local web UI (0.10.0+) |
+| `claude-memory digest --since 7` | Markdown report of the last 7 days (0.10.0+) |
+| `claude-memory stats --stale` | List facts not recalled recently (0.10.0+) |
+| `claude-memory stats --tools` | MCP tool-call telemetry (0.9.0+) |
+| `claude-memory census` | Privacy-safe predicate audit across projects (0.10.0+) |
+| `claude-memory dedupe-conflicts --dry-run` | Preview historical conflict-row dedup (0.10.0+) |
+| `claude-memory reclassify-references --dry-run` | Preview reference-material retag (0.10.0+) |
+| `claude-memory compact` | VACUUM databases |
+| `claude-memory export` | Dump facts to JSON |
 | `/claude-memory:analyze` | Bootstrap project knowledge |
 
 ## Support

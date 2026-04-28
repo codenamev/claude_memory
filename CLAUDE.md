@@ -208,6 +208,8 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
 - **`Distill`**: Fact extraction interface (`distill/`)
   - Pluggable distiller design (current: NullDistiller stub)
   - Extracts entities, facts, scope hints from content
+  - `ReferenceMaterialDetector`: classifies "X is a plugin/library/tool" templates, LOC counts, "by Firstname Lastname" attributions as reference material. Runs in `ManagementHandlers#store_extraction` so mislabeling can't persist
+  - SessionStart distillation prompt enforces reason clauses ("because…", "so that…") for `decision` and `convention` predicates — bare conclusions are explicitly disallowed
 
 - **`Resolve`**: Truth maintenance and conflict resolution (`resolve/`)
   - Determines equivalence, supersession, or conflicts
@@ -234,6 +236,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Reads stdin JSON from Claude Code hooks
   - Routes to ingest/sweep/publish commands
   - `DistillationRunner`: Manages context hook injection with undistilled content for LLM extraction
+  - `AutoMemoryMirror` (0.10.0): On fresh sessions, scans `~/.claude/projects/<slug>/memory/*.md` for new/changed entries and surfaces them as extraction candidates in the SessionStart context. State diffed by md5 in `.claude/auto_memory_mirror.json`; bounded to 5 candidates per session, 1500 chars each.
 
 ### Database Schema
 
@@ -246,11 +249,14 @@ Key tables (defined in `sqlite_store.rb`):
 - `fact_links`: Supersession and conflict relationships
 - `conflicts`: Open contradictions
 - `mcp_tool_calls`: MCP server tool invocation telemetry (schema v13)
+- `activity_events`: Hook/recall/context/sweep telemetry (schema v15) — powers the dashboard timeline, moments feed, efficacy reports
+- `moment_feedback`: Per-moment 👍/👎 verdicts with optional notes (schema v16) — unique on event_id, repeat clicks upsert
 
 Facts include:
 - `scope`: "global" or "project" (determines applicability)
 - `project_path`: Set for project-scoped facts
 - `valid_from`/`valid_to`: Temporal validity window
+- `last_recalled_at` (schema v17): Set by `Sweep::RecallTimestampRefresher` from activity_events; powers `claude-memory stats --stale` and the dashboard's "stale" needs-review count
 
 ### Scope System
 

@@ -142,6 +142,34 @@ File-searchable questions ("what version is this?") and one-shot code generation
 - **Database Maintenance**: Compact, export, and backup commands
 - **Built-in Observability** (0.10.0+): `claude-memory dashboard` opens a local web UI with a moments feed, trust panel, conflicts dedup, knowledge index, 👍/👎 feedback, and a 30-day utilization ratio. See **[Dashboard guide →](docs/dashboard.md)**. `claude-memory digest` writes a weekly markdown report; `claude-memory census` audits the predicate vocabulary across projects.
 
+## What's New in 0.10.0
+
+Three behavior changes worth knowing about — they affect what you'll see in
+extracted facts and SessionStart context, even if you don't change anything:
+
+- **Auto-memory mirror** — On fresh sessions, the SessionStart context hook
+  scans `~/.claude/projects/<slug>/memory/*.md` and surfaces new or changed
+  entries as candidates for extraction into ClaudeMemory. You'll see a
+  "Pending Knowledge Extraction" section in Claude's startup context citing
+  files from your auto-memory directory. Claude reviews these and calls
+  `memory.store_extraction` for the high-signal ones; you don't need to
+  copy-paste manually anymore.
+- **Why-clause enforcement** — When Claude distills `decision` and
+  `convention` facts, it's now required to embed a reason ("…because…",
+  "…so that…", "…to avoid…"). A bare conclusion is dead weight; a fact with
+  a reason stays useful when the situation changes. You'll see this
+  reflected in fact text being longer and more justified.
+- **Reference predicate** — Active facts that look like reference material
+  (LOC counts, "X is a plugin/library/tool" templates, "by Firstname
+  Lastname" attributions) are auto-tagged `predicate=reference` instead of
+  `convention`. Keeps the conventions list signal-rich. Browse them in the
+  dashboard's Knowledge → References section, or run
+  `claude-memory reclassify-references --dry-run` to see candidates.
+
+Plus: **staleness detection** (`claude-memory stats --stale`) lists active
+facts that haven't been recalled in N days, so you can prune dead weight
+explicitly. The dashboard's Trust → Needs review panel surfaces the count.
+
 ## Privacy Control
 
 Exclude sensitive data from memory using privacy tags:
