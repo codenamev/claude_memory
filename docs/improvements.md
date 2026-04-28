@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-04-28 - Opened the 1.0 punchlist track (see `docs/1_0_punchlist.md`). High-priority entries below now include the must-have 1.0 items: token-budget telemetry (#47), hallucination-rate metric (#48), negative-fact harm benchmark (#49), CLAUDE.md baseline publication (#50), `claude-memory show` (#51), benchmark scoreboard diff (#52). Post-1.0 entries: first-week ROI nudge (#53), real-session repeat-correction detector (#54), token-cost growth tracking (#55), drift dashboard (#56). Earlier 2026-04-28 update added cq study (usefulness-focused). Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
+*Updated: 2026-04-28 - Added two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28): provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 - Opened the 1.0 punchlist track (see `docs/1_0_punchlist.md`). High-priority entries below now include the must-have 1.0 items: token-budget telemetry (#47), hallucination-rate metric (#48), negative-fact harm benchmark (#49), CLAUDE.md baseline publication (#50), `claude-memory show` (#51), benchmark scoreboard diff (#52). Post-1.0 entries: first-week ROI nudge (#53), real-session repeat-correction detector (#54), token-cost growth tracking (#55), drift dashboard (#56). Earlier 2026-04-28 update added cq study (usefulness-focused). Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.6.3, re-studied 2026-03-30)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, re-studied 2026-03-30 — no changes)*
@@ -561,6 +561,67 @@ Specs cover: refresher updates from both stores including cross-DB project→glo
 ### ~~27. Usage Stats / ROI Tracking~~ ✅ Implemented 2026-04-15
 
 Schema migration v13 adds `mcp_tool_calls` telemetry table (tool_name, called_at, duration_ms, result_count, scope, error_class). `MCP::Telemetry` wraps `Server#handle_tools_call` with monotonic-clock timing, captures errors, and records to the project DB; DB errors are swallowed so telemetry never fails a real tool call. `StatsCommand` gains `--tools` and `--since DAYS` flags showing total calls, error rate, and per-tool breakdown (calls, avg ms, p95 ms, error rate). `Sweep::Maintenance#prune_old_mcp_tool_calls` enforces a 90-day retention window, wired into `Sweeper#run!`. Rejected NDJSON in favor of SQLite for schema/query consistency with the rest of the gem. Dropped query-text capture (YAGNI — the dedup insight the hash would enable also needs raw text). Also fixed a latent bug where `StatsCommand` opened the DB via `Sequel.sqlite` (requiring the unlisted `sqlite3` gem); now uses the extralite adapter consistently.
+
+### 57. Provenance-Strength-Aware Retrieval Ranking
+
+Source: 2026-04-28 article "Why Karpathy's Second Brain Breaks at Agent Scale" (Zaid, [@Ctrl_Alt_Zaid](https://x.com/Ctrl_Alt_Zaid/status/2049082538686382397)) — "Memories need metadata such as confidence" / "without scoring, everything competes equally."
+
+**Gap.** `Domain::Provenance` already records `strength` ∈ {`stated`, `inferred`} (provenance.rb:7,14,22-26), but the value is only consumed as a boolean (`stated?` / `inferred?`) for display. `Index::IndexQuery` and the RRF fusion in `Recall` do not factor strength into ranking. Result: a fact that was inferred from one ambiguous transcript line ranks identically to one explicitly stated multiple times across sessions.
+
+**Implementation.**
+
+- **Strength score derivation.** Add `Domain::Provenance#confidence_weight` returning `1.0` for `stated`, `0.6` for `inferred`. Single-source — no new column.
+- **Per-fact aggregate.** New `SQLiteStore#fact_confidence(fact_id)` returns max strength weight across all provenance rows (a fact stated once and inferred twice is still high-confidence).
+- **Ranking integration.** `Index::IndexQuery` already returns scored candidates; multiply final RRF score by `(0.7 + 0.3 * confidence_weight)`. Bounded modifier (0.7-1.0 range) so a low-confidence fact still ranks if it's the only relevant one — we're nudging, not filtering.
+- **Surfacing.** `score_trace` (introduced in #5) gains a `confidence_factor` field so the multiplier is auditable in `memory.recall_semantic --explain`.
+
+**Acceptance.**
+
+- `memory.recall` results re-rank in tests: an `inferred`-only fact loses to a `stated` fact when both have similar BM25/vector scores.
+- Retrieval benchmark (`spec/benchmarks/retrieval/`) shows Recall@k unchanged or improved on the 155-query set.
+- `score_trace.confidence_factor` populated for every result.
+
+**Edge cases.**
+
+- Facts with no provenance (legacy / direct stores): default to 0.8 (between stated and inferred). Don't penalize as 0.6 — those facts predate the field.
+- `memory.store_extraction` callers don't always set strength; default already lands on `stated` per provenance.rb:14, which is the right behavior.
+
+**Effort.** ~half day. No schema migration; `strength` already exists.
+
+**Why medium.** The article calls this out as a structural reliability requirement, but ClaudeMemory already has the data — we're just not using it. Cheap win that closes a visible gap in the article's external critique.
+
+---
+
+### 58. Reinforcement-and-Decay Ranking Signal
+
+Source: 2026-04-28 article "Why Karpathy's Second Brain Breaks at Agent Scale" (Zaid) — "Memories need metadata such as freshness, importance, reinforcement" / "Some memory should weaken, expire, or be archived."
+
+**Gap.** `last_recalled_at` (schema v17, populated by `Sweep::RecallTimestampRefresher`) currently only feeds `Recall::StaleDetector` to *flag* unused facts (stale_detector.rb:57-61). It does not boost frequently-recalled facts in retrieval ranking, nor decay long-untouched ones. Result: a fact recalled 50 times in the last week and a fact recalled once 8 months ago compete on equal footing once their BM25/vector scores match — the inverse of what the article calls "the right memory, not the most memory."
+
+**Implementation.**
+
+- **Add `recall_count` column.** Migration vNN adds `facts.recall_count INTEGER DEFAULT 0`. `RecallTimestampRefresher` increments it alongside the `last_recalled_at` update (single UPDATE, no extra query).
+- **Reinforcement-decay multiplier.** New `Recall::FreshnessScorer.weight(fact)` returns `max(0.5, min(1.5, log1p(recall_count) * exp(-age_days / HALF_LIFE)))` where `HALF_LIFE` defaults to 60 days. Bounded so a single hot fact can't dominate and a cold fact can't disappear.
+- **Wire into RRF.** Same composition point as #57: `final_score = rrf_score * confidence_factor * freshness_factor`. Both factors land in `score_trace`.
+- **Configuration.** `CLAUDE_MEMORY_RECALL_HALF_LIFE_DAYS` env var (default 60) for users who want longer/shorter memory.
+- **Decay is soft, not destructive.** No facts are deleted or archived by this — that stays the user's job via `claude-memory reject`. The article's "decay" framing is correct in spirit (rank weight drops) but we don't auto-prune.
+
+**Acceptance.**
+
+- Two facts with identical BM25 scores: the one recalled 10× in the last week ranks above one not recalled in 6 months.
+- Repeat-correction benchmark (#32) shows improvement: facts that "stuck" rank higher than abandoned ones.
+- `score_trace.freshness_factor` populated; visible in `memory.recall_semantic --explain`.
+- Telemetry: `activity_events` gain `freshness_factor` in the details JSON for hook_context events so we can backtest changes to `HALF_LIFE`.
+
+**Edge cases.**
+
+- Brand-new facts (recall_count=0, age=0): `log1p(0) = 0` would zero out the weight. Floor at 0.5 — new facts shouldn't be penalized for being new.
+- Facts never recalled but still valid: clamped to 0.5 floor; ranked behind reinforced peers but not invisible.
+- Cross-DB mixing: refresher already handles cross-DB project→global per memory fact "OperationTracker.reset_stuck_operations…"; recall_count lives on each fact in its own DB, which is the right shape.
+
+**Effort.** ~1 day (migration, refresher update, ranking integration, tests).
+
+**Why medium.** This pairs naturally with #57 — together they answer the article's "without scoring, everything competes equally" critique. Defer behind the 1.0 punchlist (#47-52) but ahead of the post-1.0 nudge/drift items, since these directly affect retrieval quality measured by the existing benchmarks.
 
 ---
 
