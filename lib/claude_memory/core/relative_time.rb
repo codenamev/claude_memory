@@ -37,6 +37,15 @@ module ClaudeMemory
         nil
       end
 
+      # Parse a timestamp value into a Unix epoch integer; returns 0 when the
+      # value is unparseable. Used by sort comparators that need a stable
+      # numeric key without an exception path.
+      def self.to_epoch(value)
+        Time.parse(value.to_s).to_i
+      rescue ArgumentError, TypeError
+        0
+      end
+
       def self.format_absolute(time)
         time.strftime("%Y-%m-%d")
       end

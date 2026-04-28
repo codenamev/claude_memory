@@ -398,7 +398,7 @@ module ClaudeMemory
           presented = FactPresenter.new(store).list_summary(rows)
           presented.map { |f| f.merge(source: source) }
         }
-        collected.sort_by! { |f| -parse_timestamp(f[:created_at]) }
+        collected.sort_by! { |f| -Core::RelativeTime.to_epoch(f[:created_at]) }
 
         {
           total: collected.size,
@@ -560,12 +560,6 @@ module ClaudeMemory
           created_at: fact[:created_at] || fact["created_at"],
           receipts_count: receipts.is_a?(Array) ? receipts.size : nil
         }.compact
-      end
-
-      def parse_timestamp(value)
-        Time.parse(value.to_s).to_i
-      rescue ArgumentError, TypeError
-        0
       end
 
       # Return the {since:, until:} ISO timestamps of the first-to-last

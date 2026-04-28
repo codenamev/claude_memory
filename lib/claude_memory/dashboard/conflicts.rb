@@ -35,7 +35,7 @@ module ClaudeMemory
         }
 
         groups = group_rows(rows)
-        groups.sort_by! { |g| -parse_timestamp(g[:representative][:detected_at]) }
+        groups.sort_by! { |g| -Core::RelativeTime.to_epoch(g[:representative][:detected_at]) }
 
         {
           total: groups.size,
@@ -227,7 +227,7 @@ module ClaudeMemory
         end
 
         groups.values.map do |g|
-          sorted = g[:members].sort_by { |r| -parse_timestamp(r[:detected_at]) }
+          sorted = g[:members].sort_by { |r| -Core::RelativeTime.to_epoch(r[:detected_at]) }
           {representative: sorted.first, members: g[:members], facts: g[:facts]}
         end
       end
@@ -273,12 +273,6 @@ module ClaudeMemory
           group_size: group[:members].size,
           group_member_ids: group[:members].map { |m| m[:id] }
         }
-      end
-
-      def parse_timestamp(value)
-        Time.parse(value.to_s).to_i
-      rescue ArgumentError, TypeError
-        0
       end
     end
   end
