@@ -4,8 +4,15 @@ require "optparse"
 
 module ClaudeMemory
   module Commands
-    # Starts a local web dashboard for debugging and observability.
-    # Shows stats, activity timeline, fact explorer, and efficacy reports.
+    # Starts a local web dashboard for inspection and trust signals. Default
+    # port 3377; reads global + project databases, no writes from page loads.
+    # Panels: feed (Moments), Trust sidebar (utilization, fingerprint,
+    # feedback ratio, needs-review), Knowledge (predicate-grouped facts),
+    # Conflicts (deduped at display layer), Reuse, Health, Timeline,
+    # Activity drill-down, Query tester. Each panel is backed by a dedicated
+    # `Dashboard::*` collaborator class.
+    #
+    # See `docs/dashboard.md` for the user-facing guide.
     class DashboardCommand < BaseCommand
       def call(args)
         opts = parse_options(args, {port: Dashboard::Server::DEFAULT_PORT, no_open: false}) do |o|

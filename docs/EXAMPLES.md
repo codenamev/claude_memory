@@ -428,9 +428,48 @@ Claude: "You're using Context API for state management. You previously used Redu
 
 ---
 
+## Inspecting What Memory Knows (0.10.0+)
+
+When you want to see what's actually in memory — what's been extracted, which
+facts Claude has been reaching for, what's stale, what's contradicting — open
+the dashboard:
+
+```bash
+claude-memory dashboard
+```
+
+Default port `http://localhost:3377`. Surfaces:
+
+- A **moments feed** — every recall, context injection, extraction event with
+  the facts they touched. Click any moment for the full payload.
+- A **Trust sidebar** — week-over-week activity, your global "fingerprint",
+  utilization ratio (% of recently extracted facts Claude actually used), and
+  your 👍/👎 feedback ratio.
+- **Conflicts** with display-layer dedup so you don't have to triage 11 rows
+  of the same contradiction one at a time.
+- **Knowledge** — facts grouped by predicate, with a separate References
+  section for auto-detected reference material.
+
+For a markdown summary you can email or commit:
+
+```bash
+claude-memory digest --since 7
+```
+
+For a privacy-safe cross-project audit:
+
+```bash
+claude-memory census
+```
+
+See **[Dashboard guide →](dashboard.md)** for the full panel reference.
+
+---
+
 ## Next Steps
 
-- 📖 [Read the Getting Started Guide](GETTING_STARTED.md) *(coming soon)*
-- 🔧 [Set up the Claude Code Plugin](PLUGIN.md)
+- 📖 [Read the Getting Started Guide](GETTING_STARTED.md)
+- 📊 [Inspect with the Dashboard](dashboard.md)
+- 🔧 [Set up the Claude Code Plugin](plugin.md)
 - 🏗️ [Understand the Architecture](architecture.md)
 - 📝 [Check the Changelog](../CHANGELOG.md)

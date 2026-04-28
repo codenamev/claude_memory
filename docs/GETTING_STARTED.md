@@ -314,6 +314,22 @@ ls -lh .claude/memory.sqlite3
 # => -rw-r--r-- 1 user staff 64K Jan 26 10:35 .claude/memory.sqlite3
 ```
 
+### Open the Dashboard (0.10.0+)
+
+Once you have a few sessions worth of memory, the dashboard is the fastest
+way to see what's actually in there:
+
+```bash
+claude-memory dashboard
+```
+
+Opens `http://localhost:3377` with a moments feed (every recall, context
+injection, and extraction event), a Trust sidebar showing your global
+"fingerprint" and 30-day utilization ratio, a deduped Conflicts panel, and a
+Knowledge panel grouping facts by predicate.
+
+See **[docs/dashboard.md](dashboard.md)** for the full panel guide.
+
 ### Test Memory Recall
 
 Have a conversation with Claude to test:

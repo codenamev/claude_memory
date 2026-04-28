@@ -201,6 +201,21 @@ end
 - Output style templates (`output-styles/memory-aware.md`)
 - Setup and configuration scaffolding
 
+#### Dashboard (`dashboard/`)
+- **Server**: WEBrick HTTP server (default port 3377), starts via `claude-memory dashboard`
+- **API**: HTTP-shape glue + per-endpoint formatting; routes/delegates to panel classes
+- **Panels** (each backed by a dedicated class with focused responsibility):
+  - `Trust`: weekly moments, fingerprint, utilization, feedback ratio, needs-review
+  - `Moments`: feed-first activity stream with kind classification
+  - `Knowledge`: predicate-grouped fact summary (incl. References section)
+  - `Conflicts`: display-layer dedup with bulk-reject helper
+  - `Reuse`: most-used facts within window
+  - `Health`: db / hooks / vec checks with actionable fix strings
+  - `Timeline`: 30-day daily rollup
+  - `FactPresenter`, `ScopedFactResolver`: shared rendering / scope-aware ID resolution
+- Connections released after every request — no held WAL writer locks across page loads
+- See [docs/dashboard.md](dashboard.md) for the user-facing guide
+
 **Key Principles:**
 - Ports and Adapters: Clear interfaces for external systems
 - Dependency Injection: Real vs. test implementations

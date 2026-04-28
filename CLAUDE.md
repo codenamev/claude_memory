@@ -369,6 +369,16 @@ ClaudeMemory integrates with Claude Code via hooks in `.claude/settings.json`:
 
 Hook commands read JSON payloads from stdin for robustness. Supports `--async` flag for non-blocking execution.
 
+## Dashboard
+
+Local web UI for inspecting memory state. Started via `claude-memory dashboard` (default port 3377). Reads from both global and project databases; no write side effects from page loads.
+
+The dashboard is a thin web layer over the same `Recall`/`Conflicts`/`Trust`/`Moments`/`Knowledge`/`Reuse`/`Health`/`Timeline` classes the MCP server uses. Each panel is backed by a dedicated module under `lib/claude_memory/dashboard/`; `Dashboard::API` holds HTTP-shape glue and per-endpoint formatting (delegating non-trivial logic to the panel classes).
+
+Connections are released after each request — never holds a WAL writer lock open across page loads.
+
+See [docs/dashboard.md](docs/dashboard.md) for the user-facing guide (panels, common workflows, related CLI commands).
+
 ## Code Style
 
 This project uses [Standard Ruby](https://github.com/standardrb/standard) for linting. Run `bundle exec rake standard:fix` before committing.

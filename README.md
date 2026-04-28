@@ -140,7 +140,7 @@ File-searchable questions ("what version is this?") and one-shot code generation
 - **Claude-Powered**: Uses Claude's intelligence to extract facts (no API key needed)
 - **Token Efficient**: 10x reduction in memory queries with progressive disclosure
 - **Database Maintenance**: Compact, export, and backup commands
-- **Built-in Observability** (0.10.0+): `claude-memory dashboard` opens a local web UI with feed, trust panel, conflicts, moments, 👍/👎 feedback, and utilization ratio. `claude-memory digest` writes a weekly markdown report; `claude-memory census` audits the predicate vocabulary across projects.
+- **Built-in Observability** (0.10.0+): `claude-memory dashboard` opens a local web UI with a moments feed, trust panel, conflicts dedup, knowledge index, 👍/👎 feedback, and a 30-day utilization ratio. See **[Dashboard guide →](docs/dashboard.md)**. `claude-memory digest` writes a weekly markdown report; `claude-memory census` audits the predicate vocabulary across projects.
 
 ## Privacy Control
 
@@ -242,6 +242,7 @@ The uninstall command removes:
 
 - 📖 [Getting Started](docs/GETTING_STARTED.md) - Step-by-step onboarding
 - 💡 [Examples](docs/EXAMPLES.md) - Use cases and workflows
+- 📊 [Dashboard](docs/dashboard.md) - Local web UI for inspection and trust signals (0.10.0+)
 - 🔧 [Plugin Setup](docs/plugin.md) - Claude Code integration
 - 🏗️ [Architecture](docs/architecture.md) - Technical deep dive
 - 📝 [Changelog](CHANGELOG.md) - Release notes
