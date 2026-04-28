@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
+*Updated: 2026-04-28 - Opened the 1.0 punchlist track (see `docs/1_0_punchlist.md`). High-priority entries below now include the must-have 1.0 items: token-budget telemetry (#47), hallucination-rate metric (#48), negative-fact harm benchmark (#49), CLAUDE.md baseline publication (#50), `claude-memory show` (#51), benchmark scoreboard diff (#52). Post-1.0 entries: first-week ROI nudge (#53), real-session repeat-correction detector (#54), token-cost growth tracking (#55), drift dashboard (#56). Earlier 2026-04-28 update added cq study (usefulness-focused). Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.6.3, re-studied 2026-03-30)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, re-studied 2026-03-30 — no changes)*
@@ -88,6 +88,230 @@ Source: claude-supermemory v2.0.1 study (2026-03-09)
 
 Extraction instructions embedded in `/distill-transcripts` skill and context hook injection prompt. Defines what to extract (technology decisions, conventions, preferences, architecture, entities by type) vs what to skip (debugging steps, code output, transient errors). Scope detection for global vs project facts. Claude Code itself performs extraction — no separate API call needed.
 
+### 47. Token Budget Telemetry — *what does memory cost?*
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #1)
+
+**Gap.** `Core::TokenEstimator` (`lib/claude_memory/core/token_estimator.rb`) exists and is only consumed by `Index::IndexQuery`. We record `context_length` (chars) on every `hook_context` activity event but never tokens, so users can't answer "what's memory costing me per session?" — the loudest critique of any context-injection memory system.
+
+**Implementation.**
+
+- **Capture at injection time.** `Commands::HookCommand#record_context_activity` (hook_command.rb:208-232) already builds the details hash with `context_length`. Add `context_tokens: Core::TokenEstimator.estimate(context_text)` and the same field in `Hook::Handler#context` (handler.rb:106-108). Backfill behavior: legacy events without `context_tokens` fall back to `context_length / 4` (matches TokenEstimator's CHARS_PER_TOKEN constant).
+- **Surface in Trust.** `Dashboard::Trust#snapshot` (trust.rb:28-36) gains a `token_budget` block: `{p50:, p95:, total_30d:, sessions:}` derived from `activity_events` where `event_type='hook_context' AND status='success'` over `UTILIZATION_DAYS`.
+- **Surface in digest.** `Commands::DigestCommand` (digest_command.rb) adds a "Context cost" line — average tokens injected per session in the window, rendered alongside activity counts.
+- **Surface in stats.** `claude-memory stats --tokens` prints the same p50/p95 + per-day distribution for terminal-only users.
+
+**Acceptance.**
+
+- Trust panel shows `Context cost` widget with current-week p95 + week-over-week delta (matches the existing weekly_moments shape).
+- Digest's Activity section includes "Context tokens injected (avg/session): N".
+- `claude-memory stats --tokens --since 30` works and matches the dashboard.
+
+**Edge cases.**
+
+- Sessions where `generate_context` returns nil (`status='skipped'`): record `context_tokens: 0` so the denominator stays honest.
+- Fresh installs with no `hook_context` events: Trust shows the widget hidden (mirroring the `utilization` panel's empty-state handling).
+- Old events (pre-rollout) without the field: fall back via `(detail_json->>'context_length').to_i / 4`. Doc this in the migration note in `db/migrations/` if a schema change is added later — currently no schema change required.
+
+**Effort.** ~4-6 hours. No schema changes; `detail_json` is opaque blob.
+
+**Why high priority.** Without this number, the trade-off "memory eats N tokens forever" is unfalsifiable. The data is already flowing through `record_context_activity` — we're only failing to compute one extra integer.
+
+---
+
+### 48. Hallucination Rate as a First-Class Trust Metric
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #2). Builds on #34 (Why-Preservation Audit) and #41 (ReferenceMaterialDetector).
+
+**Gap.** We already have `Distill::ReferenceMaterialDetector` classifying "X is a CLI/library/MCP server" / "by Firstname Lastname" / LOC-count facts as suspect. The #34 audit found ~25% of project facts had embedded reasoning, ~75% were bare conclusions. Neither signal is exposed on the dashboard. The Trust panel today shows clean numbers; it should show stained ones so users can see the calibration loop.
+
+**Implementation.**
+
+- **Two component metrics.**
+  1. *Suspect-fact ratio*: `ReferenceMaterialDetector.suspect_count(active_facts) / active_facts.count`. Already a one-liner — the detector exists and is invoked in `ManagementHandlers#store_extraction` to retag at write time. Add a read-only count method.
+  2. *Bare-conclusion ratio*: new lightweight detector that flags `decision`/`convention` facts whose `object_literal` lacks a why clause. Cheapest heuristic: `object !~ /\b(because|so that|caused by|breaks when|to avoid|to ensure|reason)\b/i`. Lives in `lib/claude_memory/distill/why_clause_detector.rb` so the rule is cited in one spot.
+- **Composite quality_score.** `Dashboard::Trust#snapshot` exposes `quality: {suspect_pct:, bare_conclusion_pct:, score:}` where `score = 100 - suspect_pct - bare_conclusion_pct/2` (bare conclusions are weaker negatives than reference-material mislabels). Tunable; the formula matters less than the trend.
+- **Rejection-rate companion.** Digest gains a "Calibration" section: of facts created in the last 30d, what % are now `status='rejected'`? This is the ex-post calibration signal that complements the ex-ante quality_score.
+- **CLI surface.** `claude-memory stats --quality` prints the score plus the top 10 suspect facts so users can act.
+
+**Acceptance.**
+
+- Trust panel shows `Quality score: 87 (suspect 4%, bare 18%)` with red/yellow/green coding (>80 green, >60 yellow, else red).
+- Digest's Calibration section shows `12/87 facts rejected within 7 days (14% rejection rate)`.
+- Stats command lists actionable suspects with docids so users can `claude-memory reject <docid>`.
+
+**Edge cases.**
+
+- Reference-material is a multi-value predicate now (#41), so detector hits don't always mean rejection — they can also indicate correctly-tagged reference rows. The metric only counts mislabeled-as-convention/decision suspects, not facts with `predicate='reference'`.
+- Bare-conclusion detection is regex-based and lossy. Keep it advisory: this score is a trend signal, not a precision tool. Accept ~10% false-positive rate as long as the directional signal holds across releases.
+- Empty-DB case: `quality_score` is nil (not 100). Frontend hides the widget.
+
+**Effort.** ~1 day. Detector reuse + one new helper + Trust + digest wiring.
+
+**Why high priority.** A retrieval system that injects polluted facts is strictly worse than no memory. Users need to see the pollution rate, not just the recall rate.
+
+---
+
+### 49. Negative-Fact Harm Benchmark
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #3). Parallels #32 (Repeat-Correction Benchmark) but inverts the goal.
+
+**Gap.** Every benchmark we run measures whether memory **helps** (Recall@k, MRR, e2e pass rate, repeat-correction prevention rate). Nothing measures whether memory **harms** — i.e. holds a wrong/stale fact and causes Claude to follow it. Without this, "memory helps" is unfalsifiable.
+
+**Implementation.**
+
+- **Dataset.** `spec/benchmarks/dataset/harm_scenarios.yml` modeled on `repeat_correction_scenarios.yml` (`spec/benchmarks/e2e/repeat_correction_spec.rb` is the template). Each scenario carries:
+  - `memory_facts`: 1-3 facts pre-loaded into memory, intentionally outdated/wrong (e.g. `uses_database = MySQL` when the prompt context implies PostgreSQL is current).
+  - `prompt`: a question whose right answer requires *not* trusting the wrong fact.
+  - `harm_patterns`: regex list — any match in Claude's response = Claude followed the bad fact. Matches the absence-pattern shape from #32.
+  - `safe_indicators`: optional positive patterns showing Claude correctly questioned/ignored the fact.
+- **10-15 scenarios spanning four harm classes:**
+  1. *Stale-tech*: outdated framework/database choice that conflicts with prompt cues.
+  2. *Mismatched-scope*: project fact applied to a different-project prompt (tests scope leakage).
+  3. *Superseded-but-undetected*: fact that should have been superseded but wasn't.
+  4. *Reference-material-as-fact*: a "by Firstname Lastname" attribution mislabeled as `convention`, prompt asks for actual conventions.
+- **Spec.** `spec/benchmarks/e2e/harm_spec.rb` runs each scenario through the e2e harness (`ClaudeCliRunner`) with memory enabled; scores `harm` if any `harm_patterns` matches, `safe` otherwise. Stub mode validates schema + regex compile (matches #32 pattern). Real mode reports harm rate with $-cost printed.
+- **Release gate.** `bin/run-evals --all` aggregates harm rate; `> 1%` blocks release. Threshold tunable via `HARM_RATE_THRESHOLD` env var. The `/release` skill reads the latest result JSON (#52 below) before publishing.
+
+**Acceptance.**
+
+- Stub run validates 10-15 scenarios pass schema/regex checks.
+- Real run prints `Harm rate: X/N (Y%)` with per-scenario passes/fails and `safe_indicators` stats.
+- Release script refuses to publish when harm rate exceeds threshold.
+- Dashboard shows latest harm rate alongside other benchmark scores once #52 lands.
+
+**Edge cases.**
+
+- `harm_patterns` regexes need to be specific enough that "I'm not sure" doesn't match. Lean on the same diagnostic discipline as #32 (positive `safe_indicators` for ambiguous cases).
+- Scenario IDs need stable docids so we can track which scenarios regress release-to-release once #52 lands.
+- No `acceptance_keywords` — the metric is *absence* of harm, not positive proof of correctness.
+
+**Effort.** ~2 days. Dataset is the bulk of the time (real-world wrong-fact patterns drawn from the existing audit notes — Sequel.sqlite, hallucination CLAUDE.md example, Rails-vs-React conflicts).
+
+**Why high priority.** Closes the "is this strictly better than no memory" question. Pairs with #50 (CLAUDE.md baseline) so we can publish "vs no memory: harmless; vs CLAUDE.md: superior".
+
+---
+
+### 50. Publish CLAUDE.md Baseline in Headline E2E Results
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #4)
+
+**Gap.** `spec/benchmarks/comparative/adapters/claude_md_adapter.rb` exists, supports E2E (`supports_e2e?` returns true, `setup_for_claude` writes a real CLAUDE.md), and is registered in `comparative_helper.rb`. But the README's headline comparative table doesn't include it. The single most important question for adoption — *"is this better than a hand-written CLAUDE.md?"* — is unanswered in our published numbers.
+
+**Implementation.**
+
+- **Surface in comparative E2E spec.** `spec/benchmarks/comparative/e2e/comparative_e2e_spec.rb` already iterates adapters via `ComparativeHelpers.adapters`; ensure CLAUDE.md baseline is included in the iteration (verify by reading the spec — likely needs an `if adapter.supports_e2e?` guard tweak).
+- **Reporter changes.** `spec/benchmarks/comparative/reporting/comparative_reporter.rb` already supports multi-adapter rows. Confirm CLAUDE.md row appears in markdown + terminal output.
+- **README publishing.** `spec/benchmarks/README.md` "Comparative Results" section gets a new E2E table showing pass rate per ability category for ClaudeMemory vs CLAUDE.md baseline vs No memory. Run `EVAL_MODE=real ./bin/run-evals --comparative` once and paste the result.
+- **Release gate.** Add a soft gate in `/release` skill: warn (don't block) if ClaudeMemory's E2E pass rate isn't materially above CLAUDE.md baseline. Threshold: 5% absolute pass-rate margin. Tunable.
+
+**Acceptance.**
+
+- README has a "ClaudeMemory vs CLAUDE.md baseline" E2E pass-rate table with a brief commentary on when each wins.
+- Comparative reporter prints CLAUDE.md row inline with QMD/grepai/no-memory.
+- README "Key takeaways" updated to include the ClaudeMemory-vs-CLAUDE.md comparison as a top-line finding.
+
+**Edge cases.**
+
+- CLAUDE.md baseline returns `[]` for `search()` — that's fine, retrieval comparison already handles this (it's a No-Retrieval row in retrieval results). The E2E story is the one we care about.
+- The static CLAUDE.md grows unbounded with our test fact set (105 facts). That's the baseline's *actual* ergonomics — don't artificially shrink it. If CLAUDE.md beats us in E2E because Claude can read everything, that's a genuine signal.
+
+**Effort.** ~30 min code + one $2-8 real-mode run.
+
+**Why high priority.** Cheapest item on the list. If we can't beat a static CLAUDE.md on developer scenarios, that's the loudest possible "we're not done" signal; if we can, that's the headline 1.0 brag.
+
+---
+
+### 51. `claude-memory show` — Human-Readable "What Would Be Injected"
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #5)
+
+**Gap.** Inspecting memory state today requires the dashboard or several CLI commands (`recall`, `stats`, `census`). The CLAUDE.md alternative is `cat CLAUDE.md` — instant, plain-English, no tool. Users develop trust through inspectability, and we're missing the simplest possible inspect surface.
+
+**Implementation.**
+
+- **New command.** `lib/claude_memory/commands/show_command.rb` registered in `Commands::Registry`. Construct a `Hook::ContextInjector` against the current manager (`source: nil` → behaves as a startup session for the fresh-session sections), call `generate_context`, and print the result. That's the same path real sessions use, so the output is *exactly* what would be injected.
+- **Plain-English rendering.** ContextInjector already returns markdown; the command pipes it through `less` if `STDOUT.tty?` and `--paginate` (default true). `--raw` flag dumps the unprocessed string for diffing across runs.
+- **Section flags.** `--decisions`, `--conventions`, `--architecture`, `--undistilled`, `--mirror` filter to specific sections. Default is all sections.
+- **Sized for terminal.** Existing `MAX_TEXT_PER_ITEM` (1500 chars) and per-section limits already cap output.
+- **Token reporting.** When #47 lands, `claude-memory show` prints a footer line: `(Estimated cost: ~N tokens; X% of 200k context window.)` so the user sees the trade in the same view.
+
+**Acceptance.**
+
+- `claude-memory show` runs in <1s on a populated DB and prints what next session would see.
+- `claude-memory show --raw` is suitable for diff'ing (deterministic ordering already enforced by `Recall#query`).
+- `claude-memory show --section decisions` works for narrow inspection.
+
+**Edge cases.**
+
+- Empty DB: print "No facts in memory yet. Try `claude-memory hook context` after a few sessions." rather than empty output.
+- Fresh-session-only sections (undistilled, mirror) only show with `--source startup` or by default. `--no-fresh` suppresses them for the steady-state view.
+- ContextInjector currently auto-commits the auto-memory mirror state on emission (context_injector.rb:67); the show command must pass an injector that *doesn't* commit, or the act of inspecting alters state. Two options: (a) add a `read_only:` flag to ContextInjector, (b) construct a no-op AutoMemoryMirror double in the show command. (a) is cleaner.
+
+**Effort.** Half a day.
+
+**Why high priority.** Trust requires inspectability. A user who can't see what memory will inject can't develop confidence in it. This is the answer to "show me, don't tell me."
+
+---
+
+### 52. Release-to-Release Benchmark Scoreboard
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #6)
+
+**Gap.** Benchmark output is textual today (`spec/benchmarks/comparative/reporting/comparative_reporter.rb` + per-spec `puts`). Nothing diff-able across versions. The only reason we caught the BM25 normalization regression was a manual run. 1.0 is the moment we commit to *not regressing* what we ship; we need machine-readable longitudinal results.
+
+**Implementation.**
+
+- **JSON output sink.** New `BenchmarkHelpers::ResultsWriter` module in `spec/benchmarks/benchmark_helper.rb`. Each benchmark spec calls `ResultsWriter.record(suite:, metrics:)` after computing its metrics. Writer accumulates into a single `spec/benchmarks/results/<version>-<timestamp>.json` per run, plus a `spec/benchmarks/results/latest.json` symlink.
+- **Schema.** Top-level `{version:, run_at:, suites: {retrieval: {...}, resolution: {...}, distillation: {...}, e2e: {...}, harm: {...}, comparative: {...}}}`. Per-suite metrics match what's already printed today.
+- **Diff command.** `bin/bench-diff [--against TAG]` reads the latest results JSON and the JSON for the named tag (default: previous tag from `git tag --sort=-creatordate`). Prints color-coded deltas for each metric. Threshold for "regression" is per-metric (e.g. Recall@5 ±2%, MRR ±3%, harm rate must not increase at all).
+- **Release gate.** `/release` skill reads `latest.json` and the previous version's JSON before bumping; refuses to ship on regressions over threshold. Override with `--force-regression` for explicit acknowledgments (e.g. an intentional algorithm change).
+- **Storage.** Results JSON committed to repo (small, <50KB per run) so any contributor can `bin/bench-diff` historically. `.gitignore` excludes intermediate timestamped files; only the per-version stable file is committed.
+
+**Acceptance.**
+
+- Running `bin/run-evals --all` writes `spec/benchmarks/results/<version>.json`.
+- `bin/bench-diff` shows a clear delta table when there are changes.
+- `/release` warns/blocks on regressions per the threshold.
+- README "Latest Results" section is auto-generated from the JSON via a rake task to stop drift.
+
+**Edge cases.**
+
+- Stub mode (no real Claude) only fills retrieval/resolution/distillation suites; e2e/harm/comparative sections are absent. Diff command tolerates missing keys.
+- Comparative results vary by adapter availability — schema accommodates absent adapters without diffing them as regressions.
+- First run has no prior JSON: `bin/bench-diff` prints "no baseline" and `/release` proceeds without gating.
+
+**Effort.** ~1 day. Mostly plumbing; the metrics already exist as Ruby variables in the specs.
+
+**Why high priority.** Without longitudinal tracking every benchmark we run is a snapshot. Pairs with #49 (harm benchmark) — the harm rate is the metric most worth tracking release-to-release.
+
+---
+
+## cq Study (2026-04-28)
+
+Source: docs/influence/cq.md — usefulness-focused study (not internals)
+
+cq is complementary to ClaudeMemory, not competing: it's an out-of-band SQL audit tool over raw Claude Code transcripts (DuckDB cache + `tool_calls`/`messages`/`sessions` views), aimed at meta-questions like "is my skill firing?" or "where did context go in that bad session?" ClaudeMemory has data parity for the per-project case (its own `tool_calls` table) but lacks cross-project SQL ergonomics.
+
+### High Priority Recommendations
+
+- [ ] **Install cq as a developer audit tool for the ClaudeMemory plugin itself**
+  - Value: Answer "is the memory plugin firing when it should?" — currently unanswerable
+  - Evidence: cq's three documented patterns (skill-activation gap, silent failure, context budget) translate directly; only predicate names change
+  - Effort: 5 minutes (`cargo install --git https://github.com/technicalpickles/cq`)
+  - Trade-off: Adds Rust toolchain dep on dev machine; runs out-of-band so no project impact
+
+- [x] **Capture reference audit queries in `docs/audit-queries.md`** (2026-04-28)
+  - Five queries: activation rate, missed memory-shaped prompts, tool ranking, error rate, result-size distribution
+  - Each runnable as `cq sql "..." --since 30d --table` against Claude Code transcripts (not ClaudeMemory's own SQLite — cq sees calls that bypassed the MCP server entirely)
+  - Re-run before each release, after MCP server instruction changes, or when investigating "memory doesn't seem to do anything" reports
+
+### Features to Avoid (from this study)
+
+- DuckDB as a primary store — wrong tool for the curation workload
+- Cross-project default scoping — breaks ClaudeMemory's project/global memory separation
+- Re-indexing transcripts on every command — ClaudeMemory's hook-driven ingest is already the right pattern
+
 ---
 
 ## Medium Priority
@@ -103,6 +327,120 @@ IndexCommand builds text→embedding cache from already-embedded facts before in
 ### ~~20. Deduplication Before Vector Scoring~~ ✅ Implemented 2026-03-16
 
 In Ruby fallback path (`search_by_vector_fallback`), facts are grouped by `embedding_json` before cosine similarity computation. Unique embeddings scored once, results fanned out to all matching fact_ids. Native sqlite-vec path unaffected (handles own dedup).
+
+### 53. First-Week ROI Nudge
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #7). Closes the cold-start gap.
+
+**Gap.** New users install the gem, run a few sessions, and don't know whether memory is working. The dashboard exists but they have to know to look. The auto-memory mirror (#36) helps but isn't surfaced. We need a low-friction nudge in the first ~10 sessions that says "memory is working, here's what it did" — and then gets out of the way.
+
+**Implementation.**
+
+- **New hook command.** `claude-memory hook session-end-summary` runs on SessionEnd alongside the existing ingest/sweep. Reads the most recent `hook_context` activity event for the current session_id; emits a `systemMessage` (or `additionalContext` if the spec supports it for SessionEnd) summarizing: facts injected, % used, top subjects.
+- **Sentinel.** Tracked in a new `Configuration#session_count` (or `.claude/.session_counter`) — only emit on sessions 1–10. After 10, the user has either seen enough or doesn't care; turn it off so we don't become noise.
+- **Hooks config.** `HooksConfigurator#build_hooks_config` (hooks_configurator.rb:130) gains the new command in the SessionEnd block.
+- **Opt-out.** `CLAUDE_MEMORY_NO_NUDGE=1` disables.
+
+**Acceptance.**
+
+- Sessions 1-10 print a one-line "memory contributed N facts; you used Y of them" summary at session end.
+- Session 11+ stays silent unless the user opts in via `CLAUDE_MEMORY_ALWAYS_NUDGE=1`.
+- Telemetry: each emitted nudge logs an `activity_event` so we can track whether users disable it (rough proxy for noise).
+
+**Edge cases.**
+
+- Sessions where `generate_context` returned nil: don't emit the nudge — there's nothing to celebrate.
+- Multi-window sessions / tab-switches: the session counter is per-(project_path, claude_config_dir), not global. Two projects = two independent first-week windows.
+- "% used" needs a recall event in the same session to compute; absent that, fall back to "memory contributed N facts (use them via /memory-recall)".
+
+**Effort.** ~half day.
+
+**Why post-1.0.** Nice onboarding polish, not a confidence gap. The token-budget, hallucination, and harm metrics in the must-have set already give the skeptic the answer they need.
+
+---
+
+### 54. Real-Session Repeat-Correction Detection
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #8). Production-side companion to #32 (synthetic harness).
+
+**Gap.** The repeat-correction benchmark fires synthetic prompts and asks "did Claude repeat itself?". Production has no equivalent signal. When a user re-states something memory already injected, that's the strongest possible "memory failed silently" signal — and we don't capture it.
+
+**Implementation.**
+
+- **Detector.** New `Sweep::RepeatCorrectionDetector` (parallel to `Sweep::RecallTimestampRefresher`). Runs in the sweep cycle; reads `activity_events` for `event_type='hook_context'` over the last 7 days. For each session, takes the `top_subjects` (from `detail_json`) and looks at the next ingested transcript chunk for prompts that mention the same subject in a "we discussed this" / "I told you" / correction-shaped way.
+- **Signal extraction.** Regex-light heuristic against ingested content: `/\b(again|already|told you|previously|as I said|reminder)\b/i` AND a subject keyword from the prior injection's `top_subjects`.
+- **Surface.** New dashboard panel "Memory misses (last 30d)" + a `--missed` flag on `claude-memory stats`. Each row links to the offending session and the subject that was injected but not heeded.
+- **Privacy posture.** Only surfaces subject names + session IDs, never the user's full prompt text. Same posture as census.
+
+**Acceptance.**
+
+- Stats command shows actionable list of "memory was injected but the user re-corrected" cases.
+- Dashboard surfaces these with a link to the originating fact so users can act (reject / promote / rephrase).
+- Aggregate "miss rate" appears in digest as a 30d trend.
+
+**Edge cases.**
+
+- Heuristic is lossy — we'll miss real misses and flag false positives. Treat as a trend signal not a precision tool, same posture as `relevance_ratio` (#31).
+- Need to disambiguate "user re-stated for emphasis" vs "memory failed". Lean toward false-negative bias (only flag obvious cases) so the panel isn't crying wolf.
+
+**Effort.** ~2 days. Detector logic is the bulk; UI is straightforward addition.
+
+**Why post-1.0.** Good signal but not blocking — the synthetic harness in #32 already gives release-time guarantees. Production-side measurement is icing.
+
+---
+
+### 55. Token-Cost Growth Tracking
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #9). Builds on #47 (token budget telemetry).
+
+**Gap.** Once #47 is recording context_tokens per session, the next question is: *is it growing?* DB bloat or context-injection going wide should be visible as an anomaly, not discoverable only by manual census.
+
+**Implementation.**
+
+- **Digest section.** `Commands::DigestCommand` adds a "Context cost trend" line: `current 7d avg vs 30d avg (delta %)`. Same window comparison shape as the existing `weekly_moments`.
+- **Dashboard widget.** Trust panel's `token_budget` block (added in #47) gains `growth_30d` and `growth_7d` fields with color coding (>20% growth = yellow, >50% = red).
+- **Alert threshold.** New `Configuration#token_growth_alert_pct` (default 30) controls the "is this concerning" line. Configurable via env var.
+
+**Acceptance.**
+
+- Digest shows directional trend at a glance.
+- Dashboard surfaces sustained growth with appropriate severity.
+
+**Effort.** ~3 hours after #47 lands.
+
+**Why post-1.0.** Pure derivation from #47's data; doesn't add new instrumentation.
+
+---
+
+### 56. Drift Dashboard
+
+Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #10). Builds on #30 (Predicate Census).
+
+**Gap.** `claude-memory census` (#30) gives a one-shot privacy-safe scan but it's not longitudinal. "Is my fact base going off?" requires comparing today's predicate distribution against historical ones — which today only exists in a user's git history of committed `.claude/memory.sqlite3` (and we don't recommend committing that).
+
+**Implementation.**
+
+- **Snapshot store.** New table `census_snapshots` (schema migration vNN) stores compact aggregates: `{snapshotted_at, predicate, status, count, scope}`. Bounded retention (keep last 12 weeks).
+- **Capture.** Sweep cycle records a snapshot weekly (gated by "last snapshot > 6 days ago"). Cheap — single aggregate query.
+- **Dashboard panel.** "Distribution drift" widget shows a small sparkline per predicate over the last 12 weeks. Anomalies (predicate count drops >50%, or rises >200%) get highlighted.
+- **CLI.** `claude-memory drift` prints a text-mode version of the dashboard widget for terminal users.
+
+**Acceptance.**
+
+- Dashboard shows predicate distribution sparklines.
+- A user who's been running the gem for 3 months can see "convention facts dropped 40% this week — what happened?".
+- Snapshots stay <100KB total over 12 weeks (bounded by predicate × status × scope cardinality).
+
+**Edge cases.**
+
+- Fresh installs have no historical snapshots. Widget hides until 2+ snapshots exist.
+- Schema migration touches the gem-core schema; needs round-trip migration tests per #f1fe317.
+
+**Effort.** ~1.5 days.
+
+**Why post-1.0.** Useful longitudinal signal but the must-have set already gives the headline confidence numbers. Drift is the "operate it long-term" question.
+
+---
 
 ### 21. Incremental Indexing with File Watching
 
@@ -415,4 +753,4 @@ Influence documents:
 
 ---
 
-*Last updated: 2026-04-27 - #35 (access-based staleness, sweep-derived) landed for the next major release. Paths from earlier sessions (#38, #43, #46) carry forward.*
+*Last updated: 2026-04-28 - 1.0 punchlist track opened (`docs/1_0_punchlist.md`). High Priority entries #47-52 (must-have for 1.0): token-budget telemetry, hallucination rate, harm benchmark, CLAUDE.md baseline publication, `claude-memory show`, benchmark scoreboard. Medium Priority entries #53-56 (post-1.0): first-week ROI nudge, real-session repeat-correction detection, token-cost growth tracking, drift dashboard. Previously: 2026-04-27 - #35 (access-based staleness, sweep-derived) landed.*
