@@ -213,6 +213,7 @@ module ClaudeMemory
         details = {
           source: source,
           context_length: context_text&.length,
+          context_tokens: ClaudeMemory::Core::TokenEstimator.estimate(context_text),
           preview: context_text&.byteslice(0, CONTEXT_PREVIEW_BYTES),
           truncated: context_text ? context_text.bytesize > CONTEXT_PREVIEW_BYTES : false,
           top_fact_ids: injector.emitted_fact_ids.first(10),

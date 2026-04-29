@@ -189,6 +189,41 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
         expect(output.dig("hookSpecificOutput", "additionalContext")).to include("Docker")
       end
 
+      it "records context_tokens on the activity event" do
+        store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+        text = "decision constraint Use Docker for deployment"
+        content_id = store.upsert_content_item(
+          source: "test", session_id: "sess-1",
+          text_hash: Digest::SHA256.hexdigest(text),
+          byte_len: text.bytesize, raw_text: text
+        )
+        ClaudeMemory::Index::LexicalFTS.new(store).index_content_item(content_id, text)
+        entity_id = store.find_or_create_entity(type: "repo", name: "myapp")
+        fact_id = store.insert_fact(
+          subject_entity_id: entity_id, predicate: "decision",
+          object_literal: "Use Docker for deployment",
+          status: "active", scope: "project"
+        )
+        store.insert_provenance(
+          fact_id: fact_id, content_item_id: content_id,
+          quote: text, strength: "stated"
+        )
+        store.close
+
+        payload = {"hook_event_name" => "SessionStart"}
+        stdin.string = JSON.generate(payload)
+        command.call(["context", "--db", db_path])
+
+        check_store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+        event = check_store.activity_events.where(event_type: "hook_context").order(:id).last
+        details = JSON.parse(event[:detail_json])
+        check_store.close
+
+        expect(details["context_tokens"]).to be_a(Integer)
+        expect(details["context_tokens"]).to be > 0
+        expect(details["context_length"]).to be > 0
+      end
+
       it "outputs nothing when no facts exist" do
         payload = {"hook_event_name" => "SessionStart"}
         stdin.string = JSON.generate(payload)

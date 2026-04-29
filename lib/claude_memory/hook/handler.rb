@@ -105,7 +105,11 @@ module ClaudeMemory
 
         log_activity("hook_context",
           status: context_text ? "success" : "skipped", t0: t0,
-          details: {context_length: context_text&.length, source: source})
+          details: {
+            context_length: context_text&.length,
+            context_tokens: Core::TokenEstimator.estimate(context_text),
+            source: source
+          })
 
         {status: :ok, context: context_text}
       rescue => e

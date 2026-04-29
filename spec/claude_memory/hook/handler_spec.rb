@@ -217,5 +217,37 @@ RSpec.describe ClaudeMemory::Hook::Handler do
       expect(result[:status]).to eq(:ok)
       expect(result[:context]).to include("Redis")
     end
+
+    it "records context_tokens on the activity event when context is emitted" do
+      manager.ensure_both!
+      project_store = manager.project_store
+
+      text = "decision constraint Use Redis for caching"
+      content_id = project_store.upsert_content_item(
+        source: "test", session_id: "sess-1",
+        text_hash: Digest::SHA256.hexdigest(text),
+        byte_len: text.bytesize, raw_text: text
+      )
+      ClaudeMemory::Index::LexicalFTS.new(project_store).index_content_item(content_id, text)
+      entity_id = project_store.find_or_create_entity(type: "repo", name: "myapp")
+      fact_id = project_store.insert_fact(
+        subject_entity_id: entity_id, predicate: "decision",
+        object_literal: "Use Redis for caching",
+        status: "active", scope: "project", project_path: tmpdir
+      )
+      project_store.insert_provenance(
+        fact_id: fact_id, content_item_id: content_id,
+        quote: text, strength: "stated"
+      )
+
+      result = handler_with_manager.context(payload)
+      expect(result[:context]).not_to be_nil
+
+      event = store.activity_events.where(event_type: "hook_context").order(:id).last
+      details = JSON.parse(event[:detail_json])
+      expected_tokens = ClaudeMemory::Core::TokenEstimator.estimate(result[:context])
+      expect(details["context_tokens"]).to eq(expected_tokens)
+      expect(details["context_tokens"]).to be > 0
+    end
   end
 end
