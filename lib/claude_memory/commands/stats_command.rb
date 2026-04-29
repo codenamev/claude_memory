@@ -13,14 +13,15 @@ module ClaudeMemory
       SCOPE_PROJECT = "project"
 
       def call(args)
-        opts = parse_options(args, {scope: SCOPE_ALL, tools: false, stale: false, since_days: nil, stale_days: nil}) do |o|
+        opts = parse_options(args, {scope: SCOPE_ALL, tools: false, tokens: false, stale: false, since_days: nil, stale_days: nil}) do |o|
           OptionParser.new do |parser|
             parser.banner = "Usage: claude-memory stats [options]"
             parser.on("--scope SCOPE", ["all", "global", "project"],
               "Show stats for: all (default), global, or project") { |v| o[:scope] = v }
             parser.on("--tools", "Show MCP tool-call usage stats") { o[:tools] = true }
+            parser.on("--tokens", "Show SessionStart context-injection token budget") { o[:tokens] = true }
             parser.on("--stale", "Show facts not recalled in CLAUDE_MEMORY_STALE_DAYS (default 14)") { o[:stale] = true }
-            parser.on("--since DAYS", Integer, "Limit --tools to last N days") { |v| o[:since_days] = v }
+            parser.on("--since DAYS", Integer, "Limit --tools/--tokens to last N days") { |v| o[:since_days] = v }
             parser.on("--stale-days N", Integer, "Override staleness threshold for --stale") { |v| o[:stale_days] = v }
           end
         end
@@ -28,6 +29,10 @@ module ClaudeMemory
 
         if opts[:tools]
           return print_mcp_tool_call_stats(opts[:since_days])
+        end
+
+        if opts[:tokens]
+          return print_token_budget_stats(opts[:since_days])
         end
 
         if opts[:stale]
@@ -347,6 +352,93 @@ module ClaudeMemory
       rescue Sequel::DatabaseError, Extralite::Error => e
         stderr.puts "Error reading telemetry: #{e.message}"
         1
+      end
+
+      TOKEN_BUCKETS = [
+        ["<500", 0, 500],
+        ["500-1000", 500, 1000],
+        ["1000-2000", 1000, 2000],
+        ["2000-5000", 2000, 5000],
+        ["5000+", 5000, Float::INFINITY]
+      ].freeze
+
+      def print_token_budget_stats(since_days)
+        manager = ClaudeMemory::Store::StoreManager.new
+        db_path = manager.project_db_path
+
+        stdout.puts "SessionStart Context Token Budget"
+        stdout.puts "=" * 50
+
+        unless File.exist?(db_path)
+          stdout.puts "Project database does not exist: #{db_path}"
+          manager.close
+          return 0
+        end
+
+        db = open_readonly(db_path)
+
+        unless db.table_exists?(:activity_events)
+          stdout.puts "No activity telemetry recorded yet."
+          db.disconnect
+          manager.close
+          return 0
+        end
+
+        dataset = db[:activity_events]
+          .where(event_type: "hook_context", status: "success")
+        if since_days
+          cutoff = (Time.now - since_days * 86400).utc.iso8601
+          dataset = dataset.where { occurred_at >= cutoff }
+          stdout.puts "Window: last #{since_days} day#{"s" unless since_days == 1}"
+        else
+          stdout.puts "Window: all time"
+        end
+        stdout.puts
+
+        tokens = dataset.select_map(:detail_json).filter_map do |json|
+          next unless json
+          value = JSON.parse(json)["context_tokens"]
+          value if value.is_a?(Integer) && value > 0
+        end
+
+        if tokens.empty?
+          stdout.puts "No context injections recorded in window."
+          stdout.puts ""
+          stdout.puts "Token telemetry is recorded automatically on SessionStart hooks."
+          stdout.puts "Run a Claude Code session in this project to populate."
+          db.disconnect
+          manager.close
+          return 0
+        end
+
+        sorted = tokens.sort
+        total = sorted.size
+        stdout.puts "Sessions: #{format_number(total)}"
+        stdout.puts "p50: #{format_number(percentile(sorted, 0.50))} tokens"
+        stdout.puts "p95: #{format_number(percentile(sorted, 0.95))} tokens"
+        stdout.puts "Avg: #{format_number((sorted.sum.to_f / total).round)} tokens"
+        stdout.puts "Min: #{format_number(sorted.first)} tokens"
+        stdout.puts "Max: #{format_number(sorted.last)} tokens"
+        stdout.puts ""
+        print_token_distribution(sorted)
+
+        db.disconnect
+        manager.close
+        0
+      rescue Sequel::DatabaseError, JSON::ParserError, Extralite::Error => e
+        stderr.puts "Error reading token telemetry: #{e.message}"
+        1
+      end
+
+      def print_token_distribution(sorted)
+        total = sorted.size
+        stdout.puts "Distribution:"
+        TOKEN_BUCKETS.each do |label, low, high|
+          count = sorted.count { |t| t >= low && t < high }
+          pct = (count * 100.0 / total).round(1)
+          bar = "█" * (pct / 5).round
+          stdout.puts "  #{label.ljust(12)} #{count.to_s.rjust(5)} (#{pct.to_s.rjust(5)}%) #{bar}"
+        end
       end
 
       def print_per_tool_breakdown(dataset)

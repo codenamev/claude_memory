@@ -82,6 +82,75 @@ RSpec.describe ClaudeMemory::Commands::StatsCommand do
     end
   end
 
+  describe "--tokens" do
+    def seed_context_event(tokens, occurred_at: Time.now.utc.iso8601, status: "success")
+      store = ClaudeMemory::Store::SQLiteStore.new(project_db_path)
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "hook_context",
+        status: status,
+        session_id: "sess-#{tokens}",
+        duration_ms: 5,
+        details: {context_tokens: tokens, context_length: tokens * 4})
+      store.activity_events.where(session_id: "sess-#{tokens}").update(occurred_at: occurred_at)
+      store.close
+    end
+
+    it "reports 'database does not exist' when project DB missing" do
+      exit_code = command.call(["--tokens"])
+      expect(exit_code).to eq(0)
+      expect(stdout.string).to include("does not exist")
+    end
+
+    it "reports 'no injections' when activity_events has no successful hook_context rows" do
+      ClaudeMemory::Store::SQLiteStore.new(project_db_path).close
+      exit_code = command.call(["--tokens"])
+      expect(exit_code).to eq(0)
+      expect(stdout.string).to include("No context injections recorded in window.")
+    end
+
+    it "renders p50/p95/avg and a distribution histogram" do
+      [100, 250, 600, 1500, 3000].each { |t| seed_context_event(t) }
+
+      exit_code = command.call(["--tokens"])
+      expect(exit_code).to eq(0)
+
+      out = stdout.string
+      expect(out).to include("SessionStart Context Token Budget")
+      expect(out).to include("Sessions: 5")
+      expect(out).to include("p50: 600 tokens")
+      expect(out).to include("p95: 3,000 tokens")
+      expect(out).to include("Distribution:")
+      expect(out).to match(/<500\s+2\s+\(.*40\.0%\)/)
+    end
+
+    it "filters by --since days" do
+      old = (Time.now - 30 * 86_400).utc.iso8601
+      recent = (Time.now - 1 * 86_400).utc.iso8601
+      seed_context_event(800, occurred_at: old)
+      seed_context_event(200, occurred_at: recent)
+
+      command.call(["--tokens", "--since", "7"])
+      expect(stdout.string).to include("Sessions: 1")
+      expect(stdout.string).to include("p50: 200 tokens")
+      expect(stdout.string).to include("last 7 days")
+    end
+
+    it "ignores skipped events and rows without context_tokens" do
+      seed_context_event(800)
+      seed_context_event(400, status: "skipped")
+      store = ClaudeMemory::Store::SQLiteStore.new(project_db_path)
+      ClaudeMemory::ActivityLog.record(store,
+        event_type: "hook_context", status: "success",
+        session_id: "no-tokens", duration_ms: 5,
+        details: {context_length: 999}) # missing context_tokens
+      store.close
+
+      command.call(["--tokens"])
+      expect(stdout.string).to include("Sessions: 1")
+      expect(stdout.string).to include("p50: 800 tokens")
+    end
+  end
+
   describe "--stale" do
     def seed_stale_fact(scope:, days_ago:)
       store_path = (scope == "project") ? project_db_path : global_db_path
