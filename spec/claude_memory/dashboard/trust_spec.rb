@@ -206,5 +206,58 @@ RSpec.describe ClaudeMemory::Dashboard::Trust do
       expect(feedback[:down]).to eq(0)
       expect(feedback[:ratio_pct]).to be_nil
     end
+
+    it "returns the zero shape for token_budget when no context events exist" do
+      tb = trust.snapshot[:token_budget]
+      expect(tb).to include(p50: 0, p95: 0, avg: 0, sample_size: 0, window_days: 30)
+    end
+
+    it "computes p50/p95/avg from context_tokens in successful hook_context events" do
+      now = Time.now.utc
+      # 5 events with token counts: 100, 200, 300, 400, 500 — p50=300, p95=500, avg=300
+      [100, 200, 300, 400, 500].each_with_index do |tokens, i|
+        record_event(manager.project_store, "hook_context",
+          {context_tokens: tokens, context_length: tokens * 4},
+          occurred_at: (now - (i + 1) * 3600).iso8601)
+      end
+
+      tb = trust.snapshot[:token_budget]
+      expect(tb[:sample_size]).to eq(5)
+      expect(tb[:p50]).to eq(300)
+      expect(tb[:p95]).to eq(500)
+      expect(tb[:avg]).to eq(300)
+      expect(tb[:window_days]).to eq(30)
+    end
+
+    it "ignores events outside the 30-day window" do
+      now = Time.now.utc
+      record_event(manager.project_store, "hook_context",
+        {context_tokens: 1000},
+        occurred_at: (now - 31 * 86_400).iso8601)
+      record_event(manager.project_store, "hook_context",
+        {context_tokens: 200},
+        occurred_at: (now - 3600).iso8601)
+
+      tb = trust.snapshot[:token_budget]
+      expect(tb[:sample_size]).to eq(1)
+      expect(tb[:p50]).to eq(200)
+    end
+
+    it "ignores skipped/failed events and rows missing context_tokens" do
+      now = Time.now.utc
+      record_event(manager.project_store, "hook_context",
+        {context_tokens: 500}, status: "skipped",
+        occurred_at: (now - 3600).iso8601)
+      record_event(manager.project_store, "hook_context",
+        {context_length: 999}, # no context_tokens key
+        occurred_at: (now - 3600).iso8601)
+      record_event(manager.project_store, "hook_context",
+        {context_tokens: 250},
+        occurred_at: (now - 3600).iso8601)
+
+      tb = trust.snapshot[:token_budget]
+      expect(tb[:sample_size]).to eq(1)
+      expect(tb[:p50]).to eq(250)
+    end
   end
 end

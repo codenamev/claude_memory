@@ -31,8 +31,60 @@ module ClaudeMemory
           fingerprint: fingerprint,
           needs_review: needs_review,
           utilization: utilization,
-          feedback: feedback_summary
+          feedback: feedback_summary,
+          token_budget: token_budget
         }
+      end
+
+      # What does memory cost? Aggregates `context_tokens` from successful
+      # `hook_context` activity events over the last UTILIZATION_DAYS so a
+      # skeptical user can see the per-session token cost in p50/p95.
+      #
+      # Shape: {p50:, p95:, avg:, sample_size:, window_days:}
+      # All ints. Returns zeros when there are no events in the window.
+      def token_budget
+        store = @manager.default_store(prefer: :project)
+        return token_budget_zero unless store
+
+        cutoff = (Time.now.utc - UTILIZATION_DAYS * 86_400).iso8601
+        rows = store.activity_events
+          .where(event_type: "hook_context", status: "success")
+          .where { occurred_at >= cutoff }
+          .select(:detail_json)
+          .all
+
+        tokens = rows.filter_map do |row|
+          details = row[:detail_json] ? JSON.parse(row[:detail_json]) : {}
+          value = details["context_tokens"]
+          value if value.is_a?(Integer) && value > 0
+        end
+
+        return token_budget_zero if tokens.empty?
+
+        sorted = tokens.sort
+        {
+          p50: percentile(sorted, 0.50),
+          p95: percentile(sorted, 0.95),
+          avg: (sorted.sum.to_f / sorted.size).round,
+          sample_size: sorted.size,
+          window_days: UTILIZATION_DAYS
+        }
+      rescue Sequel::DatabaseError, JSON::ParserError => e
+        ClaudeMemory.logger.debug("Trust#token_budget failed: #{e.message}")
+        token_budget_zero
+      end
+      public :token_budget
+
+      def token_budget_zero
+        {p50: 0, p95: 0, avg: 0, sample_size: 0, window_days: UTILIZATION_DAYS}
+      end
+
+      def percentile(sorted, pct)
+        return 0 if sorted.empty?
+        idx = (sorted.size * pct).ceil - 1
+        idx = 0 if idx < 0
+        idx = sorted.size - 1 if idx >= sorted.size
+        sorted[idx]
       end
 
       private
