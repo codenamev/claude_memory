@@ -43,7 +43,7 @@ No proactive minor work here.
 Theme: *users can see what memory costs and whether it's helping.* Each item
 adds a number a skeptical user can read.
 
-### #1 Token budget telemetry — *what does memory cost?*
+### #1 Token budget telemetry — *what does memory cost?* ✅ landed 2026-04-29
 
 **Gap.** `Core::TokenEstimator` exists and is unused outside one helper. We
 have no idea what % of the SessionStart token budget memory consumes per
@@ -55,6 +55,12 @@ tokens per session over the last 30 days. Per-session count rides on every
 
 **Why this release.** Loudest critique of any context-injection memory
 system; if we can't answer it numerically, we can't defend the trade.
+
+**Status.** Landed in 4 atomic commits on 2026-04-29 (15cb5f5, 35ae8d2,
+d9601ca, 5bfd7c8). `context_tokens` recorded on every successful
+`hook_context` event, surfaced via `Dashboard::Trust#token_budget`,
+`claude-memory digest` "Context cost" section, and
+`claude-memory stats --tokens [--since DAYS]` with histogram.
 
 → improvements.md entry: *#47 Token Budget Telemetry*. Effort: 4-6h.
 

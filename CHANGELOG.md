@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Token budget telemetry** — every successful SessionStart context injection now records an estimated `context_tokens` count on its `activity_events` row. Surfaced three ways:
+  - Dashboard Trust panel emits a `token_budget` block with p50/p95/avg/sample_size over the last 30 days, so the JSON dashboard endpoint and any downstream consumer answer "what does memory cost per session?"
+  - `claude-memory digest` includes a "Context cost" subsection between activity and new-knowledge so the weekly report shows the price tag next to the value.
+  - `claude-memory stats --tokens [--since DAYS]` reports total sessions, p50/p95/avg/min/max, and a histogram across <500 / 500-1k / 1-2k / 2-5k / 5k+ buckets.
+- Pure additive — no schema migration. Historical events written before this release simply contribute zero samples until new injections accumulate.
+- First 0.11.0 milestone item from the 1.0 punchlist (Trust & Cost). Closes the "what % of my SessionStart token budget does memory consume?" gap.
+
 ## [0.10.0] - 2026-04-28
 
 ### Added
