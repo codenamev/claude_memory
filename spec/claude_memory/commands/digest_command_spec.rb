@@ -125,6 +125,28 @@ RSpec.describe ClaudeMemory::Commands::DigestCommand do
       expect(stderr.string).to include("Wrote digest to")
     end
 
+    it "renders the empty Context cost section when there are no injections" do
+      command.call([])
+      expect(stdout.string).to include("## Context cost")
+      expect(stdout.string).to include("_No context injections in the last 30 days._")
+    end
+
+    it "reports p50/p95/avg in Context cost when hook_context events exist" do
+      [200, 400, 600].each do |tokens|
+        record_event(manager.project_store, "hook_context",
+          {context_tokens: tokens, context_length: tokens * 4})
+      end
+
+      command.call([])
+
+      out = stdout.string
+      expect(out).to include("## Context cost")
+      expect(out).to include("**Per-session injected tokens (last 30d, n=3):**")
+      expect(out).to include("- p50: 400 tokens")
+      expect(out).to include("- p95: 600 tokens")
+      expect(out).to include("- avg: 400 tokens")
+    end
+
     it "surfaces feedback counts when thumbs exist" do
       record_event(manager.project_store, "recall", {result_count: 1})
       event_id = manager.project_store.activity_events.first[:id]

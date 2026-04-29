@@ -48,6 +48,8 @@ module ClaudeMemory
         lines << ""
         lines << activity_section(manager, cutoff)
         lines << ""
+        lines << context_cost_section(manager)
+        lines << ""
         lines << knowledge_section(manager, cutoff)
         lines << ""
         lines << utilization_section(manager)
@@ -122,6 +124,27 @@ module ClaudeMemory
         out.join("\n")
       rescue Sequel::DatabaseError => e
         "## New knowledge\n\n_Unavailable: #{e.message}_"
+      end
+
+      # The token cost of every SessionStart context injection, measured over
+      # the last 30 days (Trust panel's window — intentionally wider than the
+      # digest's coverage window so percentiles stay statistically meaningful
+      # on quiet weeks). Reports zero state explicitly so users know whether a
+      # missing number means "no injections" vs. "telemetry didn't fire".
+      def context_cost_section(manager)
+        tb = Dashboard::Trust.new(manager).token_budget
+        out = ["## Context cost", ""]
+        if tb[:sample_size].zero?
+          out << "_No context injections in the last #{tb[:window_days]} days._"
+        else
+          out << "**Per-session injected tokens (last #{tb[:window_days]}d, n=#{tb[:sample_size]}):**"
+          out << "- p50: #{tb[:p50]} tokens"
+          out << "- p95: #{tb[:p95]} tokens"
+          out << "- avg: #{tb[:avg]} tokens"
+        end
+        out.join("\n")
+      rescue Sequel::DatabaseError => e
+        "## Context cost\n\n_Unavailable: #{e.message}_"
       end
 
       def utilization_section(manager)
