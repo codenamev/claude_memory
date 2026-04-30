@@ -42,7 +42,8 @@ module ClaudeMemory
         "reclassify-references" => {class: ReclassifyReferencesCommand, description: "Retag existing convention facts that match reference-material heuristics"},
         "census" => {class: CensusCommand, description: "Aggregate predicate usage across project databases"},
         "dashboard" => {class: DashboardCommand, description: "Open debugging dashboard"},
-        "digest" => {class: DigestCommand, description: "Render a weekly markdown digest of memory activity"}
+        "digest" => {class: DigestCommand, description: "Render a weekly markdown digest of memory activity"},
+        "show" => {class: ShowCommand, description: "Print what memory would inject at the next SessionStart"}
       }.freeze
 
       # Find a command class by name
