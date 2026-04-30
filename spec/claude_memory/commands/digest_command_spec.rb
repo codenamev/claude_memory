@@ -131,6 +131,41 @@ RSpec.describe ClaudeMemory::Commands::DigestCommand do
       expect(stdout.string).to include("_No context injections in the last 30 days._")
     end
 
+    it "renders the empty Quality section when there are no facts yet" do
+      command.call([])
+      out = stdout.string
+      expect(out).to include("## Quality")
+      expect(out).to include("_No active facts to score yet._")
+      expect(out).to include("**Rejection rate (in window):** 0 of 0")
+    end
+
+    it "reports quality score and rejection rate when facts exist" do
+      ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Use frozen_string_literal because mutations cause subtle bugs",
+        status: "active", scope: "project"
+      )
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Bare convention without reason",
+        status: "active", scope: "project"
+      )
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "decision",
+        object_literal: "Rejected idea, no reason",
+        status: "rejected", scope: "project"
+      )
+
+      command.call([])
+
+      out = stdout.string
+      expect(out).to include("## Quality")
+      expect(out).to include("**Score:**")
+      expect(out).to include("Bare conclusions (decision/convention without reason): 1")
+      expect(out).to include("**Rejection rate (in window):** 1 of 3 extracted facts rejected")
+    end
+
     it "reports p50/p95/avg in Context cost when hook_context events exist" do
       [200, 400, 600].each do |tokens|
         record_event(manager.project_store, "hook_context",

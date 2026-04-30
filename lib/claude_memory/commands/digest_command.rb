@@ -50,6 +50,8 @@ module ClaudeMemory
         lines << ""
         lines << context_cost_section(manager)
         lines << ""
+        lines << quality_section(manager, cutoff)
+        lines << ""
         lines << knowledge_section(manager, cutoff)
         lines << ""
         lines << utilization_section(manager)
@@ -145,6 +147,50 @@ module ClaudeMemory
         out.join("\n")
       rescue Sequel::DatabaseError => e
         "## Context cost\n\n_Unavailable: #{e.message}_"
+      end
+
+      # Hallucination-rate proxy. Reports current overall quality score
+      # (suspect + bare-conclusion ratio across active facts) plus the
+      # in-window rejection rate so calibration drift is visible: if a lot
+      # of facts created in the last N days have already been rejected,
+      # the LLM is producing noise faster than usable knowledge.
+      def quality_section(manager, cutoff)
+        out = ["## Quality", ""]
+        qs = Dashboard::Trust.new(manager).quality_score
+
+        if qs[:total_active].zero?
+          out << "_No active facts to score yet._"
+        else
+          out << "**Score:** #{qs[:score]}/100 _(higher is cleaner)_"
+          out << "- Suspect (reference material): #{qs[:suspect_count]} (#{qs[:suspect_pct]}%)"
+          out << "- Bare conclusions (decision/convention without reason): #{qs[:bare_conclusion_count]} (#{qs[:bare_pct]}%)"
+        end
+
+        rate = rejection_rate_in_window(manager, cutoff)
+        out << ""
+        out << "**Rejection rate (in window):** #{rate[:rejected]} of #{rate[:created]} extracted facts rejected (#{rate[:pct]}%)"
+
+        out.join("\n")
+      rescue Sequel::DatabaseError => e
+        "## Quality\n\n_Unavailable: #{e.message}_"
+      end
+
+      # How many facts created in the digest window have since been
+      # rejected? Counts across both stores.
+      def rejection_rate_in_window(manager, cutoff)
+        created = 0
+        rejected = 0
+
+        %w[project global].each do |scope|
+          store = manager.store_if_exists(scope)
+          next unless store
+          dataset = store.facts.where { created_at >= cutoff }
+          created += dataset.count
+          rejected += dataset.where(status: "rejected").count
+        end
+
+        pct = created.zero? ? 0.0 : (rejected * 100.0 / created).round(1)
+        {created: created, rejected: rejected, pct: pct}
       end
 
       def utilization_section(manager)
