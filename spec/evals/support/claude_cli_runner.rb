@@ -6,17 +6,7 @@ require "tmpdir"
 
 module EvalHelpers
   class ClaudeCliRunner
-    MEMORY_TOOLS = %w[
-      mcp__memory__memory_store_extraction
-      mcp__memory__memory_recall
-      mcp__memory__memory_recall_index
-      mcp__memory__memory_recall_semantic
-      mcp__memory__memory_mark_distilled
-      mcp__memory__memory_undistilled
-      mcp__memory__memory_decisions
-      mcp__memory__memory_conventions
-      mcp__memory__memory_status
-    ].freeze
+    MEMORY_TOOLS = %w[mcp__memory__*].freeze
 
     def initialize(working_dir:, memory_enabled: true, allowed_tools: nil)
       @working_dir = working_dir
@@ -92,7 +82,11 @@ module EvalHelpers
     end
 
     def self.memory_enabled_runner(project_dir)
-      ClaudeCliRunner.new(working_dir: project_dir, memory_enabled: true)
+      ClaudeCliRunner.new(
+        working_dir: project_dir,
+        memory_enabled: true,
+        allowed_tools: ClaudeCliRunner::MEMORY_TOOLS
+      )
     end
   end
 end
