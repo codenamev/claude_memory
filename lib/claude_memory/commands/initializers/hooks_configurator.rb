@@ -19,8 +19,9 @@ module ClaudeMemory
           db_path = ClaudeMemory.project_db_path
           ingest_cmd = "claude-memory hook ingest --db #{db_path}"
           sweep_cmd = "claude-memory hook sweep --db #{db_path}"
+          nudge_cmd = "claude-memory hook nudge --db #{db_path}"
 
-          hooks_config = build_hooks_config(ingest_cmd, sweep_cmd)
+          hooks_config = build_hooks_config(ingest_cmd, sweep_cmd, nudge_cmd)
 
           existing = load_json_file(settings_path)
           existing["hooks"] ||= {}
@@ -37,8 +38,9 @@ module ClaudeMemory
           db_path = ClaudeMemory.global_db_path
           ingest_cmd = "claude-memory hook ingest --db #{db_path}"
           sweep_cmd = "claude-memory hook sweep --db #{db_path}"
+          nudge_cmd = "claude-memory hook nudge --db #{db_path}"
 
-          hooks_config = build_hooks_config(ingest_cmd, sweep_cmd)
+          hooks_config = build_hooks_config(ingest_cmd, sweep_cmd, nudge_cmd)
 
           existing = load_json_file(settings_path)
           existing["hooks"] ||= {}
@@ -96,7 +98,7 @@ module ClaudeMemory
 
         private
 
-        def build_hooks_config(ingest_cmd, sweep_cmd)
+        def build_hooks_config(ingest_cmd, sweep_cmd, nudge_cmd = "claude-memory hook nudge")
           context_cmd = "claude-memory hook context"
 
           {
@@ -132,7 +134,8 @@ module ClaudeMemory
                   {"type" => "command", "command" => ingest_cmd, "timeout" => 30,
                    "statusMessage" => "Saving memory..."},
                   {"type" => "command", "command" => sweep_cmd, "timeout" => 30,
-                   "statusMessage" => "Sweeping memory..."}
+                   "statusMessage" => "Sweeping memory..."},
+                  {"type" => "command", "command" => nudge_cmd, "timeout" => 5}
                 ]
               }],
               "TaskCompleted" => [{

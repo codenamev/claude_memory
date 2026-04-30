@@ -68,6 +68,11 @@
             "command": "claude-memory hook sweep",
             "timeout": 30,
             "statusMessage": "Sweeping memory..."
+          },
+          {
+            "type": "command",
+            "command": "claude-memory hook nudge",
+            "timeout": 5
           }
         ]
       }

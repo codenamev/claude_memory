@@ -59,6 +59,19 @@ RSpec.describe ClaudeMemory::Commands::InitCommand do
       expect(config["hooks"]["Stop"]).not_to be_nil
     end
 
+    it "wires SessionEnd to invoke ingest, sweep, and nudge in order" do
+      command.call([])
+      config = JSON.parse(File.read(".claude/settings.json"))
+      session_end_hooks = config.dig("hooks", "SessionEnd", 0, "hooks")
+      expect(session_end_hooks).to be_an(Array)
+      commands = session_end_hooks.map { |h| h["command"] }
+      expect(commands.map { |c| c.split(" ")[0..2].join(" ") }).to eq([
+        "claude-memory hook ingest",
+        "claude-memory hook sweep",
+        "claude-memory hook nudge"
+      ])
+    end
+
     it "configures MCP server in .claude.json" do
       exit_code = command.call([])
       expect(exit_code).to eq(0)
