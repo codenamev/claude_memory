@@ -108,7 +108,7 @@ estimate, char count.
 
 → improvements.md entry: *#51 claude-memory show*. Effort: ½d.
 
-### #7 First-week ROI nudge — *moved up from post-1.0*
+### #7 First-week ROI nudge — *moved up from post-1.0* ✅ landed 2026-04-30
 
 **Gap.** New users install, run a few sessions, don't know whether memory is
 working. The dashboard exists but they have to know to look.
@@ -120,6 +120,14 @@ via `CLAUDE_MEMORY_NO_NUDGE=1`.
 **Why this release.** Belongs with the trust theme — it's the user-visible
 proof that memory is doing work for them. Originally listed as post-1.0;
 elevating because cold-start trust deserves to land before 1.0.
+
+**Status.** Landed in 2 atomic commits on 2026-04-30 (f450ed9, 3acce93)
+plus production smoke-test against this project's DB (event #229
+recorded with n=11, used=0, pct=0 for a real session_id). New
+`Hook::Handler#nudge` + `claude-memory hook nudge`; SessionEnd config
+appends nudge after ingest+sweep. Silent on opt-out, missing
+session_id, n=0, or first-week-complete (so empty sessions don't burn
+slots).
 
 → improvements.md entry: *#53 First-Week ROI Nudge*. Effort: ½d.
 

@@ -20,6 +20,11 @@ All notable changes to this project will be documented in this file.
   - Default suppresses the raw-transcript "Pending Knowledge Extraction" dump (intended for LLM distillation, not human reading); pass `--pending` to include it.
   - `--source SOURCE` (startup/resume/clear) simulates each fresh-session entrypoint so users can preview which sections would appear.
 - Third 0.11.0 milestone item. Closes the inspectability gap — trust requires being able to see what memory will inject, the same way `cat CLAUDE.md` works.
+- **First-week ROI nudge** — at SessionEnd, memory now prints `memory contributed N facts this session, %used = X` for the first 10 sessions, then quiets. New users get user-visible proof memory is doing work for them without having to know about the dashboard. Once trust is established (or it isn't), the nudge gets out of the way.
+  - New `claude-memory hook nudge` subcommand + `Hook::Handler#nudge`. SessionEnd config now wires `[ingest, sweep, nudge]` in order.
+  - Silent on `CLAUDE_MEMORY_NO_NUDGE=1` opt-out, missing session_id, n=0 contributions, and after MAX_NUDGES emissions. The empty-session silent path doesn't burn a slot — quiet sessions don't count toward the 10.
+  - Activity event `roi_nudge` records `{n, used, pct, prior_count}` per emission so a future migration could change the threshold without re-counting from raw events.
+- Fourth 0.11.0 milestone item. Cold-start trust signal that pairs with #47 (token cost) and #48 (quality) to make the first-week answer to "is this worth it?" visible without effort.
 
 ## [0.10.0] - 2026-04-28
 
