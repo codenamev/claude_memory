@@ -519,6 +519,51 @@ Source: 2026-04-30 production verification of #48 hallucination-rate metric. Sur
 
 **Why this is in `improvements.md`.** Independently of which cause is correct, the verification of #48 surfaced a real signal worth tracking. The metric did its job (turning invisible drift into a visible 84%); now the work is the actual cleanup. Tracked here so it doesn't fall off the radar between 0.11 ship and the 1.0 soak.
 
+**Update 2026-04-30: investigation complete.** Diagnostics ran for all four causes; results recorded in `docs/quality_review.md`. Summary: cause 1 (prompt drift) explains 97% of bare conclusions; cause 4 (`/study-repo` misattribution burst) explains 100% of the 7-day rejection cluster; causes 2 and 3 ruled out. Headline metric calibration fix landed in commit `7591da4` (live 30-day window + historical block). The two systemic issues split into entries #61 and #62 below.
+
+---
+
+### 61. /study-repo Misattribution Guard
+
+Source: 2026-04-30 #60 investigation, cause 4. All 27 rejected facts in this project's 7-day window were `uses_database` (18) or `deployment_platform` (9) with `session_id=nil` (MCP-originated), all from a 2-day burst on 2026-04-23 to 04-24. The pattern: when running `/study-repo` on an external project, the LLM extracted that project's tech stack and asserted it as facts about *this* project. Cleanup happened correctly via `claude-memory reject` after detection, but the round-trip is wasteful and noisy.
+
+**Implementation.**
+
+- New `Distill::ExternalAttributionDetector` (sister to `ReferenceMaterialDetector`). Runs after extraction and before storage.
+- Heuristics: when the source content_item text contains markers like "studying X", "/study-repo", a non-current-project repo URL, or "external project", strongly bias toward `predicate=reference` for any `uses_database`/`deployment_platform`/`uses_framework` extraction.
+- Optional: extend `Hook::ContextInjector` or the distillation prompt to make this constraint explicit ("when discussing an external repository, do NOT extract its tech stack as project-level facts").
+
+**Acceptance.**
+
+- Re-run a `/study-repo` on a fresh DB; observe zero `uses_database` or `deployment_platform` facts inserted that point to the external project's tech.
+- The 27 rejected facts cluster from this project's history doesn't reappear in similar scenarios.
+
+**Effort.** ~½ day. Detector is mostly regex + content_item text inspection. Prompt addition is trivial.
+
+---
+
+### 62. Historical Bare-Conclusion Backfill
+
+Source: 2026-04-30 #60 investigation, cause 1. 34 bare-conclusion facts pre-date the 2026-04-20 reason-clause prompt commit (`f22d12f`). They satisfy the strict regex but most are factually informative ("MCP tools return dual content + structuredContent via TextSummary module" — describes mechanics implicitly without a "because"). The `quality_score` headline now correctly windows to the last 30 days (commit `7591da4`), but those 34 facts still appear in the historical line and may surface in `claude-memory show` and recall queries forever.
+
+**Implementation options (pick one).**
+
+A. **Reclassify to `legacy_observation` predicate.** New non-guarded predicate that the bare-conclusion detector ignores. Migration walks active `decision`/`convention` facts created before 2026-04-20 with no reason clause, reclassifies. Preserves the content; removes the metric pollution.
+
+B. **One-shot prompt-rewrite pass.** For each pre-2026-04-20 bare fact, run a small LLM call asking "infer the reason from the original quote/content_item text" and rewrite the object. Higher fidelity; costs ~$1-5 in API calls.
+
+C. **Retroactive rejection.** Mark them all `status=rejected`. Cheap and clean but throws away signal. Probably wrong.
+
+**Recommendation.** Option A. Cheap, reversible (predicate change is just a column update), and the facts remain queryable just outside the bare-conclusion bucket.
+
+**Acceptance.**
+
+- Run the migration; verify the historical bare-conclusion count drops by ~34.
+- Verify those facts still appear in `memory.recall` queries (predicate filter optional).
+- `digest` quality section's historical block reports a meaningfully lower number afterwards.
+
+**Effort.** ~½ day. Mostly a Sequel migration + a `claude-memory reclassify-bare-conclusions` command paralleling `reclassify-references`.
+
 ---
 
 ### 21. Incremental Indexing with File Watching
