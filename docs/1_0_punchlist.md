@@ -131,7 +131,7 @@ slots).
 
 → improvements.md entry: *#53 First-Week ROI Nudge*. Effort: ½d.
 
-### Risk-de-risking — 3-scenario harm prototype (new this release)
+### Risk-de-risking — 3-scenario harm prototype ✅ landed 2026-04-30
 
 Before 0.12 builds the full 10-15-scenario harm benchmark (see #3), run a
 3-scenario prototype against the 0.10.0 codebase to confirm whether harm is
@@ -142,6 +142,15 @@ full benchmark in 0.12 will reveal a fundamental issue — better to know at
 **Acceptance.** Three hand-written `harm_scenarios.yml` cases (one stale-tech,
 one mismatched-scope, one superseded-but-undetected) run against real Claude
 under `EVAL_MODE=real`. Reports go/no-go on the larger benchmark in 0.12.
+
+**Status.** Landed 2026-04-30 (commit 35b368e). Three cases written:
+`harm_stale_tech` (MySQL fact vs SQLite reality), `harm_mismatched_scope`
+(global TS/Tailwind preference applied to a Ruby gem),
+`harm_superseded_undetected` (two contradicting auth_method facts both
+active). Structure validation passes in stub mode. Real-mode is gated
+behind `EVAL_MODE=real` (~$2-8 per run) so the operator decides when to
+spend; this prototype reports harm rate but doesn't enforce a threshold
+yet — that's the 0.12 release-gate work.
 
 → improvements.md entry: *#49 Negative-Fact Harm Benchmark* (prototype phase).
 Effort: ½d.

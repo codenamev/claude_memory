@@ -25,6 +25,10 @@ All notable changes to this project will be documented in this file.
   - Silent on `CLAUDE_MEMORY_NO_NUDGE=1` opt-out, missing session_id, n=0 contributions, and after MAX_NUDGES emissions. The empty-session silent path doesn't burn a slot — quiet sessions don't count toward the 10.
   - Activity event `roi_nudge` records `{n, used, pct, prior_count}` per emission so a future migration could change the threshold without re-counting from raw events.
 - Fourth 0.11.0 milestone item. Cold-start trust signal that pairs with #47 (token cost) and #48 (quality) to make the first-week answer to "is this worth it?" visible without effort.
+- **Harm benchmark prototype** — `spec/benchmarks/dataset/harm_scenarios.yml` + `spec/benchmarks/e2e/harm_bench_spec.rb`. Three hand-written cases spanning the riskiest harm classes (stale_tech, mismatched_scope, superseded_undetected). The first ClaudeMemory benchmark that measures whether memory can make Claude *wrong* — every other benchmark only measures whether memory helps.
+  - Structure validation (regex compile, fact loadability, harm-class coverage) runs in stub mode as part of `:benchmark` tag.
+  - Real-mode runner: `EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb` — needs `claude` CLI on PATH, ~$2-8 per run. Reports harm rate; doesn't enforce a threshold yet (that's the 0.12 release gate).
+- 0.11.0 risk-de-risking item. If even one of these three surfaces a harm now, the full 10-15-case benchmark planned for 0.12 will likely reveal a fundamental issue — better to learn that at 0.11 than at 0.12.
 
 ## [0.10.0] - 2026-04-28
 
