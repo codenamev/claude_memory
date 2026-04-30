@@ -243,6 +243,102 @@ RSpec.describe ClaudeMemory::Dashboard::Trust do
       expect(tb[:p50]).to eq(200)
     end
 
+    it "returns score=100 with zero counts when stores are empty" do
+      qs = trust.snapshot[:quality_score]
+      expect(qs[:score]).to eq(100)
+      expect(qs[:total_active]).to eq(0)
+      expect(qs[:suspect_count]).to eq(0)
+      expect(qs[:bare_conclusion_count]).to eq(0)
+    end
+
+    it "counts suspect (reference) facts toward the quality score" do
+      ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "reference",
+        object_literal: "External library, 5,000 stars by Jane Doe",
+        status: "active", scope: "project"
+      )
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Use frozen_string_literal because mutations cause subtle bugs",
+        status: "active", scope: "project"
+      )
+
+      qs = trust.snapshot[:quality_score]
+      expect(qs[:total_active]).to eq(2)
+      expect(qs[:suspect_count]).to eq(1)
+      expect(qs[:bare_conclusion_count]).to eq(0)
+      expect(qs[:suspect_pct]).to eq(50.0)
+      expect(qs[:score]).to eq(50)
+    end
+
+    it "counts bare-conclusion decision/convention facts toward the score" do
+      ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      # 3 facts: 2 with reasons, 1 bare convention
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "decision",
+        object_literal: "Adopt sqlite-vec so that semantic recall stays in-process",
+        status: "active", scope: "project"
+      )
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Always use bundle exec to avoid version drift",
+        status: "active", scope: "project"
+      )
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Use 4-space indentation",
+        status: "active", scope: "project"
+      )
+
+      qs = trust.snapshot[:quality_score]
+      expect(qs[:total_active]).to eq(3)
+      expect(qs[:bare_conclusion_count]).to eq(1)
+      expect(qs[:suspect_count]).to eq(0)
+      expect(qs[:bare_pct]).to be_within(0.1).of(33.3)
+      expect(qs[:score]).to eq(67)
+    end
+
+    it "aggregates across project and global stores" do
+      project_ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      manager.project_store.insert_fact(
+        subject_entity_id: project_ent, predicate: "convention",
+        object_literal: "Project bare convention",
+        status: "active", scope: "project"
+      )
+      global_ent = manager.global_store.find_or_create_entity(type: "concept", name: "user")
+      manager.global_store.insert_fact(
+        subject_entity_id: global_ent, predicate: "reference",
+        object_literal: "Global suspect material",
+        status: "active", scope: "global"
+      )
+
+      qs = trust.snapshot[:quality_score]
+      expect(qs[:total_active]).to eq(2)
+      expect(qs[:suspect_count]).to eq(1)
+      expect(qs[:bare_conclusion_count]).to eq(1)
+      expect(qs[:score]).to eq(0)
+    end
+
+    it "ignores superseded facts" do
+      ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "reference",
+        object_literal: "Old reference, deprecated",
+        status: "superseded", scope: "project"
+      )
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Use frozen_string_literal because of immutability",
+        status: "active", scope: "project"
+      )
+
+      qs = trust.snapshot[:quality_score]
+      expect(qs[:total_active]).to eq(1)
+      expect(qs[:suspect_count]).to eq(0)
+      expect(qs[:score]).to eq(100)
+    end
+
     it "ignores skipped/failed events and rows missing context_tokens" do
       now = Time.now.utc
       record_event(manager.project_store, "hook_context",

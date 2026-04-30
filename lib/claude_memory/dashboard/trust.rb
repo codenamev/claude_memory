@@ -32,8 +32,75 @@ module ClaudeMemory
           needs_review: needs_review,
           utilization: utilization,
           feedback: feedback_summary,
-          token_budget: token_budget
+          token_budget: token_budget,
+          quality_score: quality_score
         }
+      end
+
+      # The trust panel's hallucination-rate proxy. Counts two pollution
+      # signals across all active facts in both stores:
+      #
+      #   - suspect: facts that ReferenceMaterialDetector retagged from
+      #     `convention` to `reference` predicate (descriptions of external
+      #     projects mislabeled as user conventions).
+      #   - bare_conclusion: `decision` / `convention` facts whose object
+      #     skipped the prompt-mandated reason clause and so are dead
+      #     weight once the originating context is gone.
+      #
+      # Score = 100 - (suspect_pct + bare_pct), clamped 0..100. Lower is
+      # worse. Returns 100 (perfect) when there are no facts yet so a
+      # fresh install isn't penalized for an empty DB.
+      def quality_score
+        breakdown = aggregate_quality_counts
+        total = breakdown[:total_active]
+
+        return quality_score_zero if total.zero?
+
+        suspect_pct = (breakdown[:suspect_count] * 100.0 / total).round(1)
+        bare_pct = (breakdown[:bare_conclusion_count] * 100.0 / total).round(1)
+        score = (100 - (suspect_pct + bare_pct)).clamp(0, 100).round
+
+        breakdown.merge(
+          suspect_pct: suspect_pct,
+          bare_pct: bare_pct,
+          score: score
+        )
+      rescue Sequel::DatabaseError => e
+        ClaudeMemory.logger.debug("Trust#quality_score failed: #{e.message}")
+        quality_score_zero
+      end
+      public :quality_score
+
+      def quality_score_zero
+        {
+          total_active: 0,
+          suspect_count: 0,
+          bare_conclusion_count: 0,
+          suspect_pct: 0.0,
+          bare_pct: 0.0,
+          score: 100
+        }
+      end
+
+      def aggregate_quality_counts
+        detector = Distill::BareConclusionDetector.new
+        suspect = 0
+        bare = 0
+        total = 0
+
+        %w[project global].each do |scope|
+          store = @manager.store_if_exists(scope)
+          next unless store
+          dataset = store.facts.where(status: "active")
+          total += dataset.count
+          suspect += dataset.where(predicate: "reference").count
+          dataset.where(predicate: %w[decision convention])
+            .select(:predicate, :object_literal)
+            .all
+            .each { |row| bare += 1 if detector.bare_conclusion?(row) }
+        end
+
+        {total_active: total, suspect_count: suspect, bare_conclusion_count: bare}
       end
 
       # What does memory cost? Aggregates `context_tokens` from successful
