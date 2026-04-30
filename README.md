@@ -140,7 +140,41 @@ File-searchable questions ("what version is this?") and one-shot code generation
 - **Claude-Powered**: Uses Claude's intelligence to extract facts (no API key needed)
 - **Token Efficient**: 10x reduction in memory queries with progressive disclosure
 - **Database Maintenance**: Compact, export, and backup commands
-- **Built-in Observability** (0.10.0+): `claude-memory dashboard` opens a local web UI with a moments feed, trust panel, conflicts dedup, knowledge index, 👍/👎 feedback, and a 30-day utilization ratio. See **[Dashboard guide →](docs/dashboard.md)**. `claude-memory digest` writes a weekly markdown report; `claude-memory census` audits the predicate vocabulary across projects.
+- **Built-in Observability** (0.10.0+): `claude-memory dashboard` opens a local web UI with a moments feed, trust panel (token budget, quality score, utilization, feedback), conflicts dedup, knowledge index, and 👍/👎 feedback. See **[Dashboard guide →](docs/dashboard.md)**. `claude-memory digest` writes a weekly markdown report (Activity, Context cost, Quality, New knowledge, Utilization, Conflicts, Feedback); `claude-memory show` prints what would be injected next SessionStart; `claude-memory census` audits the predicate vocabulary across projects.
+
+## What's New in 0.11.0
+
+Five user-visible signals so you can answer "is memory still worth it?" with
+numbers, not vibes:
+
+- **Token budget telemetry** — every SessionStart context injection now
+  records its estimated `context_tokens`. `claude-memory stats --tokens
+  [--since DAYS]` reports p50/p95/avg/min/max plus a histogram across
+  <500 / 500-1k / 1-2k / 2-5k / 5k+ buckets so you can see the per-session
+  cost at a glance. The dashboard's Trust panel and `claude-memory digest`
+  surface the same numbers.
+- **Hallucination-rate metric** — the dashboard now scores how *clean* the
+  fact base is, not just how full it is. `Distill::BareConclusionDetector`
+  flags `decision` / `convention` facts that skipped the reason-clause
+  requirement. Trust panel shows `quality_score` (live 30-day window with
+  historical baseline beneath). `claude-memory digest` adds a Quality
+  section with rejection rate.
+- **`claude-memory show`** — new command prints what memory *would* inject
+  at the next SessionStart in plain Markdown. Footer reports fact count,
+  ~token estimate, and char count so you see the cost at a glance. Default
+  hides the raw-transcript "Pending Knowledge" dump for readability;
+  `--pending` opts in. `--source startup|resume|clear` simulates each
+  fresh-session entrypoint.
+- **First-week ROI nudge** — at SessionEnd, memory now prints
+  `memory contributed N facts this session, %used = X` for the first 10
+  sessions, then quiets. Cold-start trust signal — you don't have to know
+  about the dashboard. Opt out with `CLAUDE_MEMORY_NO_NUDGE=1`.
+- **Harm benchmark prototype** — first ClaudeMemory benchmark that
+  measures whether memory can make Claude *wrong*. Three hand-written
+  cases (stale-tech, mismatched-scope, superseded-but-undetected) under
+  `spec/benchmarks/e2e/harm_bench_spec.rb`. Real-mode run on the 0.11
+  release reported 0/3 harm; the full 10-15-case corpus + release gate
+  lands in 0.12.
 
 ## What's New in 0.10.0
 

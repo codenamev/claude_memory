@@ -2,20 +2,37 @@
 
 module ClaudeMemory
   module Dashboard
-    # Sidebar data for the feed-first dashboard. Three things:
+    # Sidebar data for the feed-first dashboard. Six surfaces, each
+    # answering a different "is memory helping/costing/clean?" question:
     #
-    # 1. Moments this week + week-over-week delta — the headline value number.
-    #    A moment is any meaningful activity event (recall hit, extraction,
-    #    context injection, conflict detected). Ingest-only events don't count
-    #    because they're not directly user-visible value.
+    # 1. Moments this week + week-over-week delta — the headline value
+    #    number. A moment is any meaningful activity event (recall hit,
+    #    extraction, context injection, conflict detected). Ingest-only
+    #    events don't count because they're not directly user-visible value.
     #
     # 2. "What memory knows about you" — up to 5 global facts rendered as
-    #    plain English. This is the trust panel's most compelling surface:
-    #    users can sanity-check what's being injected into their sessions.
+    #    plain English. The trust panel's most compelling surface: users
+    #    can sanity-check what's being injected into their sessions.
     #
-    # 3. Needs review — open conflicts plus facts that have gone stale
-    #    (active but never recalled in the last N days). A single actionable
-    #    count; the feed surfaces the individual items.
+    # 3. Needs review — open conflicts plus stale facts (active but never
+    #    recalled in the last N days) plus empty recalls (queries that
+    #    returned nothing). A single actionable count; the feed surfaces
+    #    the individual items.
+    #
+    # 4. Utilization (30d) — of facts extracted in the last 30 days, how
+    #    many has Claude actually surfaced via recall or context injection.
+    #    Low ratios are a signal too: memory accumulating knowledge that
+    #    Claude isn't reaching for.
+    #
+    # 5. Token budget (30d, 0.11.0+) — p50/p95/avg `context_tokens`
+    #    injected per SessionStart. Answers "what does memory cost per
+    #    session?" via numbers a skeptical user can read.
+    #
+    # 6. Quality score (live + historical, 0.11.0+) — hallucination-rate
+    #    proxy: 100 - (suspect_pct + bare_pct), clamped 0..100. Live is
+    #    over the last UTILIZATION_DAYS; historical mirrors the same
+    #    calculation across all active facts as a supplementary baseline.
+    #    See `quality_review.md` 2026-04-30 note for why the split exists.
     class Trust
       WEEK_SECONDS = 7 * 86_400
       UTILIZATION_DAYS = 30

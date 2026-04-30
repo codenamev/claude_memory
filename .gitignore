@@ -24,3 +24,6 @@ mise.toml
 
 # Pre-compiled gems
 *.gem
+
+# Runtime locks (e.g. /loop / scheduled-task harness state)
+.claude/scheduled_tasks.lock

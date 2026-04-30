@@ -5,9 +5,11 @@ require "optparse"
 module ClaudeMemory
   module Commands
     # Weekly digest — a markdown summary of what memory did over the last N days.
-    # Rolls up moment counts, new knowledge, utilization, conflicts, and user
-    # feedback so users can see the value memory is delivering without
-    # needing to visit the dashboard.
+    # Sections (in order): Activity, Context cost, Quality, New knowledge,
+    # Utilization, Conflicts, Feedback. The Context cost and Quality
+    # sections (added 0.11.0) read from `Dashboard::Trust#token_budget` and
+    # `#quality_score` so users see the cost/pollution side-by-side with
+    # the value side without needing to visit the dashboard.
     #
     # The data it aggregates all already exists (activity_events, facts,
     # conflicts, moment_feedback); this command only shapes it into a report.

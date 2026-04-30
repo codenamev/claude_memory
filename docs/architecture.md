@@ -40,7 +40,7 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
 
 **Components:**
 - **CLI** (`cli.rb`): Thin router that dispatches to command classes
-- **Commands** (`commands/`): 32 command classes, each handling one CLI command
+- **Commands** (`commands/`): 34 command classes, each handling one CLI command
 - **Configuration** (`configuration.rb`): Centralized ENV access and path calculation
 
 **Key Principles:**
@@ -205,7 +205,7 @@ end
 - **Server**: WEBrick HTTP server (default port 3377), starts via `claude-memory dashboard`
 - **API**: HTTP-shape glue + per-endpoint formatting; routes/delegates to panel classes
 - **Panels** (each backed by a dedicated class with focused responsibility):
-  - `Trust`: weekly moments, fingerprint, utilization, feedback ratio, needs-review
+  - `Trust`: weekly moments, fingerprint, utilization, feedback ratio, needs-review, **token_budget** (p50/p95/avg over 30d, 0.11.0+), **quality_score** (live 30-day window + historical baseline, 0.11.0+)
   - `Moments`: feed-first activity stream with kind classification
   - `Knowledge`: predicate-grouped fact summary (incl. References section)
   - `Conflicts`: display-layer dedup with bulk-reject helper
@@ -361,7 +361,7 @@ FileSystem (write)
 - Value objects (SessionId, TranscriptPath, FactId)
 - Centralized Configuration
 - 4 domain models with business logic
-- 32 command classes
+- 34 command classes
 - 25 MCP tools
 - Semantic search with local embeddings (FastEmbed + TF-IDF fallback)
 - Schema v17 with WAL mode

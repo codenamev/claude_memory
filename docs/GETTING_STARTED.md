@@ -593,8 +593,10 @@ Now that you're up and running:
 | `claude-memory changes` | Recent updates |
 | `claude-memory conflicts` | Show contradictions |
 | `claude-memory dashboard` | Open the local web UI (0.10.0+) |
-| `claude-memory digest --since 7` | Markdown report of the last 7 days (0.10.0+) |
+| `claude-memory digest --since 7` | Markdown report of the last 7 days (0.10.0+; gains Context cost + Quality sections in 0.11.0) |
+| `claude-memory show [--pending] [--source]` | Print what memory would inject at next SessionStart (0.11.0+) |
 | `claude-memory stats --stale` | List facts not recalled recently (0.10.0+) |
+| `claude-memory stats --tokens [--since DAYS]` | SessionStart context-token budget histogram (0.11.0+) |
 | `claude-memory stats --tools` | MCP tool-call telemetry (0.9.0+) |
 | `claude-memory census` | Privacy-safe predicate audit across projects (0.10.0+) |
 | `claude-memory dedupe-conflicts --dry-run` | Preview historical conflict-row dedup (0.10.0+) |

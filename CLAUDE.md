@@ -163,7 +163,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Each command is a separate class (HelpCommand, DoctorCommand, etc.)
   - All commands inherit from BaseCommand
   - Dependency injection for I/O (stdout, stderr, stdin)
-  - 32 commands total, each focused on single responsibility
+  - 34 commands total, each focused on single responsibility
 
 - **`Configuration`**: Centralized ENV access (`configuration.rb`)
   - Single source of truth for paths and environment variables
@@ -209,6 +209,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Pluggable distiller design (current: NullDistiller stub)
   - Extracts entities, facts, scope hints from content
   - `ReferenceMaterialDetector`: classifies "X is a plugin/library/tool" templates, LOC counts, "by Firstname Lastname" attributions as reference material. Runs in `ManagementHandlers#store_extraction` so mislabeling can't persist
+  - `BareConclusionDetector` (0.11.0+): production-side mirror of the SessionStart prompt's reason-clause requirement. Pure function — flags `decision` / `convention` facts whose object lacks a reason-clause signal ("because", "so that", "to avoid", etc.). Powers the `quality_score` metric on the Trust panel and the digest's Quality section.
   - SessionStart distillation prompt enforces reason clauses ("because…", "so that…") for `decision` and `convention` predicates — bare conclusions are explicitly disallowed
 
 - **`Resolve`**: Truth maintenance and conflict resolution (`resolve/`)
@@ -249,7 +250,7 @@ Key tables (defined in `sqlite_store.rb`):
 - `fact_links`: Supersession and conflict relationships
 - `conflicts`: Open contradictions
 - `mcp_tool_calls`: MCP server tool invocation telemetry (schema v13)
-- `activity_events`: Hook/recall/context/sweep telemetry (schema v15) — powers the dashboard timeline, moments feed, efficacy reports
+- `activity_events`: Hook/recall/context/sweep/nudge telemetry (schema v15) — powers the dashboard timeline, moments feed, efficacy reports. Event types: `hook_ingest`, `hook_context` (carries `context_tokens` since 0.11.0), `hook_sweep`, `hook_publish`, `recall`, `store_extraction`, `roi_nudge` (since 0.11.0).
 - `moment_feedback`: Per-moment 👍/👎 verdicts with optional notes (schema v16) — unique on event_id, repeat clicks upsert
 
 Facts include:
@@ -331,7 +332,7 @@ Also update `SECTION_MAP` if the predicate should appear in a specific snapshot 
 
 - `lib/claude_memory.rb`: Main module, requires, database path helpers
 - `lib/claude_memory/cli.rb`: Thin command router (41 lines)
-- `lib/claude_memory/commands/`: Individual command classes (28 commands)
+- `lib/claude_memory/commands/`: Individual command classes (34 commands)
 - `lib/claude_memory/configuration.rb`: Centralized configuration and ENV access
 - `lib/claude_memory/domain/`: Domain models (Fact, Entity, Provenance, Conflict)
 - `lib/claude_memory/core/`: Value objects and null objects
@@ -372,6 +373,13 @@ ClaudeMemory integrates with Claude Code via hooks in `.claude/settings.json`:
 - **Sweep hook**: Triggers on PreCompact/SessionEnd events
   - Runs time-bounded maintenance on both databases
   - Cleans up vec0 entries for superseded/expired facts
+
+- **Nudge hook** (0.11.0+): Triggers on SessionEnd, fires after ingest+sweep
+  - Calls `claude-memory hook nudge`
+  - For the first 10 sessions only, prints "memory contributed N facts this session, %used = X" to stdout so new users see ROI inline before they discover the dashboard
+  - Records `roi_nudge` activity_events; quiets after `MAX_NUDGES` emissions
+  - Opt out with `CLAUDE_MEMORY_NO_NUDGE=1` (no event recorded on opt-out)
+  - Empty sessions (n=0) silently no-op so quiet sessions don't burn nudge slots
 
 Hook commands read JSON payloads from stdin for robustness. Supports `--async` flag for non-blocking execution.
 

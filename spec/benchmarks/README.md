@@ -95,6 +95,24 @@ LongMemEval-inspired end-to-end scenarios across 5 memory abilities:
 
 Each scenario specifies `acceptance_keywords` (must appear), `rejection_keywords` (must not appear), and a pass `threshold`.
 
+### harm_scenarios.yml (3 scenarios, prototype) *(0.11.0+)*
+
+The first ClaudeMemory benchmark that measures whether memory can make Claude **wrong**. Every other benchmark measures whether memory helps; without this signal, "memory helps" is unfalsifiable.
+
+Three hand-written cases spanning the riskiest harm classes:
+
+| Harm class | What it tests |
+|---|---|
+| `stale_tech` | Memory asserts MySQL; project actually uses SQLite. Does Claude write MySQL adapter code blindly, or surface the right tech? |
+| `mismatched_scope` | Global TS/Tailwind preference vs. a Ruby gem. Does Claude apply the irrelevant global fact, or use Ruby idioms? |
+| `superseded_undetected` | Two contradicting `auth_method` facts both still active (HTTP Basic + JWT). Does Claude silently pick one (often the older), or flag the contradiction? |
+
+Each case scores `harm` if the response contains a `harm_pattern` AND no `safe_indicator`, `safe` otherwise.
+
+Run via `EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb` (~30s/scenario, ~$2-8 per full run). Reports harm rate; doesn't enforce a threshold yet (>1% gate lands in 0.12 with the full 10-15-case corpus).
+
+**0.11 prototype baseline:** 0/3 harm.
+
 ## Metrics
 
 ### IR Metrics (implemented in `benchmark_helper.rb`)

@@ -31,7 +31,8 @@ The dashboard is **feed-first**: the main view is a chronological stream of
 
 ### Sidebar — Trust
 
-Three at-a-glance signals so you can answer "is memory helping?" in one look:
+At-a-glance signals so you can answer "is memory helping?" — and "what does
+it cost?" — in one look:
 
 - **This week's moments** — count of value-producing events (recall hits,
   context injections, extractions). Includes a week-over-week delta.
@@ -40,6 +41,16 @@ Three at-a-glance signals so you can answer "is memory helping?" in one look:
 - **Needs review** — open conflicts (deduped to distinct contradictions) +
   stale facts (active but not recalled in the configured window) + empty
   recalls (queries that returned nothing).
+- **Token budget (30d)** *(0.11.0+)* — p50/p95/avg `context_tokens` injected
+  per SessionStart over the last 30 days, with sample size. Answers "what
+  does memory cost per session?" — pairs with the digest's "Context cost"
+  section and `claude-memory stats --tokens`.
+- **Quality score (live, 30d)** *(0.11.0+)* — 0–100 hallucination-rate
+  proxy. `score = 100 - (suspect_pct + bare_pct)` where suspect = facts
+  retagged as `predicate=reference` and bare = decision/convention facts
+  whose object skipped the prompt-mandated reason clause. Headline is the
+  live 30-day window; the underlying snapshot also exposes a `historical`
+  block over all active facts for context. Returns 100 on empty stores.
 - **Utilization (30d)** — of facts extracted in the last 30 days, what % has
   Claude actually surfaced via recall or context injection. Color-coded
   (green ≥40%, yellow ≥15%, red below). Hidden on fresh installs.
@@ -161,8 +172,17 @@ WAL writer lock open across page loads.
 ## Related CLI
 
 - `claude-memory digest [--since DAYS] [--output FILE]` — markdown report of
-  the same Trust + Knowledge + Conflicts + Feedback signals, suitable for
-  email or commit-into-repo.
+  the same Trust + Knowledge + Conflicts + Feedback signals plus
+  **Context cost** (token-budget p50/p95) and **Quality** (score + rejection
+  rate) sections. Suitable for email or commit-into-repo.
+- `claude-memory show [--pending] [--source SOURCE]` *(0.11.0+)* — print
+  what memory would inject at the next SessionStart in plain Markdown.
+  Same `Hook::ContextInjector` path real sessions use, so the output
+  matches what Claude actually receives. Footer reports fact count, ~token
+  estimate, and char count.
+- `claude-memory stats --tokens [--since DAYS]` *(0.11.0+)* — token budget
+  histogram (p50/p95/avg/min/max + bucketed distribution) for SessionStart
+  context injections. Same data the Trust panel's Token budget block aggregates.
 - `claude-memory census [--root DIR]` — privacy-safe cross-project
   predicate vocabulary scan; pairs with the Knowledge panel for "what
   predicates does my whole tree use?".
