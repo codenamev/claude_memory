@@ -483,6 +483,44 @@ Source: 2026-04-28 path-to-1.0 review (`docs/1_0_punchlist.md` #11). Added after
 
 ---
 
+### 60. LLM Extractor Calibration Drift (surfaced by #48)
+
+Source: 2026-04-30 production verification of #48 hallucination-rate metric. Surfaced when the metric was first run against real data on this very project.
+
+**The signal.** First run of `claude-memory digest` against `claude_memory/.claude/memory.sqlite3` after the metric landed:
+
+| Number | Value | Verdict |
+|---|---|---|
+| Quality score | 39/100 | bad |
+| Suspect (predicate=`reference`) | 2 / 59 (3.4%) | acceptable |
+| Bare conclusions (decision/convention without reason) | 34 / 59 (57.6%) | poor |
+| 7-day rejection rate | 27 of 32 facts (84.4%) | very bad |
+
+**What it means.** The 84% rejection rate over 7 days says the LLM extractor in this project was producing noise faster than usable knowledge — almost everything new it created got rejected within a week. The 57.6% bare-conclusion rate confirms the same drift from the prompt's *"every decision/convention MUST embed a reason clause"* requirement: the prompt asks for "because…" / "so that…" / "to avoid…" but recent extractions skipped the reason clause majority of the time.
+
+**Why this is a finding, not a metric bug.** Spot-checked 5 flagged + 5 unflagged facts on 2026-04-30; the detector's regex correctly matches the prompt's strict reason-clause vocabulary in both directions. Not a false-positive issue. The metric is doing what it was designed to do: surface real LLM calibration drift that was previously invisible.
+
+**Possible causes (to investigate).**
+
+1. **Prompt drift in `lib/claude_memory/commands/skills/distill-transcripts.md`** — the reason-clause requirement may have been added to the prompt after a chunk of older facts were already extracted. Mostly historical noise rather than ongoing extraction problem. → check `git log -p lib/claude_memory/commands/skills/distill-transcripts.md` for when the reason-clause section landed and whether bare-conclusion facts cluster pre-that-commit.
+2. **Auto-memory mirror regurgitation** — the `Hook::AutoMemoryMirror` (0.10.0) injects auto-memory file content as extraction candidates at SessionStart. If those auto-memory files have bare-conclusion content (likely, since they're written by Claude with no reason-clause discipline), the LLM may be re-extracting them faithfully without injecting reasons that weren't in the source. → grep auto-memory file content for the same bare conclusions appearing in flagged DB facts.
+3. **Reference-material guard too narrow** — `ReferenceMaterialDetector` only retags `convention` predicates; "From QMD restudy: adopt X" facts (clearly third-party-project descriptions) come back as `decision` rather than `reference` and stay in the corpus. → expand `GUARDED_PREDICATES` to include `decision` for the same patterns.
+4. **High rejection rate is correct + the corpus is junky** — 84% rejection in last 7 days might mean we (the team) are correctly rejecting noise that the LLM is producing too aggressively. → check whether rejected facts cluster by source (transcript topic, hook event type, time-of-day).
+
+**Acceptance / next steps.**
+
+- Investigation note in `docs/quality_review.md` capturing which of (1)–(4) above explains the bulk of the drift.
+- If prompt drift (cause 1): the historical bulk-flag is fine, the live extraction rate is what matters. Expose "extraction rate" over a tighter window (last 24h vs 30-day baseline) so calibration drift becomes visible without historical noise drowning the signal.
+- If auto-memory regurgitation (cause 2): patch the auto-memory-mirror prompt or distillation prompt to require reason-clause synthesis even when source text is bare.
+- If reference-material guard too narrow (cause 3): expand `Distill::ReferenceMaterialDetector::GUARDED_PREDICATES` and re-run `claude-memory reclassify-references --predicate decision` against active corpus.
+- If correct + junky (cause 4): the metric is healthy; the cleanup is `claude-memory reject` runs against high-frequency junk.
+
+**Effort.** Investigation: 0.5d. Fix: depends on cause.
+
+**Why this is in `improvements.md`.** Independently of which cause is correct, the verification of #48 surfaced a real signal worth tracking. The metric did its job (turning invisible drift into a visible 84%); now the work is the actual cleanup. Tracked here so it doesn't fall off the radar between 0.11 ship and the 1.0 soak.
+
+---
+
 ### 21. Incremental Indexing with File Watching
 
 Source: grepai study (reinforced 2026-03-02)
