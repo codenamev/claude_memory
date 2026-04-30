@@ -16,6 +16,10 @@ All notable changes to this project will be documented in this file.
   - Dashboard Trust panel emits a `quality_score` block aggregating across project + global active facts: `suspect_count` (predicate=reference, retagged by ReferenceMaterialDetector), `bare_conclusion_count`, percentages, and an overall 0–100 score (higher = cleaner). Returns 100 on empty stores so fresh installs aren't penalized.
   - `claude-memory digest` includes a "Quality" section showing the score breakdown plus the in-window rejection rate ("of facts created in the last 7 days, X% have been rejected since"), so calibration drift is visible.
 - Second 0.11.0 milestone item. Pairs with token-budget telemetry to answer "is memory still worth its cost?" via two skeptic-friendly numbers.
+- **`claude-memory show`** — new CLI command prints what memory would inject at the next SessionStart in plain Markdown. Runs the exact `Hook::ContextInjector` path real sessions use, so output matches what Claude actually receives. Footer reports fact count, ~token estimate, and char count so users see the SessionStart cost at a glance.
+  - Default suppresses the raw-transcript "Pending Knowledge Extraction" dump (intended for LLM distillation, not human reading); pass `--pending` to include it.
+  - `--source SOURCE` (startup/resume/clear) simulates each fresh-session entrypoint so users can preview which sections would appear.
+- Third 0.11.0 milestone item. Closes the inspectability gap — trust requires being able to see what memory will inject, the same way `cat CLAUDE.md` works.
 
 ## [0.10.0] - 2026-04-28
 

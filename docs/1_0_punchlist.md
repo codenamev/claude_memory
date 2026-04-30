@@ -85,7 +85,7 @@ with #1 — together they answer the "is this still worth it?" question.
 
 → improvements.md entry: *#48 Hallucination Rate Metric*. Effort: 1d.
 
-### #5 `claude-memory show` — human-readable "what would be injected"
+### #5 `claude-memory show` — human-readable "what would be injected" ✅ landed 2026-04-29
 
 **Gap.** Inspecting memory state today requires the dashboard or several CLI
 commands (`recall`, `stats`, `census`). The CLAUDE.md alternative is
@@ -99,6 +99,12 @@ matching the snapshot format.
 
 **Why this release.** Trust requires inspectability. A user who can't see what
 memory will inject can't develop confidence in it.
+
+**Status.** Landed 2026-04-29 (commit 2586bb3). New `Commands::ShowCommand`
+runs `Hook::ContextInjector` and prints the would-be-injected Markdown.
+Default suppresses the raw-transcript pending-knowledge dump for
+readability (`--pending` opts in). Footer reports fact count, token
+estimate, char count.
 
 → improvements.md entry: *#51 claude-memory show*. Effort: ½d.
 
