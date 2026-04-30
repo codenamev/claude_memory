@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-30
+
+Theme: **Trust & Cost** — five user-visible signals that answer "is memory still worth it?" with numbers a skeptical user can read in <30 seconds.
+
 ### Added
 
 - **Token budget telemetry** — every successful SessionStart context injection now records an estimated `context_tokens` count on its `activity_events` row. Surfaced three ways:
@@ -28,7 +32,21 @@ All notable changes to this project will be documented in this file.
 - **Harm benchmark prototype** — `spec/benchmarks/dataset/harm_scenarios.yml` + `spec/benchmarks/e2e/harm_bench_spec.rb`. Three hand-written cases spanning the riskiest harm classes (stale_tech, mismatched_scope, superseded_undetected). The first ClaudeMemory benchmark that measures whether memory can make Claude *wrong* — every other benchmark only measures whether memory helps.
   - Structure validation (regex compile, fact loadability, harm-class coverage) runs in stub mode as part of `:benchmark` tag.
   - Real-mode runner: `EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb` — needs `claude` CLI on PATH, ~$2-8 per run. Reports harm rate; doesn't enforce a threshold yet (that's the 0.12 release gate).
-- 0.11.0 risk-de-risking item. If even one of these three surfaces a harm now, the full 10-15-case benchmark planned for 0.12 will likely reveal a fundamental issue — better to learn that at 0.11 than at 0.12.
+- 0.11.0 risk-de-risking item. If even one of these three surfaces a harm now, the full 10-15-case benchmark planned for 0.12 will likely reveal a fundamental issue — better to learn that at 0.11 than at 0.12. **Real-mode prototype run on 2026-04-30 reported 0/3 harm** — green light to expand to the full corpus in 0.12.
+
+### Changed
+
+- **Hallucination-rate metric calibration** — `Dashboard::Trust#quality_score` now reports a windowed (last 30d) "live" score as the headline plus a "historical" block over all active facts. Production verification on 2026-04-30 (recorded in `docs/quality_review.md`) showed the unwindowed metric was technically correct but pragmatically misleading: 97% of bare-conclusion facts pre-dated the 2026-04-20 reason-clause prompt commit, and the entire 7-day rejection cluster was a single-class systemic failure (a `/study-repo` burst), not ongoing noise. The split makes the metric actionable: live score = ongoing extraction quality, historical = legacy data. The digest's "Quality" section uses the live score as the headline.
+
+### Fixed
+
+- Real-eval CLI runner now passes `allowed_tools` through explicitly so the harm benchmark and other real-mode benches can pre-allow MCP memory tools without per-test wiring.
+
+### Upgrade Notes
+
+- No schema migration. All new features ship purely additive.
+- Hooks run the installed gem from PATH, not the working tree. After upgrading, `bundle exec rake install` (or `gem install claude_memory`) is required for the new SessionEnd nudge, `claude-memory show` command, `--tokens` stats flag, and `context_tokens` activity-event field to actually fire on real hook events.
+- Existing `quality_score` consumers will see additional fields (`window_days`, `historical`) in the snapshot. The original keys (`score`, `total_active`, `suspect_count`, `bare_conclusion_count`, `suspect_pct`, `bare_pct`) remain at the top level and now reflect the 30-day live window — historical numbers move to the `historical` sub-hash.
 
 ## [0.10.0] - 2026-04-28
 
