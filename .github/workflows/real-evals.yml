@@ -10,6 +10,9 @@ on:
         required: false
         default: 'all'
 
+permissions:
+  contents: write
+
 jobs:
   real-evals:
     runs-on: ubuntu-latest
