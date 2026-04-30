@@ -64,7 +64,7 @@ d9601ca, 5bfd7c8). `context_tokens` recorded on every successful
 
 → improvements.md entry: *#47 Token Budget Telemetry*. Effort: 4-6h.
 
-### #2 Hallucination rate as a first-class trust metric
+### #2 Hallucination rate as a first-class trust metric ✅ landed 2026-04-29
 
 **Gap.** `ReferenceMaterialDetector` already classifies suspect facts and we
 know from the #34 audit that ~25% of facts had embedded reasoning (i.e.
@@ -78,6 +78,10 @@ rejected within a week?") so calibration drift is visible.
 
 **Why this release.** Pollution rate matters as much as recall rate. Pairs
 with #1 — together they answer the "is this still worth it?" question.
+
+**Status.** Landed in 3 atomic commits on 2026-04-29 (27fa6af, 4d1c5bf,
+0b72fa4). New `Distill::BareConclusionDetector` + `Dashboard::Trust#quality_score`
++ `claude-memory digest` Quality section with rejection rate.
 
 → improvements.md entry: *#48 Hallucination Rate Metric*. Effort: 1d.
 

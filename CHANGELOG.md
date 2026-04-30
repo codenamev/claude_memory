@@ -12,6 +12,10 @@ All notable changes to this project will be documented in this file.
   - `claude-memory stats --tokens [--since DAYS]` reports total sessions, p50/p95/avg/min/max, and a histogram across <500 / 500-1k / 1-2k / 2-5k / 5k+ buckets.
 - Pure additive — no schema migration. Historical events written before this release simply contribute zero samples until new injections accumulate.
 - First 0.11.0 milestone item from the 1.0 punchlist (Trust & Cost). Closes the "what % of my SessionStart token budget does memory consume?" gap.
+- **Hallucination rate metric** — the dashboard now quantifies how clean the fact base is, not just how full it is. `Distill::BareConclusionDetector` is the production-side mirror of the SessionStart prompt's reason-clause requirement (decision/convention facts must embed "because…" / "so that…" / "to avoid…"). Surfaced two ways:
+  - Dashboard Trust panel emits a `quality_score` block aggregating across project + global active facts: `suspect_count` (predicate=reference, retagged by ReferenceMaterialDetector), `bare_conclusion_count`, percentages, and an overall 0–100 score (higher = cleaner). Returns 100 on empty stores so fresh installs aren't penalized.
+  - `claude-memory digest` includes a "Quality" section showing the score breakdown plus the in-window rejection rate ("of facts created in the last 7 days, X% have been rejected since"), so calibration drift is visible.
+- Second 0.11.0 milestone item. Pairs with token-budget telemetry to answer "is memory still worth its cost?" via two skeptic-friendly numbers.
 
 ## [0.10.0] - 2026-04-28
 
