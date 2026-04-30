@@ -38,7 +38,7 @@ module ClaudeMemory
       end
 
       # The trust panel's hallucination-rate proxy. Counts two pollution
-      # signals across all active facts in both stores:
+      # signals:
       #
       #   - suspect: facts that ReferenceMaterialDetector retagged from
       #     `convention` to `reference` predicate (descriptions of external
@@ -47,23 +47,24 @@ module ClaudeMemory
       #     skipped the prompt-mandated reason clause and so are dead
       #     weight once the originating context is gone.
       #
+      # Reports two windows so users can distinguish historical noise from
+      # live extraction quality (per `quality_review.md` 2026-04-30
+      # investigation): the headline `score` is computed over facts
+      # created within the last UTILIZATION_DAYS — that's the actionable
+      # signal. The `historical` block reports the same counts over all
+      # active facts so legacy data is visible without dominating.
+      #
       # Score = 100 - (suspect_pct + bare_pct), clamped 0..100. Lower is
-      # worse. Returns 100 (perfect) when there are no facts yet so a
-      # fresh install isn't penalized for an empty DB.
+      # worse. Returns 100 (perfect) when there are no facts in the
+      # window so a quiet week isn't penalized.
       def quality_score
-        breakdown = aggregate_quality_counts
-        total = breakdown[:total_active]
+        cutoff = (Time.now.utc - UTILIZATION_DAYS * 86_400).iso8601
+        live = compute_quality(cutoff: cutoff)
+        historical = compute_quality(cutoff: nil)
 
-        return quality_score_zero if total.zero?
-
-        suspect_pct = (breakdown[:suspect_count] * 100.0 / total).round(1)
-        bare_pct = (breakdown[:bare_conclusion_count] * 100.0 / total).round(1)
-        score = (100 - (suspect_pct + bare_pct)).clamp(0, 100).round
-
-        breakdown.merge(
-          suspect_pct: suspect_pct,
-          bare_pct: bare_pct,
-          score: score
+        live.merge(
+          window_days: UTILIZATION_DAYS,
+          historical: historical
         )
       rescue Sequel::DatabaseError => e
         ClaudeMemory.logger.debug("Trust#quality_score failed: #{e.message}")
@@ -78,11 +79,42 @@ module ClaudeMemory
           bare_conclusion_count: 0,
           suspect_pct: 0.0,
           bare_pct: 0.0,
-          score: 100
+          score: 100,
+          window_days: UTILIZATION_DAYS,
+          historical: {
+            total_active: 0,
+            suspect_count: 0,
+            bare_conclusion_count: 0,
+            suspect_pct: 0.0,
+            bare_pct: 0.0,
+            score: 100
+          }
         }
       end
 
-      def aggregate_quality_counts
+      def compute_quality(cutoff:)
+        breakdown = aggregate_quality_counts(cutoff: cutoff)
+        total = breakdown[:total_active]
+
+        return zero_breakdown if total.zero?
+
+        suspect_pct = (breakdown[:suspect_count] * 100.0 / total).round(1)
+        bare_pct = (breakdown[:bare_conclusion_count] * 100.0 / total).round(1)
+        score = (100 - (suspect_pct + bare_pct)).clamp(0, 100).round
+
+        breakdown.merge(
+          suspect_pct: suspect_pct,
+          bare_pct: bare_pct,
+          score: score
+        )
+      end
+
+      def zero_breakdown
+        {total_active: 0, suspect_count: 0, bare_conclusion_count: 0,
+         suspect_pct: 0.0, bare_pct: 0.0, score: 100}
+      end
+
+      def aggregate_quality_counts(cutoff: nil)
         detector = Distill::BareConclusionDetector.new
         suspect = 0
         bare = 0
@@ -92,6 +124,7 @@ module ClaudeMemory
           store = @manager.store_if_exists(scope)
           next unless store
           dataset = store.facts.where(status: "active")
+          dataset = dataset.where { created_at >= cutoff } if cutoff
           total += dataset.count
           suspect += dataset.where(predicate: "reference").count
           dataset.where(predicate: %w[decision convention])

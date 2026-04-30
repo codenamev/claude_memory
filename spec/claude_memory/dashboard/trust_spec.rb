@@ -249,9 +249,11 @@ RSpec.describe ClaudeMemory::Dashboard::Trust do
       expect(qs[:total_active]).to eq(0)
       expect(qs[:suspect_count]).to eq(0)
       expect(qs[:bare_conclusion_count]).to eq(0)
+      expect(qs[:window_days]).to eq(30)
+      expect(qs[:historical][:score]).to eq(100)
     end
 
-    it "counts suspect (reference) facts toward the quality score" do
+    it "counts suspect (reference) facts in the live window toward the score" do
       ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
       manager.project_store.insert_fact(
         subject_entity_id: ent, predicate: "reference",
@@ -272,7 +274,7 @@ RSpec.describe ClaudeMemory::Dashboard::Trust do
       expect(qs[:score]).to eq(50)
     end
 
-    it "counts bare-conclusion decision/convention facts toward the score" do
+    it "counts bare-conclusion decision/convention facts toward the live score" do
       ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
       # 3 facts: 2 with reasons, 1 bare convention
       manager.project_store.insert_fact(
@@ -337,6 +339,32 @@ RSpec.describe ClaudeMemory::Dashboard::Trust do
       expect(qs[:total_active]).to eq(1)
       expect(qs[:suspect_count]).to eq(0)
       expect(qs[:score]).to eq(100)
+    end
+
+    it "excludes facts older than the live window from the headline score" do
+      ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      old_id = manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Old bare convention",
+        status: "active", scope: "project"
+      )
+      # Backdate 60 days to fall outside the 30-day live window
+      old_ts = (Time.now.utc - 60 * 86_400).iso8601
+      manager.project_store.facts.where(id: old_id).update(created_at: old_ts)
+      # Fresh bare convention (in window)
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Fresh bare convention",
+        status: "active", scope: "project"
+      )
+
+      qs = trust.snapshot[:quality_score]
+      # Live window: only the fresh fact counts
+      expect(qs[:total_active]).to eq(1)
+      expect(qs[:bare_conclusion_count]).to eq(1)
+      # Historical: both count
+      expect(qs[:historical][:total_active]).to eq(2)
+      expect(qs[:historical][:bare_conclusion_count]).to eq(2)
     end
 
     it "ignores skipped/failed events and rows missing context_tokens" do

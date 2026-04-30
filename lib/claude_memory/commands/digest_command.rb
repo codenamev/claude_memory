@@ -149,21 +149,42 @@ module ClaudeMemory
         "## Context cost\n\n_Unavailable: #{e.message}_"
       end
 
-      # Hallucination-rate proxy. Reports current overall quality score
-      # (suspect + bare-conclusion ratio across active facts) plus the
-      # in-window rejection rate so calibration drift is visible: if a lot
-      # of facts created in the last N days have already been rejected,
-      # the LLM is producing noise faster than usable knowledge.
+      # Hallucination-rate proxy. Reports two numbers per the
+      # `quality_review.md` 2026-04-30 investigation:
+      #
+      #   - Live (last `window_days`, headline) — actionable signal of
+      #     ongoing extraction quality.
+      #   - Historical (all active facts, supplementary) — visible so
+      #     legacy noise isn't hidden, but the headline is the live one.
+      #
+      # The split exists because the unwindowed metric mixed pre-prompt-
+      # commit bare conclusions with live data; users read the combined
+      # number as "ongoing quality" and that's misleading.
       def quality_section(manager, cutoff)
         out = ["## Quality", ""]
         qs = Dashboard::Trust.new(manager).quality_score
 
         if qs[:total_active].zero?
-          out << "_No active facts to score yet._"
+          if qs[:historical][:total_active].zero?
+            out << "_No active facts to score yet._"
+          else
+            out << "_No facts extracted in the last #{qs[:window_days]} days._"
+            out << "- Historical (all active): score #{qs[:historical][:score]}/100, " \
+              "#{qs[:historical][:total_active]} facts, " \
+              "#{qs[:historical][:bare_conclusion_count]} bare, " \
+              "#{qs[:historical][:suspect_count]} suspect"
+          end
         else
-          out << "**Score:** #{qs[:score]}/100 _(higher is cleaner)_"
+          out << "**Live score (last #{qs[:window_days]}d):** #{qs[:score]}/100 _(higher is cleaner)_"
           out << "- Suspect (reference material): #{qs[:suspect_count]} (#{qs[:suspect_pct]}%)"
           out << "- Bare conclusions (decision/convention without reason): #{qs[:bare_conclusion_count]} (#{qs[:bare_pct]}%)"
+          if qs[:historical][:total_active] > qs[:total_active]
+            out << ""
+            out << "_Historical (all active): score #{qs[:historical][:score]}/100, " \
+              "#{qs[:historical][:total_active]} facts, " \
+              "#{qs[:historical][:bare_conclusion_count]} bare, " \
+              "#{qs[:historical][:suspect_count]} suspect_"
+          end
         end
 
         rate = rejection_rate_in_window(manager, cutoff)

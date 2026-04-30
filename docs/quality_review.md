@@ -9,6 +9,41 @@
 
 ---
 
+## Post-0.11 Investigation: Hallucination Rate Metric Calibration (2026-04-30)
+
+When #48 (hallucination-rate metric) was first run against this project's real DB, it surfaced numbers that *looked* alarming:
+
+- Quality score: 39/100
+- Bare conclusions: 34 / 59 active facts (57.6%)
+- 7-day rejection rate: 27 of 32 facts (84.4%)
+
+The first read was that the LLM extractor was producing noise faster than usable knowledge. Per `improvements.md` #60, four causes were proposed; diagnostics ran 2026-04-30:
+
+| Cause | Verdict | Evidence |
+|---|---|---|
+| Prompt drift in `distill-transcripts.md` | **Confirmed dominant** | 34/35 (97%) bare-conclusion facts pre-date the reason-clause prompt commit `f22d12f` (2026-04-20). Only 1 was created post-commit (and that one is a meta-convention added during this session). |
+| Auto-memory mirror regurgitation | Rejected | 0/35 substring matches in `~/.claude/projects/.../memory/*.md`. Auto-memory mirror only landed in 0.10.0 (2026-04-28), after the bare-fact creation window — temporally impossible to be the source. |
+| `ReferenceMaterialDetector` predicate scope too narrow | Not material | Only 3/35 bare facts are `decision`-predicate; 0 of those match the strong reference-material patterns. Expanding `GUARDED_PREDICATES` would not move the needle on the bare-conclusion count. |
+| Junky corpus / rejection cluster | **Confirmed in single class** | All 27 rejected facts in the 7-day window are `uses_database` (18) or `deployment_platform` (9), all with `session_id=nil` (MCP-originated, almost certainly `/study-repo` runs misattributing external-project tech to this project), all from 2026-04-23 to 04-24. Systemic single-class failure, correctly cleaned up after detection — not ongoing extraction noise. |
+
+**What this means for #48 as currently shipped:**
+
+The metric is *technically correct* but *pragmatically misleading*. It bakes historical noise (pre-prompt-commit bare conclusions) into a signal that users will read as "ongoing extraction quality." A 57.6% bare-conclusion rate looks like the LLM is broken; in reality the live extraction rate (post-2026-04-20) is ~3% (1 bare fact out of ~30+ created since the prompt commit landed).
+
+The 84% rejection rate has a similar structural issue: it counts cleanup of a bursty `/study-repo` regression against the active-facts denominator, not against the actual extraction quality of the live window.
+
+**Quick fix shipping now (this session):** restrict `quality_score` and the digest's "Quality" section to facts created within the same 30-day window already used by `token_budget`. Surface a separate "historical" line so users can see both numbers, but the headline is the live one. This makes the metric actionable: a high live bare-conclusion rate = live LLM calibration drift; a high historical rate = legacy data, not a current alarm.
+
+**Deferred to 0.12 / 1.x:**
+
+1. The systemic `/study-repo` misattribution failure mode (cause 4) deserves its own guard. External-project READMEs being studied should land in `reference` predicates, not as `uses_database`/`deployment_platform`. Track this as a follow-up entry.
+2. A backfill/cleanup pass on the 34 historical bare-conclusion facts: either retroactive rejection, or a one-shot reclassification that moves them to a `legacy_observation` predicate that the prompt's reason-clause requirement doesn't apply to.
+3. The metric's calibration assumes "bare conclusion = bad", but spot-checking shows several flagged facts are perfectly informative ("MCP tools return dual content + structuredContent via TextSummary module") — they describe mechanics implicitly. The vocabulary may itself be too strict; revisit during 1.0 soak with real usage data.
+
+**Process win:** the metric did its job — it surfaced a real signal that would otherwise have stayed invisible, and the investigation distinguished historical noise from live calibration. Without #48 we'd have no way to know.
+
+---
+
 ## Executive Summary
 
 Six days, +2,011 LOC. The headline finding: **the watch-list item from 2026-04-22 (#28 — extract per-endpoint helpers from `Dashboard::API`) was not just deferred, it actively regressed.** `dashboard/api.rb` grew from 627 → 807 LOC (+180, +29%), is now the only file in `lib/` over 750 lines, and gained four new methods all exceeding 15 lines. Method-size pressure increased: the previous worst case (`recall` at 39 lines) is now `timeline` at 52 lines, and the file has 11 methods over 15 lines (vs 11 last review) but with a higher mean.

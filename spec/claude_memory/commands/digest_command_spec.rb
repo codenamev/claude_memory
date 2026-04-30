@@ -139,7 +139,7 @@ RSpec.describe ClaudeMemory::Commands::DigestCommand do
       expect(out).to include("**Rejection rate (in window):** 0 of 0")
     end
 
-    it "reports quality score and rejection rate when facts exist" do
+    it "reports live quality score and rejection rate when facts exist" do
       ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
       manager.project_store.insert_fact(
         subject_entity_id: ent, predicate: "convention",
@@ -161,9 +161,32 @@ RSpec.describe ClaudeMemory::Commands::DigestCommand do
 
       out = stdout.string
       expect(out).to include("## Quality")
-      expect(out).to include("**Score:**")
+      expect(out).to include("**Live score (last 30d):**")
       expect(out).to include("Bare conclusions (decision/convention without reason): 1")
       expect(out).to include("**Rejection rate (in window):** 1 of 3 extracted facts rejected")
+    end
+
+    it "shows a historical block when older facts exist outside the live window" do
+      ent = manager.project_store.find_or_create_entity(type: "repo", name: "app")
+      old_id = manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Old bare convention",
+        status: "active", scope: "project"
+      )
+      old_ts = (Time.now.utc - 60 * 86_400).iso8601
+      manager.project_store.facts.where(id: old_id).update(created_at: old_ts)
+      manager.project_store.insert_fact(
+        subject_entity_id: ent, predicate: "convention",
+        object_literal: "Fresh convention because reasons matter",
+        status: "active", scope: "project"
+      )
+
+      command.call([])
+
+      out = stdout.string
+      expect(out).to include("**Live score (last 30d):**")
+      expect(out).to include("_Historical (all active):")
+      expect(out).to include("2 facts, 1 bare")
     end
 
     it "reports p50/p95/avg in Context cost when hook_context events exist" do
