@@ -246,6 +246,68 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
       end
     end
 
+    describe "nudge subcommand" do
+      it "is silent (exit 0, no stdout) when nothing was contributed" do
+        # Isolate from real global database
+        empty_global = File.join(tmpdir, "empty_global.sqlite3")
+        config = instance_double(
+          ClaudeMemory::Configuration,
+          global_db_path: empty_global,
+          project_db_path: db_path,
+          project_dir: tmpdir,
+          claude_config_dir: File.join(tmpdir, "claude_config"),
+          session_id: nil
+        )
+        allow(ClaudeMemory::Configuration).to receive(:new).and_return(config)
+
+        payload = {"hook_event_name" => "SessionEnd", "session_id" => "sess-1"}
+        stdin.string = JSON.generate(payload)
+
+        exit_code = command.call(["nudge", "--db", db_path])
+
+        expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+        expect(stdout.string.strip).to be_empty
+      end
+
+      it "prints the nudge message when memory contributed facts in this session" do
+        # Seed a fact with provenance pointing to a content_item from sess-2
+        store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+        text = "decision Use Postgres because we need transactions"
+        content_id = store.upsert_content_item(
+          source: "claude_code", session_id: "sess-2",
+          text_hash: Digest::SHA256.hexdigest(text),
+          byte_len: text.bytesize, raw_text: text
+        )
+        entity_id = store.find_or_create_entity(type: "repo", name: "myapp")
+        fact_id = store.insert_fact(
+          subject_entity_id: entity_id, predicate: "decision",
+          object_literal: text, status: "active", scope: "project"
+        )
+        store.insert_provenance(fact_id: fact_id, content_item_id: content_id, quote: text)
+        store.close
+
+        empty_global = File.join(tmpdir, "empty_global.sqlite3")
+        config = instance_double(
+          ClaudeMemory::Configuration,
+          global_db_path: empty_global,
+          project_db_path: db_path,
+          project_dir: tmpdir,
+          claude_config_dir: File.join(tmpdir, "claude_config"),
+          session_id: nil
+        )
+        allow(ClaudeMemory::Configuration).to receive(:new).and_return(config)
+
+        payload = {"hook_event_name" => "SessionEnd", "session_id" => "sess-2"}
+        stdin.string = JSON.generate(payload)
+
+        exit_code = command.call(["nudge", "--db", db_path])
+
+        expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+        expect(stdout.string).to include("memory contributed 1 fact this session")
+        expect(stdout.string).to include("%used = 0%")
+      end
+    end
+
     describe "unknown subcommand" do
       it "returns ERROR (2) for unknown subcommand" do
         exit_code = command.call(["unknown"])

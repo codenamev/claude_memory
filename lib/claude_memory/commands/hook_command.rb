@@ -19,9 +19,9 @@ module ClaudeMemory
           return Hook::ExitCodes::ERROR
         end
 
-        unless %w[ingest sweep publish context].include?(subcommand)
+        unless %w[ingest sweep publish context nudge].include?(subcommand)
           stderr.puts "Unknown hook command: #{subcommand}"
-          stderr.puts "Available: ingest, sweep, publish, context"
+          stderr.puts "Available: ingest, sweep, publish, context, nudge"
           return Hook::ExitCodes::ERROR
         end
 
@@ -63,6 +63,8 @@ module ClaudeMemory
           hook_publish(handler, payload)
         when "context"
           hook_context(payload, opts[:db])
+        when "nudge"
+          hook_nudge(payload, opts[:db])
         end
 
         store.close
@@ -167,6 +169,28 @@ module ClaudeMemory
         end
 
         Hook::ExitCodes::SUCCESS
+      end
+
+      def hook_nudge(payload, db_path)
+        # Nudge needs to count past nudge events across both stores,
+        # so prefer the manager-aware path. db_path overrides only
+        # the project store (useful for tests).
+        project_path = payload["project_path"] || payload["cwd"]
+        manager = ClaudeMemory::Store::StoreManager.new(
+          project_db_path: db_path, project_path: project_path
+        )
+        manager.ensure_both!
+        store = manager.project_store || manager.global_store
+
+        handler = ClaudeMemory::Hook::Handler.new(store, manager: manager)
+        result = handler.nudge(payload)
+
+        stdout.puts result[:message] if result[:status] == :emitted
+
+        manager.close
+        Hook::ExitCodes::SUCCESS
+      rescue => e
+        classify_error(e)
       end
 
       def hook_context(payload, db_path)

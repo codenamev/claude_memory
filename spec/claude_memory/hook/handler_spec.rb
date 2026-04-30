@@ -250,4 +250,143 @@ RSpec.describe ClaudeMemory::Hook::Handler do
       expect(details["context_tokens"]).to be > 0
     end
   end
+
+  describe "#nudge" do
+    let(:tmpdir) { Dir.mktmpdir("hook_nudge_#{Process.pid}") }
+    let(:global_db_path) { File.join(tmpdir, "global.sqlite3") }
+    let(:project_db_path) { File.join(tmpdir, "project.sqlite3") }
+    let(:manager) do
+      ClaudeMemory::Store::StoreManager.new(
+        global_db_path: global_db_path,
+        project_db_path: project_db_path,
+        project_path: tmpdir
+      )
+    end
+    let(:project_store) { manager.project_store }
+    let(:env) { {} }
+    let(:handler) { described_class.new(project_store, manager: manager, env: env) }
+    let(:session_id) { "sess-nudge-1" }
+
+    before { manager.ensure_both! }
+    after do
+      manager.close
+      FileUtils.rm_rf(tmpdir)
+    end
+
+    def seed_session_fact(used_in_recall: false)
+      text = "fact body #{rand(1_000_000)}"
+      content_id = project_store.upsert_content_item(
+        source: "claude_code", session_id: session_id,
+        text_hash: Digest::SHA256.hexdigest(text),
+        byte_len: text.bytesize, raw_text: text
+      )
+      entity_id = project_store.find_or_create_entity(type: "repo", name: "app")
+      fact_id = project_store.insert_fact(
+        subject_entity_id: entity_id, predicate: "convention",
+        object_literal: text, status: "active", scope: "project"
+      )
+      project_store.insert_provenance(fact_id: fact_id, content_item_id: content_id, quote: text)
+
+      if used_in_recall
+        ClaudeMemory::ActivityLog.record(project_store,
+          event_type: "recall", status: "success",
+          session_id: session_id, duration_ms: 5,
+          details: {top_fact_ids: [fact_id], result_count: 1})
+      end
+
+      fact_id
+    end
+
+    it "returns silent when CLAUDE_MEMORY_NO_NUDGE=1" do
+      env["CLAUDE_MEMORY_NO_NUDGE"] = "1"
+      seed_session_fact
+      result = handler.nudge({"session_id" => session_id})
+      expect(result[:status]).to eq(:silent)
+      expect(result[:reason]).to eq("opt_out")
+    end
+
+    it "returns silent when payload has no session_id" do
+      result = handler.nudge({})
+      expect(result[:status]).to eq(:silent)
+      expect(result[:reason]).to eq("no_session_id")
+    end
+
+    it "returns silent when memory contributed nothing this session" do
+      result = handler.nudge({"session_id" => session_id})
+      expect(result[:status]).to eq(:silent)
+      expect(result[:reason]).to eq("no_contributions")
+    end
+
+    it "emits a nudge with N facts and 0% used when nothing was used" do
+      seed_session_fact
+      seed_session_fact
+
+      result = handler.nudge({"session_id" => session_id})
+      expect(result[:status]).to eq(:emitted)
+      expect(result[:n]).to eq(2)
+      expect(result[:used]).to eq(0)
+      expect(result[:pct]).to eq(0)
+      expect(result[:message]).to eq("memory contributed 2 facts this session, %used = 0%")
+    end
+
+    it "computes %used from top_fact_ids in same-session activity events" do
+      seed_session_fact(used_in_recall: true)
+      seed_session_fact(used_in_recall: true)
+      seed_session_fact
+
+      result = handler.nudge({"session_id" => session_id})
+      expect(result[:n]).to eq(3)
+      expect(result[:used]).to eq(2)
+      expect(result[:pct]).to eq(67)
+    end
+
+    it "uses singular wording for n=1" do
+      seed_session_fact
+      result = handler.nudge({"session_id" => session_id})
+      expect(result[:message]).to start_with("memory contributed 1 fact ")
+    end
+
+    it "records a roi_nudge activity event when emitting" do
+      seed_session_fact
+      handler.nudge({"session_id" => session_id})
+
+      event = project_store.activity_events.where(event_type: "roi_nudge").order(:id).last
+      expect(event).not_to be_nil
+      expect(event[:status]).to eq("success")
+      expect(event[:session_id]).to eq(session_id)
+      details = JSON.parse(event[:detail_json])
+      expect(details["n"]).to eq(1)
+    end
+
+    it "quiets after MAX_NUDGES prior nudges" do
+      # Pre-seed 10 prior nudge events
+      described_class::MAX_NUDGES.times do |i|
+        ClaudeMemory::ActivityLog.record(project_store,
+          event_type: "roi_nudge", status: "success",
+          session_id: "sess-prior-#{i}", duration_ms: 1, details: {n: 1})
+      end
+
+      seed_session_fact
+      result = handler.nudge({"session_id" => session_id})
+
+      expect(result[:status]).to eq(:silent)
+      expect(result[:reason]).to eq("first_week_complete")
+      expect(result[:prior_count]).to eq(described_class::MAX_NUDGES)
+    end
+
+    it "still emits on the MAX_NUDGES-th call (counting from zero)" do
+      # 9 prior nudges leaves room for one more
+      (described_class::MAX_NUDGES - 1).times do |i|
+        ClaudeMemory::ActivityLog.record(project_store,
+          event_type: "roi_nudge", status: "success",
+          session_id: "sess-prior-#{i}", duration_ms: 1, details: {n: 1})
+      end
+
+      seed_session_fact
+      result = handler.nudge({"session_id" => session_id})
+
+      expect(result[:status]).to eq(:emitted)
+      expect(result[:remaining]).to eq(0)
+    end
+  end
 end
