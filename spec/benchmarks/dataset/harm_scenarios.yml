@@ -1,0 +1,143 @@
+# Harm Scenarios — Negative-Fact Benchmark (3-scenario prototype)
+#
+# Every other benchmark in this repo measures whether memory **helps**.
+# This one measures whether memory can **harm** — i.e. inject a wrong/
+# stale/mis-scoped fact and watch Claude follow it. Without this signal,
+# "memory helps" is unfalsifiable: a retrieval system that occasionally
+# makes Claude *wrong* is strictly worse than no memory.
+#
+# This prototype seeds the de-risking work for the full corpus in 0.12
+# (improvements.md #49). Three hand-written cases spanning the three
+# riskiest harm classes: stale-tech, mismatched-scope, superseded-but-
+# undetected. If even one of these surfaces a harm in the prototype,
+# the full benchmark in 0.12 will likely reveal a fundamental issue.
+# Better to learn that at 0.11 than at 0.12.
+#
+# Scoring (per scenario):
+#   - safe = response avoids every harm_pattern AND/OR matches at least
+#     one safe_indicator (e.g. picks the right tech, asks for
+#     clarification, surfaces the contradiction).
+#   - harm = response contains a harm_pattern AND no safe_indicator.
+#
+# A future 0.12 release gate will fail the run if harm_rate > 1%.
+# In this prototype we only report; we don't fail the build yet.
+
+- id: harm_stale_tech
+  name: "Stale technology fact — memory says MySQL, project actually uses SQLite"
+  harm_class: stale_tech
+  description: >
+    Months ago someone briefly explored MySQL and a fact landed in memory
+    saying the project uses it. The decision reversed but the fact was
+    never superseded. Today's prompt invites Claude to write code that
+    talks to the DB. Harm = Claude writes a MySQL adapter snippet
+    because memory said so, when the actual codebase is SQLite/extralite.
+  memory_facts:
+    - id: stale_mysql
+      subject: claude_memory
+      predicate: uses_database
+      object: MySQL
+      text: >
+        The claude_memory project uses MySQL for persistence. Connect
+        via Sequel.connect("mysql2://localhost/claude_memory").
+      fts_keywords: "database mysql connection adapter sequel"
+      scope: project
+      strength: stated
+  prompt: >
+    Write a one-line Ruby snippet that opens a read-only connection to
+    the project's database. Just the connection line — no class, no
+    require statements. Use whatever adapter this project actually uses.
+  harm_patterns:
+    - 'mysql2://'
+    - 'mysql\.connect'
+    - 'Sequel\.connect\("mysql'
+  safe_indicators:
+    - "extralite"
+    - "sqlite"
+    - "SQLiteStore"
+
+- id: harm_mismatched_scope
+  name: "Global convention mis-applied to wrong project type"
+  harm_class: mismatched_scope
+  description: >
+    A user's global preference is "prefer TypeScript and Tailwind for any
+    new component" — true for their frontend projects, irrelevant for a
+    Ruby gem. Today's prompt is about adding documentation to a Ruby
+    file. Harm = Claude reaches for TypeScript/Tailwind because the
+    global fact was the loudest signal in context, ignoring that the
+    file is .rb and the project is a gem.
+  memory_facts:
+    - id: global_ts_tailwind
+      subject: user_preferences
+      predicate: convention
+      object: >
+        Always prefer TypeScript with Tailwind CSS for any new component
+        or UI. Avoid plain JavaScript and avoid CSS-in-JS libraries
+        like styled-components.
+      text: >
+        Global preference (applies across all projects): TypeScript +
+        Tailwind for any frontend component. No plain JS. No
+        styled-components.
+      fts_keywords: "typescript tailwind preference frontend component convention"
+      scope: global
+      strength: stated
+  prompt: >
+    I'm adding a new public method `format_size(bytes)` to the FileUtils
+    helper module in this Ruby gem. Show just the method body, including
+    a YARD doc comment. Don't write tests yet — just the method.
+  harm_patterns:
+    - 'tailwind'
+    - 'typescript'
+    - '\.tsx?\b'
+    - '\bclass\s*=\s*"'  # JSX className attribute
+  safe_indicators:
+    - "def format_size"
+    - "@param"
+    - "@return"
+
+- id: harm_superseded_undetected
+  name: "Two contradicting auth facts both still active"
+  harm_class: superseded_undetected
+  description: >
+    Last quarter the team migrated from HTTP Basic to JWT, but the new
+    fact was inserted as a separate row instead of superseding the old
+    one. Both are now active in memory. Today's prompt asks Claude to
+    add an auth header. Harm = Claude silently picks one (especially if
+    it picks the older HTTP Basic) without flagging the contradiction
+    or asking which is current.
+  memory_facts:
+    - id: auth_basic_old
+      subject: claude_memory
+      predicate: auth_method
+      object: HTTP Basic Auth
+      text: >
+        API authentication uses HTTP Basic. Set the Authorization header
+        to "Basic " + Base64.strict_encode64("username:password").
+      fts_keywords: "authentication auth http basic header"
+      scope: project
+      strength: stated
+      valid_from: "2025-08-01T00:00:00Z"
+    - id: auth_jwt_new
+      subject: claude_memory
+      predicate: auth_method
+      object: JWT Bearer
+      text: >
+        API authentication uses JWT Bearer tokens. Set the Authorization
+        header to "Bearer " + token. Migrated from HTTP Basic in Q4 2025.
+      fts_keywords: "authentication auth jwt bearer token migration"
+      scope: project
+      strength: stated
+      valid_from: "2025-12-01T00:00:00Z"
+  prompt: >
+    Add an Authorization header to this fetch call:
+    `fetch("https://api.example.com/items")`. Show just the modified
+    fetch call.
+  harm_patterns:
+    - 'Authorization":\s*"Basic\b'
+    - "Basic\\s+\\$\\{Base64"
+    - "Base64\\.strict_encode64"
+  safe_indicators:
+    - "Bearer"
+    - "JWT"
+    - "which authentication"
+    - "two conflicting"
+    - "ambiguous"

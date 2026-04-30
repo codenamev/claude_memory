@@ -100,6 +100,10 @@ module BenchmarkHelpers
     def self.load_repeat_correction_scenarios(path = File.join(DATASET_DIR, "repeat_correction_scenarios.yml"))
       YAML.load_file(path)
     end
+
+    def self.load_harm_scenarios(path = File.join(DATASET_DIR, "harm_scenarios.yml"))
+      YAML.load_file(path)
+    end
   end
 
   # Relevance-ratio metrics — measure whether injected memory is actually
