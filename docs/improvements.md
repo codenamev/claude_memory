@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-04-28 (post-0.10.0) - Restructured 1.0 punchlist around milestone versions. **0.11.0 "Trust & Cost"** ships #47 (token budget), #48 (hallucination rate), #51 (claude-memory show), #53 (first-week ROI nudge — moved up from post-1.0), and a 3-scenario prototype of #49 (harm benchmark). **0.12.0 "Release Discipline"** ships #49 full corpus, #50 (CLAUDE.md baseline), #52 (benchmark scoreboard). **1.0.0** lands soak-validated #54/#55/#56 if time + new #59 API stability audit. See `docs/1_0_punchlist.md` for the full plan with calendar targets. Also added 2026-04-28: two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28) — provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 updates: opened the 1.0 punchlist track + added cq study. Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
+*Updated: 2026-05-01 - Added Strands Agent SOPs study (article, not repo) — one M-priority item (parameter blocks in skill frontmatter); rest already implemented or deferred. See `docs/influence/strands-agent-sops.md`. Previously: 2026-04-28 (post-0.10.0) - Restructured 1.0 punchlist around milestone versions. **0.11.0 "Trust & Cost"** ships #47 (token budget), #48 (hallucination rate), #51 (claude-memory show), #53 (first-week ROI nudge — moved up from post-1.0), and a 3-scenario prototype of #49 (harm benchmark). **0.12.0 "Release Discipline"** ships #49 full corpus, #50 (CLAUDE.md baseline), #52 (benchmark scoreboard). **1.0.0** lands soak-validated #54/#55/#56 if time + new #59 API stability audit. See `docs/1_0_punchlist.md` for the full plan with calendar targets. Also added 2026-04-28: two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28) — provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 updates: opened the 1.0 punchlist track + added cq study. Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.6.3, re-studied 2026-03-30)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, re-studied 2026-03-30 — no changes)*
@@ -318,6 +318,31 @@ cq is complementary to ClaudeMemory, not competing: it's an out-of-band SQL audi
 
 ---
 
+## Strands Agent SOPs Study (2026-05-01)
+
+Source: docs/influence/strands-agent-sops.md — article study (AWS Open Source Blog)
+
+Amazon's Strands Agent SOPs describe markdown-based parameterized workflows for agents (RFC-2119 keywords, parameter blocks, sequential chaining via artifact handoff, MCP-prompt invocation). **ClaudeMemory has independently arrived at the same architecture** via Anthropic Skills (`/distill-transcripts`, `/release`, `/study-repo`), MCP `prompts/list`+`prompts/get` (`memory_guide`), and the `Ingest → Distill → Resolve → Publish` pipeline. The article is *validation*, not a roadmap.
+
+### Medium Priority Recommendations
+
+- [ ] **Add explicit `## Parameters` blocks to skill markdowns**
+  - Value: Self-documenting skills; Claude can prompt the user for missing parameters instead of guessing from `$ARGUMENTS`
+  - Evidence: Strands' `Required Parameters / Optional Parameters` block — the only verbatim format snippet in the article (`docs/influence/strands-agent-sops.md`)
+  - Implementation: Add `## Parameters` section to `lib/claude_memory/commands/skills/distill-transcripts.md`, `release.md`, `study-repo.md`, `quality-update.md`, `improve.md`. Format: bullet list with `name: description (default: …)`
+  - Effort: ~30 minutes total
+  - Trade-off: Tiny doc maintenance; no runtime cost
+
+### Deferred / Avoid (from this study)
+
+- **Progress markers + checkpoint file in `/distill-transcripts`** — UX-only improvement; DB already handles correctness. Defer until usage data shows multi-hundred-item distillation runs.
+- **MCP-prompt-exposed skill format spec** (analog of `strands-agents-sops rule`) — solves a problem we don't have; defer until ≥3 skill-authoring locations exist.
+- **Strands Python package** — wrong language ecosystem.
+- **`.sop/<name>/` artifact filesystem** — would parallel our DB-as-checkpoint substrate and double the cleanup burden.
+- **Adopting "SOP" as user-facing terminology** — Anthropic Skills is the term Claude Code users know; renaming creates confusion for zero gain.
+
+---
+
 ## Medium Priority
 
 ### ~~18. Shell Completion for CLI~~ ✅ Implemented 2026-03-20
@@ -446,7 +471,9 @@ Source: 2026-04-28 1.0 readiness review (`docs/1_0_punchlist.md` #10). Builds on
 
 ---
 
-### 59. API Stability Audit (1.0 release blocker)
+### 59. API Stability Audit (promoted to 0.12.0 — 2026-05-01)
+
+*Originally slated as 1.0 release blocker; promoted to 0.12 because #52's benchmark scoreboard needs an explicit "what surfaces are stable" list to know what counts as a regression vs. internal change. The deprecation-warning module is also a prerequisite for any soft-rename work surfaced during the 0.12 → 1.0 soak.*
 
 Source: 2026-04-28 path-to-1.0 review (`docs/1_0_punchlist.md` #11). Added after 0.10.0 ship. *(Renumbered from #57 to #59 during rebase against origin/main on 2026-04-28 — Mercury-article PR #5 had already taken #57 and #58.)*
 
@@ -568,6 +595,45 @@ C. **Retroactive rejection.** Mark them all `status=rejected`. Cheap and clean b
 - `digest` quality section's historical block reports a meaningfully lower number afterwards.
 
 **Effort.** ~½ day. Mostly a Sequel migration + a `claude-memory reclassify-bare-conclusions` command paralleling `reclassify-references`.
+
+---
+
+### 63. Pre-Release Hook Smoke Gate (0.12.0)
+
+Source: 2026-04-30 verification incident during 0.11 work. Five commits landed for #47 token-budget telemetry with 156 specs green. The user asked "did you actually run claude-memory show on this project?" — at which point a smoke test revealed the installed gem was still 0.9.1 and 24 hours of real SessionStart hook events had recorded no `context_tokens` field. The bug was not in the code; the bug was in the *release process* — specs verify code correctness against the working tree, but production hooks invoke the installed gem via PATH. Without `rake install`, every hook/MCP code change is dead in production.
+
+This already lives in memory (`feedback_hooks_run_installed_gem.md`) and as two project conventions stored via `memory.store_extraction`. It's a known trap that I (Claude) hit anyway. **Codify it into the release pipeline so the trap can't be sprung again.**
+
+**Implementation.**
+
+- **New `bin/pre-release-smoke`** script that:
+  1. Runs `bundle exec rake install` (rebuild gem from current working tree).
+  2. Verifies `which claude-memory` resolves to the installed-gem binary (sanity check).
+  3. Triggers each gem-managed hook event with a synthetic payload via stdin: `claude-memory hook context`, `claude-memory hook ingest --db /tmp/smoke.sqlite3`, `claude-memory hook nudge`, etc. — populates a temp DB.
+  4. Inspects `activity_events` table via `sqlite3 json_extract` for the fields the current version is supposed to record. Specifically:
+     - `hook_context` events should carry both `context_length` and `context_tokens` (since 0.11.0).
+     - `roi_nudge` events should carry `n`, `used`, `pct`, `prior_count` (since 0.11.0).
+     - Any future field added under release becomes part of this checklist.
+  5. Exits non-zero if any expected field is null or absent.
+- **Per-version expectation manifest** at `spec/smoke/expected_fields.yml` — declarative list of `{event_type, fields, since_version}` so the script doesn't need code changes when a new field lands; just append to the YAML and the gate enforces it on the next release.
+- **`/release` skill integration.** Phase 1 Step 5b (after specs, before lint) runs `bin/pre-release-smoke`. Failure aborts the release with the field name(s) that were null. Skill description gains a one-line "verifies installed gem actually fires hooks correctly".
+
+**Acceptance.**
+
+- `bin/pre-release-smoke` exits 0 when the installed gem matches the working tree and all expected fields populate.
+- Deleting the `context_tokens:` line from `Hook::Handler#context` and re-running `bin/pre-release-smoke` produces a clear error pointing at the missing field on `hook_context.detail_json`.
+- `/release` skill aborts Phase 1 if the smoke gate fails — never reaches `git push`.
+- Test: `spec/smoke/pre_release_smoke_spec.rb` verifies the manifest schema and that the script's exit-code logic flips on simulated null fields.
+
+**Edge cases.**
+
+- The script uses a temp DB so it can't pollute the user's project DB. Cleans up on exit.
+- If `rake install` fails (gemspec validation, signing, etc.), the script reports that as a separate failure mode, not a smoke-gate failure.
+- The `hook nudge` synthetic payload needs a `session_id` of a real session that contributed facts — the script can pre-seed one fact and use a dedicated `smoke-test-NNNN` session id.
+
+**Effort.** ~½ day for the script + manifest + skill integration. Spec is the bulk of the time.
+
+**Why this release.** 0.11 verification gap directly motivated this. Release Discipline that doesn't catch the trap that's already hit twice (#47 today, plus the 2026-04-16 ActivityLog incident in `feedback_hooks_run_installed_gem.md`) isn't real discipline. Pairs naturally with #52 — scoreboard catches regressions in measurement; smoke gate catches the regression where the measurement itself doesn't fire.
 
 ---
 
