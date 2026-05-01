@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Pre-release hook smoke gate** (`bin/pre-release-smoke`) — verifies the *installed* claude-memory gem actually fires hooks correctly and populates expected `detail_json` fields per `spec/smoke/expected_fields.yml`. Codifies the verification convention from `feedback_hooks_run_installed_gem.md` into a machine-enforced release gate. The trap has been sprung twice (2026-04-16 ActivityLog, 2026-04-30 #47 token-budget); the gate exists so it can't be sprung a third time. Wired into the `/release` skill as Phase 1 Step 6 (after specs, before lint). First 0.12.0 milestone item.
+- **`/study-repo` memory-discipline guard (prompt-only)** — top-level "CRITICAL: Memory Discipline" section in `.claude/skills/study-repo/SKILL.md` explicitly forbids the LLM from extracting external projects' tech stack as project-level facts. Roots the cleanup work `claude-memory reject` had to do during 0.11 (27-fact misattribution cluster on 2026-04-23/24, see `quality_review.md` 2026-04-30 cause-4 finding). Defense-in-depth detector deferred to 0.12.x or later, only built if measurement shows persistent leakage.
+
 ## [0.11.0] - 2026-04-30
 
 Theme: **Trust & Cost** — five user-visible signals that answer "is memory still worth it?" with numbers a skeptical user can read in <30 seconds.

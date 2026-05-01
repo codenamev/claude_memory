@@ -63,7 +63,24 @@ bundle exec rspec
 
 All tests must pass. Do not proceed with any failures. Fix them first.
 
-### Step 6: Run the linter
+### Step 6: Run the pre-release hook smoke gate
+
+```bash
+bin/pre-release-smoke
+```
+
+This script:
+
+1. Re-runs `bundle exec rake install` so the PATH-resolved `claude-memory` binary matches the working tree.
+2. Triggers each gem-managed hook against a temp DB.
+3. Verifies every field listed in `spec/smoke/expected_fields.yml` is populated on the resulting `activity_events.detail_json`.
+4. Exits non-zero with the missing field name(s) and `since_version` if any expected field is null/absent.
+
+**This catches the class of bug specs cannot:** a code change that adds a new `detail_json` field but forgets `rake install`, leaving the installed gem stale and production hooks silently missing the field. Sprung that trap on 2026-04-16 (ActivityLog) and again on 2026-04-30 (#47 token-budget) — the gate is here so it can't happen a third time.
+
+If the gate fails, **stop the release**, address the missing field (usually `bundle exec rake install` followed by re-running the gate), and only proceed when it exits 0.
+
+### Step 7: Run the linter
 
 ```bash
 bundle exec rake standard:fix
@@ -71,7 +88,7 @@ bundle exec rake standard:fix
 
 Ensure no remaining violations.
 
-### Step 7: Verify CHANGELOG.md
+### Step 8: Verify CHANGELOG.md
 
 The CHANGELOG should already have a release section written during development (via `/improve`, manual commits, or other workflow). **Do not auto-generate release notes** — they should reflect the actual development narrative.
 
@@ -83,7 +100,7 @@ Check that:
 
 If the CHANGELOG section is missing or incomplete, **stop and ask the user**. Do not fabricate release notes.
 
-### Step 8: Commit the version bump
+### Step 9: Commit the version bump
 
 ```bash
 git add lib/claude_memory/version.rb .claude-plugin/plugin.json .claude-plugin/marketplace.json Gemfile.lock
@@ -111,7 +128,7 @@ Wait for the user to confirm before proceeding to Phase 3.
 
 ## Phase 3: Announce
 
-### Step 9: Fix any stale "Latest" flags on GitHub releases
+### Step 10: Fix any stale "Latest" flags on GitHub releases
 
 Check current release state:
 
@@ -125,7 +142,7 @@ If an older release is incorrectly marked "Latest" (this happens when releases a
 gh release edit v<old-version> --latest=false
 ```
 
-### Step 10: Create the GitHub release
+### Step 11: Create the GitHub release
 
 Extract the release notes from CHANGELOG.md — everything between `## [X.Y.Z]` and the next `## [` heading. Write to a temp file:
 
@@ -146,7 +163,7 @@ gh release create vX.Y.Z \
 
 The title should capture the theme of the release in a few words (e.g., "Predicate Design Overhaul, Reject/Restore, Telemetry"). Read the CHANGELOG to derive this — don't ask the user unless the theme isn't obvious.
 
-### Step 11: Verify the release
+### Step 12: Verify the release
 
 ```bash
 gh release list --limit 5
@@ -161,6 +178,7 @@ Report the release URL to the user.
 
 ## Error Handling
 
+- **Smoke gate fails (`bin/pre-release-smoke` exits non-zero)**: The script names the missing `detail_json` field and `since_version` in stderr. Most common cause: code that adds a new field landed without a follow-up `bundle exec rake install`, so the installed gem is stale. Re-run `rake install`, then re-run the gate. If the field was newly added but no `rake install` was run, that's the bug the gate is designed to catch — don't bypass it. If the manifest needs updating because a field was intentionally removed, edit `spec/smoke/expected_fields.yml` AND add a CHANGELOG breaking-change note (removing a `detail_json` field is a public API change once #11 lands).
 - **Tests fail**: Fix first. Never release with failing tests.
 - **CHANGELOG missing**: Ask the user. Never fabricate release notes.
 - **Version already tagged**: The tag may exist from a prior attempt. Ask the user whether to delete and recreate, or use a different version.
