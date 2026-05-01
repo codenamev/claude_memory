@@ -62,9 +62,25 @@ module ClaudeMemory
 
       # Return the canonical form of a predicate name, applying known
       # synonym mappings. Leaves unmapped predicates unchanged.
+      #
+      # Emits a deprecation warning via `ClaudeMemory::Deprecations` when
+      # an actual synonym is hit, since the predicate vocabulary is part
+      # of the public API contract (`docs/api_stability.md` §6) and
+      # silent canonicalization makes the legacy form indistinguishable
+      # from the current one. Removal of the SYNONYMS entries is
+      # scheduled for `1.0.0`.
       def self.canonicalize(predicate)
         return predicate if predicate.nil?
-        SYNONYMS.fetch(predicate, predicate)
+        canonical = SYNONYMS.fetch(predicate, predicate)
+        if canonical != predicate
+          ClaudeMemory::Deprecations.warn(
+            name: "predicate=#{predicate}",
+            replacement: "predicate=#{canonical}",
+            removed_in: "1.0.0",
+            message: "PredicatePolicy::SYNONYMS will be removed; emit canonical predicate names directly."
+          )
+        end
+        canonical
       end
 
       # Return the snapshot section a predicate belongs to.

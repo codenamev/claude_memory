@@ -62,6 +62,12 @@ RSpec.describe ClaudeMemory::Resolve::PredicatePolicy do
   end
 
   describe ".canonicalize" do
+    before do
+      ClaudeMemory::Deprecations.reset!
+      ENV[ClaudeMemory::Deprecations::ENV_OPT_OUT] = "1"
+    end
+    after { ENV.delete(ClaudeMemory::Deprecations::ENV_OPT_OUT) }
+
     it "rewrites known synonyms to the canonical form" do
       expect(described_class.canonicalize("has_convention")).to eq("convention")
       expect(described_class.canonicalize("primary_language")).to eq("uses_language")
@@ -74,6 +80,29 @@ RSpec.describe ClaudeMemory::Resolve::PredicatePolicy do
 
     it "handles nil safely" do
       expect(described_class.canonicalize(nil)).to be_nil
+    end
+
+    it "emits a deprecation warning when a synonym is canonicalized" do
+      ENV.delete(ClaudeMemory::Deprecations::ENV_OPT_OUT)
+      output = StringIO.new
+      allow($stderr).to receive(:puts) { |msg| output.puts(msg) }
+
+      described_class.canonicalize("has_convention")
+
+      expect(output.string).to include("DEPRECATION")
+      expect(output.string).to include("predicate=has_convention")
+      expect(output.string).to include("predicate=convention")
+      expect(output.string).to include("1.0.0")
+    end
+
+    it "does NOT emit a deprecation when the canonical form is passed" do
+      ENV.delete(ClaudeMemory::Deprecations::ENV_OPT_OUT)
+      output = StringIO.new
+      allow($stderr).to receive(:puts) { |msg| output.puts(msg) }
+
+      described_class.canonicalize("convention")
+
+      expect(output.string).to be_empty
     end
   end
 

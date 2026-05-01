@@ -15,6 +15,8 @@ ClaudeMemory is a Ruby gem that provides long-term, self-managed memory for Clau
 
 **Check memory before exploring code.** Use `memory.recall`, `memory.decisions`, `memory.architecture`, or `memory.conventions` to find existing knowledge before reading files.
 
+**Public API contract:** [docs/api_stability.md](docs/api_stability.md) is the authoritative stable-surface list (CLI, MCP, hooks, Ruby API, schema, predicate vocabulary). When changing any of those surfaces, update the doc in the same commit; if it's a soft-rename, wire `ClaudeMemory::Deprecations.warn`.
+
 ### Git Usage & Best Practices
 
 - Before each commit, apply the quality-review skill

@@ -307,6 +307,7 @@ The uninstall command removes:
 - 📊 [Dashboard](docs/dashboard.md) - Local web UI for inspection and trust signals (0.10.0+)
 - 🔧 [Plugin Setup](docs/plugin.md) - Claude Code integration
 - 🏗️ [Architecture](docs/architecture.md) - Technical deep dive
+- 🔒 [API Stability](docs/api_stability.md) - What's stable / experimental / internal across releases (0.12.0+)
 - 📝 [Changelog](CHANGELOG.md) - Release notes
 
 ## Benchmarks
