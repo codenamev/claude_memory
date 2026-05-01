@@ -1,0 +1,49 @@
+# Pre-release expectation manifest for hook activity_events.detail_json fields.
+#
+# Each entry under `events:` lists `detail_json` fields that MUST be
+# present (non-null) after a successful hook run by the *installed*
+# claude-memory binary. The `since_version` field is informational —
+# it documents when the field was added, so downstream readers
+# (release notes, regression triage) can correlate field absence with
+# release version.
+#
+# To add a new expected field: append to the `fields:` list under the
+# appropriate event_type. `bin/pre-release-smoke` picks it up
+# automatically; no script changes needed.
+#
+# To add a new event_type: append a new entry with `event_type:`,
+# `description:`, `status:` (the activity_events status to filter on),
+# and `fields:`. The script will need to know how to *trigger* that
+# event_type — see the corresponding `seed_*` and `trigger_*` methods
+# in `bin/pre-release-smoke`.
+#
+# Run via: bin/pre-release-smoke
+# Invoked by: /release skill Phase 1 (after specs, before lint)
+# See: improvements.md #63, feedback_hooks_run_installed_gem.md
+
+events:
+  - event_type: hook_context
+    description: SessionStart context injection telemetry
+    status: success
+    fields:
+      - name: context_length
+        since_version: "0.10.0"
+      - name: context_tokens
+        since_version: "0.11.0"
+      - name: top_fact_ids
+        since_version: "0.10.0"
+      - name: fact_count
+        since_version: "0.10.0"
+
+  - event_type: roi_nudge
+    description: First-week ROI nudge emitted at SessionEnd for the first 10 sessions
+    status: success
+    fields:
+      - name: n
+        since_version: "0.11.0"
+      - name: used
+        since_version: "0.11.0"
+      - name: pct
+        since_version: "0.11.0"
+      - name: prior_count
+        since_version: "0.11.0"

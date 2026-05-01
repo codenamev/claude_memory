@@ -1,0 +1,194 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Pre-release hook smoke gate.
+#
+# Verifies the *installed* claude-memory gem fires hooks correctly and
+# populates expected `detail_json` fields per
+# `spec/smoke/expected_fields.yml`. Codifies the verification convention
+# from `feedback_hooks_run_installed_gem.md` into a machine-enforced
+# release gate.
+#
+# Why this exists: hooks invoke the installed gem via PATH, not the
+# working tree. Specs verify code correctness; only this script catches
+# the case where `rake install` was forgotten and a new field never
+# actually populates in production. Sprung that trap twice already
+# (2026-04-16 ActivityLog incident, 2026-04-30 #47 token-budget
+# incident) — the gate exists so it can't be sprung a third time.
+#
+# Run: bin/pre-release-smoke
+# Invoked by: /release skill Phase 1 (after specs, before lint).
+# Exit codes: 0 = pass; 1 = failure (with diagnostic output naming the
+#   missing field(s) and event_type).
+
+require "json"
+require "yaml"
+require "tmpdir"
+require "fileutils"
+require "digest"
+require "shellwords"
+
+class PreReleaseSmoke
+  ROOT = File.expand_path("..", __dir__)
+  MANIFEST_PATH = File.join(ROOT, "spec/smoke/expected_fields.yml")
+
+  Failure = Class.new(StandardError)
+
+  def initialize(manifest_path: MANIFEST_PATH, stdout: $stdout, stderr: $stderr)
+    @manifest_path = manifest_path
+    @stdout = stdout
+    @stderr = stderr
+  end
+
+  def run
+    manifest = load_manifest
+    install_gem
+    verify_binary_on_path
+
+    Dir.mktmpdir("pre-release-smoke-") do |tmpdir|
+      db_path = File.join(tmpdir, "smoke.sqlite3")
+      session_id = "pre-release-smoke-#{Process.pid}"
+
+      seed_database(db_path, session_id)
+      trigger_hooks(db_path, session_id)
+      verify_expected_fields(db_path, manifest)
+    end
+
+    @stdout.puts "✓ pre-release smoke gate PASSED"
+    0
+  rescue Failure => e
+    @stderr.puts "✗ pre-release smoke gate FAILED: #{e.message}"
+    1
+  end
+
+  private
+
+  def load_manifest
+    raise Failure, "Manifest missing: #{@manifest_path}" unless File.exist?(@manifest_path)
+
+    manifest = YAML.load_file(@manifest_path)
+    events = manifest && manifest["events"]
+    raise Failure, "Manifest must have an 'events:' array" unless events.is_a?(Array)
+
+    events
+  end
+
+  # Reinstall the gem from working tree so the PATH-resolved binary
+  # matches the code we're about to release. This is the whole point of
+  # the gate.
+  def install_gem
+    @stdout.puts "→ rake install …"
+    log = "/tmp/pre-release-smoke-install.log"
+    success = system("cd #{ROOT.shellescape} && bundle exec rake install > #{log} 2>&1")
+    raise Failure, "rake install failed; see #{log}" unless success
+  end
+
+  def verify_binary_on_path
+    binary = `which claude-memory`.strip
+    raise Failure, "claude-memory not on PATH after install" if binary.empty?
+
+    # Confirm it's the installed binary (not a working-tree shim like exe/),
+    # because hooks invoke the PATH-resolved one.
+    @stdout.puts "✓ installed binary: #{binary}"
+  end
+
+  # Seed a single fact + provenance + content_item so context injection
+  # has something to find and roi_nudge has a non-zero contribution
+  # count. Inline-evals so we use the *installed* gem's classes, not the
+  # working tree's.
+  def seed_database(db_path, session_id)
+    @stdout.puts "→ seeding temp DB at #{db_path} …"
+    seed_script = <<~RUBY
+      require "claude_memory"
+      require "digest"
+      store = ClaudeMemory::Store::SQLiteStore.new(#{db_path.inspect})
+      text = "decision Use SQLite for storage so persistence stays embedded"
+      cid = store.upsert_content_item(
+        source: "pre-release-smoke",
+        session_id: #{session_id.inspect},
+        text_hash: Digest::SHA256.hexdigest(text),
+        byte_len: text.bytesize,
+        raw_text: text
+      )
+      ClaudeMemory::Index::LexicalFTS.new(store).index_content_item(cid, text)
+      eid = store.find_or_create_entity(type: "repo", name: "smoke")
+      fid = store.insert_fact(
+        subject_entity_id: eid, predicate: "decision",
+        object_literal: "Use SQLite for storage so persistence stays embedded",
+        status: "active", scope: "project"
+      )
+      store.insert_provenance(fact_id: fid, content_item_id: cid, quote: text, strength: "stated")
+      store.close
+    RUBY
+
+    log = "/tmp/pre-release-smoke-seed.log"
+    success = system("ruby -e #{seed_script.shellescape} > #{log} 2>&1")
+    raise Failure, "seed script failed; see #{log}" unless success
+  end
+
+  # Each manifest event_type needs a corresponding trigger here.
+  # Adding a new event_type: add a `when` branch invoking the right
+  # `claude-memory hook <subcommand>` against the temp DB.
+  def trigger_hooks(db_path, session_id)
+    payload = {"hook_event_name" => "SessionStart", "session_id" => session_id, "source" => "startup"}
+    fire_hook("context", payload, db_path)
+
+    payload_end = {"hook_event_name" => "SessionEnd", "session_id" => session_id}
+    fire_hook("nudge", payload_end, db_path)
+  end
+
+  def fire_hook(subcommand, payload, db_path)
+    @stdout.puts "→ firing claude-memory hook #{subcommand} …"
+    cmd = "echo #{JSON.generate(payload).shellescape} | " \
+      "claude-memory hook #{subcommand} --db #{db_path.shellescape} > /dev/null 2>&1"
+    success = system(cmd)
+    raise Failure, "claude-memory hook #{subcommand} returned non-zero" unless success
+  end
+
+  # Walks the manifest and verifies every expected field is non-null on
+  # the most recent matching activity_events row. Fails on the first
+  # missing field with a diagnostic naming the event_type and field.
+  def verify_expected_fields(db_path, expectations)
+    expectations.each do |entry|
+      event_type = entry.fetch("event_type")
+      status = entry.fetch("status")
+      fields = entry.fetch("fields")
+
+      detail_json = fetch_latest_detail_json(db_path, event_type, status)
+      raise Failure, "no #{status} #{event_type} event was recorded — hook didn't fire?" if detail_json.nil?
+
+      details = JSON.parse(detail_json)
+      missing = fields.reject { |f| present?(details[f["name"]]) }
+
+      next if missing.empty?
+
+      names = missing.map { |f| "#{f["name"]} (since #{f["since_version"]})" }.join(", ")
+      raise Failure, "#{event_type} detail_json missing expected field(s): #{names}"
+    end
+  end
+
+  # SQLite is the source of truth for the verification — same shape any
+  # downstream telemetry consumer would see.
+  def fetch_latest_detail_json(db_path, event_type, status)
+    sql = "SELECT detail_json FROM activity_events " \
+      "WHERE event_type=#{escape(event_type)} AND status=#{escape(status)} " \
+      "ORDER BY id DESC LIMIT 1;"
+    output = `sqlite3 #{db_path.shellescape} #{sql.shellescape} 2>/dev/null`.strip
+    output.empty? ? nil : output
+  end
+
+  def escape(value)
+    "'#{value.to_s.gsub("'", "''")}'"
+  end
+
+  # An empty array, empty hash, or 0 still counts as "present" — the
+  # field exists in the schema. Only nil/missing keys are flagged.
+  # Adjust here if a future field needs a stricter "non-empty" check.
+  def present?(value)
+    !value.nil?
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  exit PreReleaseSmoke.new.run
+end
