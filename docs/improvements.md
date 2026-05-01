@@ -527,18 +527,23 @@ Source: 2026-04-30 production verification of #48 hallucination-rate metric. Sur
 
 Source: 2026-04-30 #60 investigation, cause 4. All 27 rejected facts in this project's 7-day window were `uses_database` (18) or `deployment_platform` (9) with `session_id=nil` (MCP-originated), all from a 2-day burst on 2026-04-23 to 04-24. The pattern: when running `/study-repo` on an external project, the LLM extracted that project's tech stack and asserted it as facts about *this* project. Cleanup happened correctly via `claude-memory reject` after detection, but the round-trip is wasteful and noisy.
 
-**Implementation.**
+**Phase 1 — prompt fix (LANDED 2026-05-01).**
 
-- New `Distill::ExternalAttributionDetector` (sister to `ReferenceMaterialDetector`). Runs after extraction and before storage.
-- Heuristics: when the source content_item text contains markers like "studying X", "/study-repo", a non-current-project repo URL, or "external project", strongly bias toward `predicate=reference` for any `uses_database`/`deployment_platform`/`uses_framework` extraction.
-- Optional: extend `Hook::ContextInjector` or the distillation prompt to make this constraint explicit ("when discussing an external repository, do NOT extract its tech stack as project-level facts").
+`.claude/skills/study-repo/SKILL.md` gained a top-level "CRITICAL: Memory Discipline" section that explicitly forbids the LLM from calling `memory.store_extraction` with the studied project's tech stack as `uses_database` / `uses_framework` / `uses_language` / `deployment_platform` / `auth_method`. Allowed: `predicate=reference` for descriptions of the external project, plus genuine project-facing decisions/conventions/architecture derived from contrast (with reason clauses). The influence document (`docs/influence/<project>.md`) is named as the right home for "what tech does the studied project use" observations, taking memory entirely out of that loop.
+
+**Phase 2 — defense-in-depth detector (DEFERRED to 0.12.x or later).**
+
+If the prompt fix isn't enough on its own — measured by re-running `/study-repo` against ≥3 external projects post-2026-05-01 and counting any `uses_database`/`deployment_platform` rows that appear with non-self subjects — build `Distill::ExternalAttributionDetector` as a sister to `ReferenceMaterialDetector`. Heuristics: source content_item text containing "studying X", "/study-repo", a non-current-project repo URL, or "external project" → bias single-value-cardinality extractions toward `predicate=reference`.
+
+False-positive risk to handle: legitimate facts ABOUT this project that mention an external one ("ClaudeMemory adopts SessionStart hook context injection like claude-supermemory does") must still land as `decision` with reason clause, not be retagged. Solution if needed: detector requires both (a) external-project marker in source AND (b) the extracted subject not being the current project's repo entity.
 
 **Acceptance.**
 
-- Re-run a `/study-repo` on a fresh DB; observe zero `uses_database` or `deployment_platform` facts inserted that point to the external project's tech.
-- The 27 rejected facts cluster from this project's history doesn't reappear in similar scenarios.
+- After Phase 1: re-run `/study-repo` on a fresh DB; observe zero `uses_database` or `deployment_platform` facts inserted that point to the external project's tech.
+- After Phase 1: the 27-fact cluster pattern doesn't reappear in similar `/study-repo` sessions.
+- Phase 2 trigger: only build if Phase 1 measurement shows persistent leakage.
 
-**Effort.** ~½ day. Detector is mostly regex + content_item text inspection. Prompt addition is trivial.
+**Effort.** Phase 1: 15 minutes (done). Phase 2 (if needed): ~½ day for detector + tests.
 
 ---
 

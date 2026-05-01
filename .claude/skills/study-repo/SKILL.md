@@ -36,6 +36,21 @@ Then invoke: `/study-repo /tmp/study-repos/project-name`
 
 See `.claude/skills/study-repo/focus-examples.md` for more examples.
 
+## CRITICAL: Memory Discipline (no external-tech misattribution)
+
+When studying an external repo you will read its README, gemspec, and source — and you will see things like *"uses Postgres"*, *"runs on AWS"*, *"built with Rails"*. These are facts **about the external project, not about this project**.
+
+Do NOT call `memory.store_extraction` with the external project's tech stack as `uses_database` / `uses_framework` / `uses_language` / `deployment_platform` / `auth_method` predicates. That misattribution caused 27 facts to be stored about ClaudeMemory in the 2026-04-23/24 window that all had to be hand-rejected (see `improvements.md` #61, `quality_review.md` 2026-04-30 note). The corpus damage was real even though the cleanup worked — every misattributed fact takes a round trip through the database, conflict-detection, and the user's `claude-memory reject` queue.
+
+**The rule.** While `/study-repo` is running, the only `memory.store_extraction` calls allowed are:
+
+- `predicate=reference` for descriptions of the external project ("X is a plugin/library/CLI that…"). The dashboard's Knowledge → References panel is the right home for these.
+- Facts genuinely about *this* project ClaudeMemory that you derive from contrast with the studied repo (e.g., a decision: "Adopt RRF fusion from QMD because…"). These belong as `decision` / `convention` / `architecture` with `subject=repo` or `subject=claude_memory` AND a reason clause embedded.
+
+**The hard ban.** Any single-value cardinality predicate (`uses_database`, `deployment_platform`, `auth_method`) populated with the studied project's tech is forbidden. If in doubt, write the observation into the influence document (`docs/influence/<project>.md`) — that file IS the right artifact for "what does this external project use" — and skip `memory.store_extraction` entirely.
+
+If the user asks "did the studied project use X?" later, the answer lives in `docs/influence/`, not in memory facts.
+
 ## Analysis Phases
 
 Follow these phases systematically to ensure comprehensive coverage:
