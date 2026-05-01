@@ -208,7 +208,7 @@ scoreboard infrastructure is there.
 → improvements.md entry: *#50 CLAUDE.md Baseline in Headline Results*.
 Effort: 30min code + one $2-8 real-mode run.
 
-### #6 Release-to-release benchmark scoreboard
+### #6 Release-to-release benchmark scoreboard ✅ landed 2026-05-01
 
 **Gap.** Benchmark output is textual today. Nothing diff-able across versions.
 Regressions land silently — the only reason we caught the BM25 normalization
@@ -222,9 +222,21 @@ reads it and refuses to ship on regressions over threshold.
 **Why this release.** The semver commitment in 1.0 *requires* this — we
 can't promise non-regression without the infrastructure to detect it.
 
+**Status.** Landed 2026-05-01. `bin/run-evals` writes
+`spec/benchmarks/results/<version>.json` with diff-friendly pass-rate
+metrics by category and per-scenario. `bin/bench-diff` compares against
+the most recent prior tagged version's scoreboard via `Gem::Version`
+ordering, flags pass-rate drops > threshold (default 5%), supports
+`--threshold` / `--baseline` / `--json` / `--strict`. 11 unit specs
+covering missing-baseline, threshold tuning, deep-nested metric paths,
+JSON output. Wired into `/release` skill as new Phase 1 Step 7 (after
+smoke gate, before lint). First release with the gate is 0.12.0 itself
+— prior versions have no scoreboard, so bench-diff exits 0 with a "no
+baseline" note; from 0.13 onward it actively gates.
+
 → improvements.md entry: *#52 Benchmark Scoreboard Diff*. Effort: 1d.
 
-### #11 API stability audit — *promoted from 1.0 (2026-05-01)*
+### #11 API stability audit — *promoted from 1.0 (2026-05-01)* ✅ landed 2026-05-01
 
 **Gap.** "1.0 commits to semver" is meaningless without an explicit
 public/internal split. Many of the surfaces touched in 0.9.0 / 0.10.0 / 0.11.0
@@ -251,7 +263,7 @@ during the 0.12 → 1.0 soak.
 
 → improvements.md entry: *#59 API Stability Audit*. Effort: 2d.
 
-### #12 Pre-release hook smoke gate — *new this release (2026-05-01)*
+### #12 Pre-release hook smoke gate — *new this release (2026-05-01)* ✅ landed 2026-05-01
 
 **Gap.** During 0.11 work, five commits landed for #47 token-budget telemetry
 with 156 specs green. 24 hours of real SessionStart hook events recorded no

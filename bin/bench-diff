@@ -1,0 +1,230 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Compare benchmark scoreboards across releases.
+#
+# Reads `spec/benchmarks/results/*.json` (written by `bin/run-evals`),
+# diffs the *current* version's scoreboard against a baseline (the most
+# recent prior tagged version by default), and reports per-category
+# deltas. Exits non-zero if any tracked metric regresses beyond the
+# threshold.
+#
+# Usage:
+#   bin/bench-diff                                # vs. previous version
+#   bin/bench-diff --baseline 0.10.0              # vs. specific version
+#   bin/bench-diff --json                         # machine-readable output
+#   bin/bench-diff --threshold 0.02               # tighten regression bar
+#                                                 # (default 0.05 = 5%)
+#
+# Exit codes:
+#   0 — no regressions over threshold
+#   1 — at least one tracked metric regressed
+#   2 — usage / file-not-found error
+#
+# Wired into the /release skill (Phase 1 step 6.5) — release aborts
+# before publish if regressions are detected. Per improvements.md #52
+# / 1_0_punchlist.md 0.12 #6.
+
+require "json"
+require "optparse"
+require "rubygems/version"
+
+require_relative "../lib/claude_memory/version"
+
+class BenchDiff
+  RESULTS_DIR = File.expand_path("../spec/benchmarks/results", __dir__)
+  DEFAULT_THRESHOLD = 0.05
+
+  def initialize(stdout: $stdout, stderr: $stderr)
+    @stdout = stdout
+    @stderr = stderr
+  end
+
+  def run(argv)
+    opts = parse_options(argv)
+    return 2 if opts.nil?
+
+    current = load_current_scoreboard
+    return 2 unless current
+
+    baseline = load_baseline_scoreboard(opts[:baseline], current["version"])
+    unless baseline
+      @stderr.puts "No baseline scoreboard available — this is the first tagged release with results."
+      @stderr.puts "Skipping diff (exit 0). Run with --strict to make this case a failure."
+      return opts[:strict] ? 2 : 0
+    end
+
+    deltas = compute_deltas(baseline, current)
+    if opts[:json]
+      @stdout.puts JSON.pretty_generate({
+        current: current["version"],
+        baseline: baseline["version"],
+        threshold: opts[:threshold],
+        deltas: deltas,
+        regressions: regressions(deltas, opts[:threshold])
+      })
+    else
+      report_text(baseline, current, deltas, opts[:threshold])
+    end
+
+    regs = regressions(deltas, opts[:threshold])
+    regs.empty? ? 0 : 1
+  end
+
+  private
+
+  def parse_options(argv)
+    opts = {threshold: DEFAULT_THRESHOLD, json: false, strict: false, baseline: nil}
+    parser = OptionParser.new do |o|
+      o.banner = "Usage: bin/bench-diff [options]"
+      o.on("--baseline VERSION", "Baseline version (default: latest prior to current)") { |v| opts[:baseline] = v }
+      o.on("--threshold N", Float, "Pass-rate drop that counts as a regression (default 0.05)") { |v| opts[:threshold] = v }
+      o.on("--json", "Emit machine-readable JSON to stdout instead of text") { opts[:json] = true }
+      o.on("--strict", "Treat 'no baseline available' as failure (exit 2)") { opts[:strict] = true }
+      o.on("-h", "--help", "Show this message") {
+        @stdout.puts o.to_s
+        exit 0
+      }
+    end
+    parser.parse(argv)
+    opts
+  rescue OptionParser::ParseError => e
+    @stderr.puts "Error: #{e.message}"
+    @stderr.puts parser
+    nil
+  end
+
+  def load_current_scoreboard
+    path = File.join(RESULTS_DIR, "#{ClaudeMemory::VERSION}.json")
+    unless File.exist?(path)
+      @stderr.puts "No scoreboard at #{path}. Run `bin/run-evals` first."
+      return nil
+    end
+    JSON.parse(File.read(path))
+  rescue JSON::ParserError => e
+    @stderr.puts "Failed to parse #{path}: #{e.message}"
+    nil
+  end
+
+  # Baseline = the most recent tagged scoreboard with a strictly older
+  # version than `current_version`. Falls back gracefully on first run.
+  def load_baseline_scoreboard(explicit_version, current_version)
+    if explicit_version
+      path = File.join(RESULTS_DIR, "#{explicit_version}.json")
+      return JSON.parse(File.read(path)) if File.exist?(path)
+      @stderr.puts "Explicit baseline #{explicit_version} not found at #{path}"
+      return nil
+    end
+
+    candidates = Dir[File.join(RESULTS_DIR, "*.json")].map do |path|
+      version = File.basename(path, ".json")
+      [Gem::Version.new(version), path]
+    rescue ArgumentError
+      nil
+    end.compact
+
+    current = Gem::Version.new(current_version)
+    candidates = candidates.select { |v, _| v < current }.sort_by { |v, _| v }
+
+    return nil if candidates.empty?
+    JSON.parse(File.read(candidates.last[1]))
+  rescue JSON::ParserError, Errno::ENOENT
+    nil
+  end
+
+  # Walk the metrics tree of both scoreboards and produce flat key →
+  # {baseline, current, delta} entries. Non-numeric values are
+  # ignored; missing keys on either side surface as nil.
+  def compute_deltas(baseline, current)
+    flat_baseline = flatten(baseline["metrics"], "metrics")
+    flat_current = flatten(current["metrics"], "metrics")
+
+    keys = (flat_baseline.keys + flat_current.keys).uniq.sort
+
+    keys.each_with_object({}) do |key, acc|
+      base = flat_baseline[key]
+      curr = flat_current[key]
+      next unless numeric?(base) || numeric?(curr)
+
+      acc[key] = {
+        "baseline" => base,
+        "current" => curr,
+        "delta" => (numeric?(base) && numeric?(curr)) ? (curr - base).round(4) : nil
+      }
+    end
+  end
+
+  def flatten(value, prefix, acc = {})
+    case value
+    when Hash
+      value.each { |k, v| flatten(v, "#{prefix}.#{k}", acc) }
+    when Numeric
+      acc[prefix] = value
+    end
+    acc
+  end
+
+  def numeric?(value)
+    value.is_a?(Numeric)
+  end
+
+  # A regression is any pass-rate-shaped key whose value dropped by
+  # more than the threshold. Other numeric keys (counts, durations)
+  # are reported but don't trigger failures — total counts can grow
+  # legitimately when new specs land.
+  def regressions(deltas, threshold)
+    deltas.select do |key, entry|
+      next false unless key.end_with?(".pass_rate") || key.include?(".pass_rate.")
+      next false unless entry["delta"].is_a?(Numeric)
+      entry["delta"] < -threshold
+    end
+  end
+
+  def report_text(baseline, current, deltas, threshold)
+    @stdout.puts "Benchmark scoreboard diff"
+    @stdout.puts "  Baseline: #{baseline["version"]} (#{baseline["timestamp"]})"
+    @stdout.puts "  Current:  #{current["version"]} (#{current["timestamp"]})"
+    @stdout.puts "  Regression threshold: -#{(threshold * 100).round(1)}%"
+    @stdout.puts ""
+
+    deltas.each do |key, entry|
+      base = format_value(entry["baseline"])
+      curr = format_value(entry["current"])
+      delta = entry["delta"]
+      next unless delta # skip keys missing on one side
+
+      arrow = if delta.zero?
+        "→"
+      elsif delta.positive?
+        "↑"
+      else
+        "↓"
+      end
+
+      pct_key = key.end_with?(".pass_rate") || key.include?(".pass_rate.")
+      delta_str = pct_key ? format("%+.2f%%", delta * 100) : format("%+.2f", delta)
+      regressed = pct_key && delta < -threshold ? " ← REGRESSION" : ""
+
+      @stdout.puts "  #{arrow} #{key.ljust(48)} #{base} → #{curr} (#{delta_str})#{regressed}"
+    end
+
+    regs = regressions(deltas, threshold)
+    @stdout.puts ""
+    if regs.empty?
+      @stdout.puts "✓ No regressions detected."
+    else
+      @stdout.puts "✗ #{regs.size} regression(s) over threshold."
+      regs.each_key { |k| @stdout.puts "    #{k}" }
+    end
+  end
+
+  def format_value(value)
+    return "—" if value.nil?
+    return value.to_s unless value.is_a?(Float)
+    (value <= 1.0) ? format("%.4f", value) : value.round(2).to_s
+  end
+end
+
+if __FILE__ == $PROGRAM_NAME
+  exit BenchDiff.new.run(ARGV)
+end
