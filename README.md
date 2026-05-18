@@ -141,6 +141,16 @@ File-searchable questions ("what version is this?") and one-shot code generation
 - **Token Efficient**: 10x reduction in memory queries with progressive disclosure
 - **Database Maintenance**: Compact, export, and backup commands
 - **Built-in Observability** (0.10.0+): `claude-memory dashboard` opens a local web UI with a moments feed, trust panel (token budget, quality score, utilization, feedback), conflicts dedup, knowledge index, and 👍/👎 feedback. See **[Dashboard guide →](docs/dashboard.md)**. `claude-memory digest` writes a weekly markdown report (Activity, Context cost, Quality, New knowledge, Utilization, Conflicts, Feedback); `claude-memory show` prints what would be injected next SessionStart; `claude-memory census` audits the predicate vocabulary across projects.
+- **OpenTelemetry ingestion** (Unreleased): point Claude Code's OTLP exporter at the dashboard and the new "Telemetry" tab shows per-API-call cost in USD, token usage by model, top tools by latency, and a per-prompt event waterfall. One-line setup:
+
+  ```bash
+  claude-memory dashboard --port 3377 &   # start the receiver
+  claude-memory otel --enable              # writes telemetry env into .claude/settings.json
+  claude-memory otel --enable-traces       # optional: include OpenTelemetry spans
+  claude-memory otel --status              # confirm metrics are flowing
+  ```
+
+  Only metrics and event names are captured by default — verbatim prompts and bodies stay off until you explicitly opt in via `claude-memory otel --capture-prompts`. The receiver binds to `127.0.0.1` only.
 
 ## What's New in 0.11.0
 
