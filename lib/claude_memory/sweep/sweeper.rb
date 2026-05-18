@@ -8,6 +8,9 @@ module ClaudeMemory
         disputed_fact_ttl_days: 30,
         content_retention_days: 30,
         mcp_tool_call_retention_days: 90,
+        otel_metric_retention_days: 30,
+        otel_event_retention_days: 14,
+        otel_trace_retention_days: 7,
         default_budget_seconds: 5
       }.freeze
 
@@ -43,6 +46,9 @@ module ClaudeMemory
         run_if_within_budget { @stats[:orphaned_provenance_deleted] = maintenance.prune_orphaned_provenance }
         run_if_within_budget { @stats[:old_content_pruned] = maintenance.prune_old_content }
         run_if_within_budget { @stats[:mcp_tool_calls_pruned] = maintenance.prune_old_mcp_tool_calls }
+        run_if_within_budget { @stats[:otel_metrics_pruned] = maintenance.prune_old_otel_metrics }
+        run_if_within_budget { @stats[:otel_events_pruned] = maintenance.prune_old_otel_events }
+        run_if_within_budget { @stats[:otel_traces_pruned] = maintenance.prune_old_otel_traces }
         run_if_within_budget { @stats[:vec_backfilled] = maintenance.backfill_vec_index }
         run_if_within_budget { @stats[:vec_cleaned] = maintenance.cleanup_vec_expired }
         run_if_within_budget { @stats[:wal_checkpointed] = maintenance.checkpoint_wal }

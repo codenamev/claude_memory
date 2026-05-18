@@ -17,7 +17,10 @@ module ClaudeMemory
         proposed_fact_ttl_days: 14,
         disputed_fact_ttl_days: 30,
         content_retention_days: 30,
-        mcp_tool_call_retention_days: 90
+        mcp_tool_call_retention_days: 90,
+        otel_metric_retention_days: 30,
+        otel_event_retention_days: 14,
+        otel_trace_retention_days: 7
       }.freeze
 
       attr_reader :store
@@ -247,6 +250,33 @@ module ClaudeMemory
 
         cutoff = cutoff_time(@config[:mcp_tool_call_retention_days])
         @store.mcp_tool_calls.where { called_at < cutoff }.delete
+      end
+
+      # Delete OTel metric data points older than retention window.
+      # Returns: Integer count of deleted rows (0 if table missing).
+      def prune_old_otel_metrics
+        return 0 unless @store.db.table_exists?(:otel_metrics)
+
+        cutoff = cutoff_time(@config[:otel_metric_retention_days])
+        @store.otel_metrics.where { recorded_at < cutoff }.delete
+      end
+
+      # Delete OTel log-style events older than retention window.
+      # Returns: Integer count of deleted rows (0 if table missing).
+      def prune_old_otel_events
+        return 0 unless @store.db.table_exists?(:otel_events)
+
+        cutoff = cutoff_time(@config[:otel_event_retention_days])
+        @store.otel_events.where { occurred_at < cutoff }.delete
+      end
+
+      # Delete OTel trace spans older than retention window.
+      # Returns: Integer count of deleted rows (0 if table missing).
+      def prune_old_otel_traces
+        return 0 unless @store.db.table_exists?(:otel_traces)
+
+        cutoff = cutoff_time(@config[:otel_trace_retention_days])
+        @store.otel_traces.where { recorded_at < cutoff }.delete
       end
 
       # Checkpoint the SQLite WAL file for compaction.
