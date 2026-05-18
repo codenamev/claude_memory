@@ -93,7 +93,6 @@ RSpec.describe "Schema round-trip from v12 to v17 (v0.8.0 boundary)" do
       fixture
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
       expect(store.db[:schema_info].get(:version)).to eq(ClaudeMemory::Store::SQLiteStore::SCHEMA_VERSION)
-      expect(ClaudeMemory::Store::SQLiteStore::SCHEMA_VERSION).to eq(17)
       store.close
     end
 

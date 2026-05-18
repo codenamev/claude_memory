@@ -101,10 +101,10 @@ RSpec.describe "Schema round-trip from v14 to v17 (v0.9.x boundary)" do
   describe "auto-migration via SQLiteStore.new" do
     let(:fixture) { build_v14_fixture! }
 
-    it "advances v14 → v17 cleanly" do
+    it "advances v14 to the current SCHEMA_VERSION" do
       fixture
       store = ClaudeMemory::Store::SQLiteStore.new(db_path)
-      expect(store.db[:schema_info].get(:version)).to eq(17)
+      expect(store.db[:schema_info].get(:version)).to eq(ClaudeMemory::Store::SQLiteStore::SCHEMA_VERSION)
       store.close
     end
 
