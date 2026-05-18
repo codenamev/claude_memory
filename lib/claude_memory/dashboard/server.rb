@@ -18,6 +18,7 @@ module ClaudeMemory
       def start
         @server = WEBrick::HTTPServer.new(
           Port: @port,
+          BindAddress: "127.0.0.1",
           Logger: WEBrick::Log.new(File::NULL),
           AccessLog: []
         )
@@ -67,6 +68,76 @@ module ClaudeMemory
         @server.mount_proc("/api/trust") { |_req, res| with_fresh_connections { json_response(res, api.trust) } }
         @server.mount_proc("/api/knowledge") { |req, res| with_fresh_connections { json_response(res, api.knowledge(req.query)) } }
         @server.mount_proc("/api/reuse") { |req, res| with_fresh_connections { json_response(res, api.reuse(req.query)) } }
+        @server.mount_proc("/api/telemetry") { |_req, res| with_fresh_connections { json_response(res, api.telemetry) } }
+        @server.mount_proc("/api/prompt_journey") { |req, res|
+          with_fresh_connections {
+            prompt_id = req.query["prompt_id"].to_s
+            json_response(res, api.prompt_journey(prompt_id))
+          }
+        }
+
+        # OTel writer routes — high-frequency, no with_fresh_connections.
+        # Telemetry exports happen at sub-second cadence; the WAL stale-cache
+        # concern that motivates per-request connection release only affects
+        # readers.
+        @server.mount_proc("/v1/metrics") { |req, res| handle_otel(:metrics, req, res) }
+        @server.mount_proc("/v1/logs") { |req, res| handle_otel(:logs, req, res) }
+        @server.mount_proc("/v1/traces") { |req, res| handle_otel(:traces, req, res) }
+      end
+
+      # OTLP/HTTP/JSON receiver. Rejects non-JSON content with 415; returns
+      # 501 for /v1/traces unless the user opted in via
+      # `claude-memory otel --enable-traces`. On parse/persist failure
+      # returns 400 with the underlying error message — matches OTLP's
+      # tolerant retry semantics so Claude Code's exporter backs off.
+      def handle_otel(kind, req, res)
+        return otel_response(res, 415, "only application/json is accepted") unless json_content?(req)
+        if kind == :traces && !configuration.otel_traces_enabled?
+          return otel_response(res, 501, "traces ingestion disabled — run `claude-memory otel --enable-traces`")
+        end
+
+        payload = parse_json_body(req)
+        return otel_response(res, 400, "request body was not valid JSON") if payload.nil? || payload == {}
+
+        store = ensure_global_store
+        return otel_response(res, 503, "global store unavailable") unless store
+
+        rows = case kind
+        when :metrics then {metrics: ClaudeMemory::OTel::OtlpJsonEnvelope.parse_metrics(payload)}
+        when :logs then {events: ClaudeMemory::OTel::OtlpJsonEnvelope.parse_logs(payload)}
+        when :traces then {traces: ClaudeMemory::OTel::OtlpJsonEnvelope.parse_traces(payload)}
+        end
+
+        result = ClaudeMemory::OTel::Ingestor.new(store).ingest(rows)
+        if result.success?
+          json_response(res, {})
+        else
+          otel_response(res, 400, result.error)
+        end
+      rescue => e
+        otel_response(res, 500, e.message)
+      end
+
+      def json_content?(req)
+        ct = req["content-type"].to_s.downcase
+        ct.start_with?("application/json")
+      end
+
+      def otel_response(res, status, message)
+        res.status = status
+        res["Content-Type"] = "application/json; charset=utf-8"
+        res.body = JSON.generate(error: message)
+      end
+
+      def configuration
+        @configuration ||= ClaudeMemory::Configuration.new
+      end
+
+      def ensure_global_store
+        @manager.ensure_global!
+        @manager.global_store
+      rescue Sequel::DatabaseError, Errno::ENOENT
+        nil
       end
 
       # WAL-mode SQLite caches pages on reader connections; when the MCP

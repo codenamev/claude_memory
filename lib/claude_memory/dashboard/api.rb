@@ -460,6 +460,14 @@ module ClaudeMemory
         Timeline.new(@manager).days
       end
 
+      def telemetry
+        Telemetry.new(@manager).snapshot
+      end
+
+      def prompt_journey(prompt_id)
+        PromptJourney.new(@manager).for(prompt_id.to_s)
+      end
+
       private
 
       CONTENT_ITEM_PREVIEW_BYTES = 8000

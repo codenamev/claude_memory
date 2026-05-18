@@ -1230,6 +1230,7 @@
     <div class="drawer-tab" data-adv="efficacy">Efficacy</div>
     <div class="drawer-tab" data-adv="conflicts">Conflicts</div>
     <div class="drawer-tab" data-adv="activity">Raw log</div>
+    <div class="drawer-tab" data-adv="telemetry">Telemetry</div>
   </div>
 
   <div class="drawer-panel active" id="adv-knowledge">
@@ -1359,6 +1360,54 @@
         <tbody id="activity-tbody"></tbody>
       </table>
     </div>
+  </div>
+
+  <div class="drawer-panel" id="adv-telemetry">
+    <div class="adv-card" id="telemetry-status" style="font-size: 12px; color: var(--text-dim);">
+      Loading telemetry status...
+    </div>
+    <div class="adv-card" style="font-size: 11px; color: var(--text-dim);">
+      Capturing only metrics by default. Prompts and bodies require explicit opt-in via
+      <code>claude-memory otel --capture-prompts</code>.
+    </div>
+    <div class="adv-card">
+      <h3 style="margin-top: 0;">Cost (last 7 days, hourly)</h3>
+      <table>
+        <thead><tr><th>Hour</th><th style="text-align: right;">Requests</th><th style="text-align: right;">Cost USD</th></tr></thead>
+        <tbody id="telemetry-cost-tbody"></tbody>
+      </table>
+    </div>
+    <div class="adv-card">
+      <h3 style="margin-top: 0;">Tokens by model</h3>
+      <table>
+        <thead><tr><th>Model</th><th>Type</th><th style="text-align: right;">Tokens</th></tr></thead>
+        <tbody id="telemetry-tokens-tbody"></tbody>
+      </table>
+    </div>
+    <div class="adv-card">
+      <h3 style="margin-top: 0;">Top tools by latency</h3>
+      <table>
+        <thead><tr><th>Tool</th><th style="text-align: right;">Calls</th><th style="text-align: right;">Avg duration (ms)</th></tr></thead>
+        <tbody id="telemetry-tools-tbody"></tbody>
+      </table>
+    </div>
+    <div class="adv-card">
+      <h3 style="margin-top: 0;">Recent token-usage points</h3>
+      <table>
+        <thead><tr><th>Recorded at</th><th>Model</th><th>Type</th><th style="text-align: right;">Tokens</th><th>Prompt</th></tr></thead>
+        <tbody id="telemetry-recent-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="prompt-journey-modal" role="dialog" aria-modal="true">
+  <div class="modal" role="document">
+    <div class="modal-header">
+      <h2 id="prompt-journey-title">Prompt journey</h2>
+      <button class="modal-close" aria-label="Close" onclick="closeModal('prompt-journey-modal')">&times;</button>
+    </div>
+    <div id="prompt-journey-body"></div>
   </div>
 </div>
 
@@ -2121,7 +2170,87 @@ function switchAdvTab(name) {
 
 // ==================== Advanced drawer loaders ====================
 async function loadAdvanced() {
-  await Promise.all([loadKnowledge(), loadOverview(), loadFacts(), loadEfficacy(), loadConflicts(), loadActivityLog()]);
+  await Promise.all([loadKnowledge(), loadOverview(), loadFacts(), loadEfficacy(), loadConflicts(), loadActivityLog(), loadTelemetry()]);
+}
+
+async function loadTelemetry() {
+  const data = await api('telemetry');
+
+  const status = data.status || {};
+  const statusEl = document.getElementById('telemetry-status');
+  const endpoint = status.endpoint ? esc(status.endpoint) : '<em>not configured</em>';
+  const banner = data.contains_prompt_content
+    ? '<div style="color: #c4863c; margin-top: 4px;">Captured payload contains prompt or body content. Disable with <code>claude-memory otel --no-capture-prompts</code>.</div>'
+    : '';
+  statusEl.innerHTML = `
+    Endpoint: ${endpoint}<br>
+    Metrics: ${status.metric_count || 0} · Events: ${status.event_count || 0} · Traces: ${status.trace_count || 0} (enabled: ${status.traces_enabled ? 'yes' : 'no'})<br>
+    Last metric: ${status.last_metric_at ? esc(status.last_metric_at) : 'never'}
+    ${banner}
+  `;
+
+  const costTbody = document.getElementById('telemetry-cost-tbody');
+  const cost = data.cost_over_time || [];
+  costTbody.innerHTML = cost.length === 0
+    ? `<tr><td colspan="3" style="color: var(--text-faint);">No cost metrics yet. Run <code>claude-memory otel --enable</code> and start a Claude session.</td></tr>`
+    : cost.map(row => `
+      <tr><td>${esc(row.hour)}</td><td style="text-align: right;">${row.requests}</td><td style="text-align: right;">$${row.cost_usd.toFixed(4)}</td></tr>
+    `).join('');
+
+  const tokensTbody = document.getElementById('telemetry-tokens-tbody');
+  const tokens = data.tokens_by_model || [];
+  tokensTbody.innerHTML = tokens.length === 0
+    ? `<tr><td colspan="3" style="color: var(--text-faint);">No token usage yet.</td></tr>`
+    : tokens.map(row => `
+      <tr><td>${esc(row.model)}</td><td>${esc(row.type)}</td><td style="text-align: right;">${row.tokens.toLocaleString()}</td></tr>
+    `).join('');
+
+  const toolsTbody = document.getElementById('telemetry-tools-tbody');
+  const tools = data.top_tools_by_latency || [];
+  toolsTbody.innerHTML = tools.length === 0
+    ? `<tr><td colspan="3" style="color: var(--text-faint);">No tool_result events yet.</td></tr>`
+    : tools.map(row => `
+      <tr><td>${esc(row.tool)}</td><td style="text-align: right;">${row.count}</td><td style="text-align: right;">${row.avg_duration_ms}</td></tr>
+    `).join('');
+
+  const recentTbody = document.getElementById('telemetry-recent-tbody');
+  const recent = data.recent_metrics || [];
+  recentTbody.innerHTML = recent.length === 0
+    ? `<tr><td colspan="5" style="color: var(--text-faint);">No recent token data points.</td></tr>`
+    : recent.map(row => {
+        const promptCell = row.prompt_id
+          ? `<a href="javascript:void(0)" onclick="openPromptJourney('${esc(row.prompt_id)}')">view</a>`
+          : '';
+        return `<tr>
+          <td>${esc(row.recorded_at || '')}</td>
+          <td>${esc(row.model || '')}</td>
+          <td>${esc(row.type || '')}</td>
+          <td style="text-align: right;">${(row.tokens || 0).toLocaleString()}</td>
+          <td>${promptCell}</td>
+        </tr>`;
+      }).join('');
+}
+
+async function openPromptJourney(promptId) {
+  const data = await api('prompt_journey', {prompt_id: promptId});
+  const body = document.getElementById('prompt-journey-body');
+  document.getElementById('prompt-journey-title').textContent = `Prompt journey · ${promptId}`;
+  const events = data.events || [];
+  body.innerHTML = events.length === 0
+    ? `<div style="padding: 12px; color: var(--text-faint);">No events recorded for prompt ${esc(promptId)} yet.</div>`
+    : `<table>
+        <thead><tr><th>Time</th><th>Source</th><th>Event</th><th>Model / Tool</th><th>Duration</th></tr></thead>
+        <tbody>${events.map(ev => `
+          <tr>
+            <td>${esc(ev.occurred_ago || ev.occurred_at || '')}</td>
+            <td><span class="src ${esc(ev.source)}">${esc(ev.source)}</span></td>
+            <td>${esc(ev.name || '')}</td>
+            <td>${esc(ev.model || ev.tool_name || '')}</td>
+            <td>${ev.duration_ms != null ? `${ev.duration_ms} ms` : ''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  openModal('prompt-journey-modal');
 }
 
 let knowledgeScope = 'all';

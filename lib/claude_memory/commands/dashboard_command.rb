@@ -36,7 +36,8 @@ module ClaudeMemory
         manager.ensure_global! if manager.global_exists?
         manager.ensure_project! if manager.project_exists?
 
-        stdout.puts "Starting ClaudeMemory dashboard on http://localhost:#{opts[:port]}"
+        stdout.puts "Starting ClaudeMemory dashboard on http://127.0.0.1:#{opts[:port]}"
+        stdout.puts "OTel receiver listening at http://127.0.0.1:#{opts[:port]}/v1/{metrics,logs,traces}"
         stdout.puts "Press Ctrl+C to stop."
 
         server = Dashboard::Server.new(
