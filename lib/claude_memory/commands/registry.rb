@@ -43,7 +43,8 @@ module ClaudeMemory
         "census" => {class: CensusCommand, description: "Aggregate predicate usage across project databases"},
         "dashboard" => {class: DashboardCommand, description: "Open debugging dashboard"},
         "digest" => {class: DigestCommand, description: "Render a weekly markdown digest of memory activity"},
-        "show" => {class: ShowCommand, description: "Print what memory would inject at the next SessionStart"}
+        "show" => {class: ShowCommand, description: "Print what memory would inject at the next SessionStart"},
+        "otel" => {class: OtelCommand, description: "Configure or inspect OpenTelemetry ingestion from Claude Code"}
       }.freeze
 
       # Find a command class by name
