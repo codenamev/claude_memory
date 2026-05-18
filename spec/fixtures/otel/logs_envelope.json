@@ -1,0 +1,39 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "claude-code"}}
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {"name": "com.anthropic.claude_code"},
+          "logRecords": [
+            {
+              "timeUnixNano": "1700000000000000000",
+              "body": {"stringValue": "user_prompt"},
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "user_prompt"}},
+                {"key": "session.id", "value": {"stringValue": "abc-123"}},
+                {"key": "prompt.id", "value": {"stringValue": "p-1"}},
+                {"key": "prompt_length", "value": {"intValue": "42"}}
+              ]
+            },
+            {
+              "timeUnixNano": "1700000001000000000",
+              "body": {"stringValue": "tool_result"},
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "tool_result"}},
+                {"key": "session.id", "value": {"stringValue": "abc-123"}},
+                {"key": "prompt.id", "value": {"stringValue": "p-1"}},
+                {"key": "tool_name", "value": {"stringValue": "Read"}},
+                {"key": "duration_ms", "value": {"intValue": "12"}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

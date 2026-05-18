@@ -1,0 +1,61 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "claude-code"}},
+          {"key": "service.version", "value": {"stringValue": "2.1.117"}},
+          {"key": "os.type", "value": {"stringValue": "darwin"}}
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {"name": "com.anthropic.claude_code"},
+          "metrics": [
+            {
+              "name": "claude_code.token.usage",
+              "unit": "tokens",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "asInt": "1234",
+                    "timeUnixNano": "1700000000000000000",
+                    "attributes": [
+                      {"key": "type", "value": {"stringValue": "input"}},
+                      {"key": "model", "value": {"stringValue": "claude-sonnet-4-6"}},
+                      {"key": "session.id", "value": {"stringValue": "abc-123"}}
+                    ]
+                  },
+                  {
+                    "asInt": "456",
+                    "timeUnixNano": "1700000000000000000",
+                    "attributes": [
+                      {"key": "type", "value": {"stringValue": "output"}},
+                      {"key": "model", "value": {"stringValue": "claude-sonnet-4-6"}},
+                      {"key": "session.id", "value": {"stringValue": "abc-123"}}
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "claude_code.cost.usage",
+              "unit": "USD",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "asDouble": 0.0042,
+                    "timeUnixNano": "1700000000000000000",
+                    "attributes": [
+                      {"key": "model", "value": {"stringValue": "claude-sonnet-4-6"}}
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

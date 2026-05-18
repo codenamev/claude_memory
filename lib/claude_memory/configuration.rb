@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require "json"
 
 module ClaudeMemory
   # Centralized configuration and ENV access
@@ -64,6 +65,46 @@ module ClaudeMemory
       (parsed > 0) ? parsed : DEFAULT_STALE_DAYS
     rescue ArgumentError
       DEFAULT_STALE_DAYS
+    end
+
+    # Whether OTel trace ingestion is opted in. Reads OTEL_TRACES_EXPORTER
+    # from .claude/settings.json's env block. Traces are off unless the
+    # value is present and non-empty and not "none". Set by
+    # `claude-memory otel --enable-traces`.
+    #
+    # @return [Boolean]
+    def otel_traces_enabled?
+      value = settings_env["OTEL_TRACES_EXPORTER"]
+      return false if value.nil?
+      stripped = value.to_s.strip
+      !stripped.empty? && stripped != "none"
+    end
+
+    # Read the env block from .claude/settings.json (project scope) so
+    # callers can inspect what Claude Code sees at session start. Returns
+    # an empty hash when the file is missing or unparseable — matches the
+    # tolerant behavior of Claude Code's settings loader.
+    #
+    # @return [Hash]
+    def settings_env
+      path = settings_json_path
+      return {} unless path
+      raw = File.read(path)
+      parsed = JSON.parse(raw)
+      env_block = parsed.is_a?(Hash) ? parsed["env"] : nil
+      env_block.is_a?(Hash) ? env_block : {}
+    rescue JSON::ParserError, Errno::ENOENT
+      {}
+    end
+
+    # Path to the project-scoped settings.json. nil when no project_dir
+    # exists (e.g. running outside any directory).
+    #
+    # @return [String, nil]
+    def settings_json_path
+      dir = project_dir
+      return nil unless dir
+      File.join(dir, ".claude", "settings.json")
     end
 
     private
