@@ -34,7 +34,9 @@ module ClaudeMemory
             parser.on("--capture-prompts", "Opt in to OTEL_LOG_USER_PROMPTS=1") { o[:action] = :capture_prompts }
             parser.on("--no-capture-prompts", "Stop capturing prompt content") { o[:action] = :disable_capture_prompts }
             parser.on("--verify", "Send a sample envelope and confirm it persisted") { o[:action] = :verify }
+            parser.on("--backfill", "Tag historical activity_events from prior OTel events") { o[:action] = :backfill }
             parser.on("--port PORT", Integer, "Receiver port for the dashboard (default 3377)") { |v| o[:port] = v }
+            parser.on("--batch-size N", Integer, "Backfill batch size (default 500)") { |v| o[:batch_size] = v }
           end
         end
         return 1 if opts.nil?
@@ -47,14 +49,17 @@ module ClaudeMemory
         when :capture_prompts then run_capture_prompts(opts)
         when :disable_capture_prompts then run_settings_change(opts) { |w| w.disable_capture_prompts! }
         when :verify then run_verify(opts)
+        when :backfill then run_backfill(opts)
         else run_status(opts)
         end
       end
 
       private
 
+      DEFAULT_BACKFILL_BATCH_SIZE = 500
+
       def default_options
-        {action: :status, port: OTel::SettingsWriter::DEFAULT_PORT}
+        {action: :status, port: OTel::SettingsWriter::DEFAULT_PORT, batch_size: DEFAULT_BACKFILL_BATCH_SIZE}
       end
 
       def writer(opts)
@@ -118,6 +123,67 @@ module ClaudeMemory
           return 0
         end
         run_settings_change(opts) { |w| w.capture_prompts! }
+      end
+
+      # One-time pass: stream every otel_events row with a prompt_id from
+      # the global store and run it through PromptScope so historical
+      # activity_events get tagged. Subsequent runs are cheap because
+      # PromptScope is idempotent (already-tagged rows are excluded by
+      # the `prompt_id: nil` filter).
+      def run_backfill(opts)
+        manager = Store::StoreManager.new
+        unless manager.global_exists?
+          return failure("Global memory DB not found — nothing to backfill against.")
+        end
+        manager.ensure_global!
+        manager.ensure_project! if manager.project_exists?
+
+        store = manager.global_store
+        unless store.db.table_exists?(:otel_events)
+          manager.close
+          return failure("otel_events table missing — run `claude-memory dashboard` first to migrate.")
+        end
+
+        total_events = store.otel_events.exclude(prompt_id: nil).count
+        if total_events.zero?
+          stdout.puts "No OTel events with prompt_id to backfill from."
+          manager.close
+          return 0
+        end
+
+        stdout.puts "Backfilling #{total_events} OTel event(s) into activity_events…"
+        scope = OTel::PromptScope.new(manager)
+        tagged = groups = batches = 0
+        offset = 0
+        batch_size = opts[:batch_size]
+
+        loop do
+          rows = store.otel_events
+            .exclude(prompt_id: nil)
+            .order(:occurred_at, :id)
+            .limit(batch_size)
+            .offset(offset)
+            .select(:event_name, :session_id, :prompt_id, :occurred_at)
+            .all
+          break if rows.empty?
+
+          events = rows.map { |r|
+            {event_name: r[:event_name], session_id: r[:session_id],
+             prompt_id: r[:prompt_id], occurred_at: r[:occurred_at]}
+          }
+          result = scope.tag(events)
+          tagged += result[:tagged].to_i
+          groups += result[:groups].to_i
+          batches += 1
+          offset += rows.size
+          stdout.print "."
+          stdout.flush
+        end
+
+        stdout.puts ""
+        stdout.puts "Backfill complete: tagged #{tagged} activity_event(s) across #{groups} prompt group(s) in #{batches} batch(es)."
+        manager.close
+        0
       end
 
       def run_verify(opts)

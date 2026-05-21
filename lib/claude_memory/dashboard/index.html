@@ -1044,6 +1044,16 @@
   }
   .knowledge-card .kc-meta .src.project { background: var(--accent-dim); color: var(--accent); }
   .knowledge-card .kc-meta .src.global { background: var(--purple-dim); color: var(--purple); }
+  /* Generic .src badge used by Prompt Journey rows; knowledge-card rule above
+     wins by specificity for project/global tags inside knowledge cards. */
+  .src {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .src.otel { background: var(--accent-dim); color: var(--accent); }
+  .src.activity { background: var(--purple-dim); color: var(--purple); }
   .knowledge-card.highlighted {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-dim);
