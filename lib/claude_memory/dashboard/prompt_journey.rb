@@ -11,10 +11,11 @@ module ClaudeMemory
       end
 
       def for(prompt_id)
-        store = @manager.default_store(prefer: :global)
-        return empty_payload(prompt_id) unless store
+        @manager.ensure_global! if @manager.respond_to?(:ensure_global!) && !@manager.global_store
+        @manager.ensure_project! if @manager.respond_to?(:ensure_project!) && !@manager.project_store
+        return empty_payload(prompt_id) unless @manager.global_store || @manager.project_store
 
-        rows = ClaudeMemory::Store::PromptJourneyQuery.new(store).fetch(prompt_id)
+        rows = ClaudeMemory::Store::PromptJourneyQuery.new(@manager).fetch(prompt_id)
         {
           prompt_id: prompt_id,
           event_count: rows.size,

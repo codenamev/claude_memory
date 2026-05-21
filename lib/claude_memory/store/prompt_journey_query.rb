@@ -2,15 +2,25 @@
 
 module ClaudeMemory
   module Store
-    # Cross-table query for the dashboard's Prompt Journey panel. UNION ALL
-    # joins otel_events and activity_events on prompt_id and orders the
-    # combined stream by timestamp. One round-trip — no Ruby-side merge.
+    # Cross-store query for the dashboard's Prompt Journey panel. OTel
+    # events live in the global DB (writes hit the receiver, which is
+    # process-wide); activity_events with a back-tagged prompt_id can
+    # live in either store (hooks fire per-project, so hook_ingest /
+    # hook_context rows land in the project DB, while global may carry
+    # cross-project events). The query reads from all available stores
+    # and orders the merged stream by occurred_at.
     #
-    # Returns plain row hashes shaped uniformly so the panel renders both
-    # sources without branching.
+    # Accepts either a single store (legacy callers) or a StoreManager.
+    # Returns plain row hashes shaped uniformly so the panel renders
+    # both sources without branching.
     class PromptJourneyQuery
-      def initialize(store)
-        @store = store
+      def initialize(store_or_manager)
+        @stores = if store_or_manager.respond_to?(:project_store) || store_or_manager.respond_to?(:global_store)
+          [store_or_manager.respond_to?(:project_store) ? store_or_manager.project_store : nil,
+            store_or_manager.respond_to?(:global_store) ? store_or_manager.global_store : nil].compact
+        else
+          [store_or_manager].compact
+        end
       end
 
       # @param prompt_id [String] OTel prompt.id UUID
@@ -18,16 +28,17 @@ module ClaudeMemory
       def fetch(prompt_id)
         return [] if prompt_id.nil? || prompt_id.empty?
 
-        # Each side caps at 500 to keep memory bounded.
-        rows = otel_dataset(prompt_id) + activity_dataset(prompt_id)
+        rows = @stores.flat_map { |store|
+          otel_rows(store, prompt_id) + activity_rows(store, prompt_id)
+        }
         rows.sort_by { |r| r[:occurred_at].to_s }
       end
 
       private
 
-      def otel_dataset(prompt_id)
-        return [] unless @store.db.table_exists?(:otel_events)
-        @store.otel_events
+      def otel_rows(store, prompt_id)
+        return [] unless store&.db&.table_exists?(:otel_events)
+        store.otel_events
           .where(prompt_id: prompt_id)
           .order(:occurred_at)
           .limit(500)
@@ -35,10 +46,10 @@ module ClaudeMemory
           .map { |row| present_otel(row) }
       end
 
-      def activity_dataset(prompt_id)
-        return [] unless @store.db.table_exists?(:activity_events)
-        return [] unless @store.activity_events.columns.include?(:prompt_id)
-        @store.activity_events
+      def activity_rows(store, prompt_id)
+        return [] unless store&.db&.table_exists?(:activity_events)
+        return [] unless store.activity_events.columns.include?(:prompt_id)
+        store.activity_events
           .where(prompt_id: prompt_id)
           .order(:occurred_at)
           .limit(500)

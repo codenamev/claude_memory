@@ -79,6 +79,33 @@ RSpec.describe "Dashboard OTel routes" do
     }.not_to(change { manager.global_store.otel_traces.count })
   end
 
+  it "back-tags activity_events with prompt_id after POST /v1/logs" do
+    sid = "sess-back-tag"
+    pid = "prompt-back-tag"
+    now = Time.now
+    project_event_id = manager.project_store.activity_events.insert(
+      event_type: "hook_ingest", status: "success",
+      session_id: sid, detail_json: "{}",
+      occurred_at: (now - 5).utc.iso8601
+    )
+    nano = ((now - 20).to_f * 1_000_000_000).to_i.to_s
+    payload = {
+      "resourceLogs" => [{
+        "scopeLogs" => [{"logRecords" => [{
+          "timeUnixNano" => nano,
+          "attributes" => [
+            {"key" => "event.name", "value" => {"stringValue" => "user_prompt"}},
+            {"key" => "session.id", "value" => {"stringValue" => sid}},
+            {"key" => "prompt.id", "value" => {"stringValue" => pid}}
+          ]
+        }]}]
+      }]
+    }
+    res = post("/v1/logs", JSON.generate(payload))
+    expect(res.code).to eq("200")
+    expect(manager.project_store.activity_events.where(id: project_event_id).get(:prompt_id)).to eq(pid)
+  end
+
   private
 
   def post(path, body, content_type = "application/json")

@@ -110,12 +110,27 @@ module ClaudeMemory
 
         result = ClaudeMemory::OTel::Ingestor.new(store).ingest(rows)
         if result.success?
+          back_tag_activity_events(rows[:events]) if kind == :logs
           json_response(res, {})
         else
           otel_response(res, 400, result.error)
         end
       rescue => e
         otel_response(res, 500, e.message)
+      end
+
+      # After OTel events with prompt.id are persisted, scan project +
+      # global activity_events and stamp prompt_id on matching rows so the
+      # Prompt Journey panel can UNION-join them. Hook events (session_id-
+      # bearing) match exactly; MCP recall/store_extraction rows (NULL
+      # session_id) fall back to time-window proximity. Best-effort —
+      # tagging failures never block the OTLP response.
+      def back_tag_activity_events(events)
+        return unless events && !events.empty?
+        @manager.ensure_project! if @manager.respond_to?(:ensure_project!) && !@manager.project_store
+        ClaudeMemory::OTel::PromptScope.new(@manager).tag(events)
+      rescue Sequel::DatabaseError, Extralite::Error
+        # never block the OTLP response on a tagging failure
       end
 
       def json_content?(req)
