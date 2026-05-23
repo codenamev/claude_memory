@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-05-01 - Added Strands Agent SOPs study (article, not repo) — one M-priority item (parameter blocks in skill frontmatter); rest already implemented or deferred. See `docs/influence/strands-agent-sops.md`. Previously: 2026-04-28 (post-0.10.0) - Restructured 1.0 punchlist around milestone versions. **0.11.0 "Trust & Cost"** ships #47 (token budget), #48 (hallucination rate), #51 (claude-memory show), #53 (first-week ROI nudge — moved up from post-1.0), and a 3-scenario prototype of #49 (harm benchmark). **0.12.0 "Release Discipline"** ships #49 full corpus, #50 (CLAUDE.md baseline), #52 (benchmark scoreboard). **1.0.0** lands soak-validated #54/#55/#56 if time + new #59 API stability audit. See `docs/1_0_punchlist.md` for the full plan with calendar targets. Also added 2026-04-28: two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28) — provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 updates: opened the 1.0 punchlist track + added cq study. Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
+*Updated: 2026-05-23 - Added AI Memory Systems Landscape Analysis (Nakajima/Opus 4.6 Research article, 2026-03-26) — meta-study of 7 benchmarks + ~12 systems. Four High Priority items: graph traversal as third RRF source (#64), temporal-aware retrieval (#65), bi-temporal schema cleanup (#66), LongMemEval integration (#67). One promotion: improvement #57 (provenance-strength ranking) Medium → High, validated as the "soft epistemic separation" pattern. See `docs/influence/ai-memory-systems-2026.md`. Previously: 2026-05-01 - Added Strands Agent SOPs study (article, not repo) — one M-priority item (parameter blocks in skill frontmatter); rest already implemented or deferred. See `docs/influence/strands-agent-sops.md`. Previously: 2026-04-28 (post-0.10.0) - Restructured 1.0 punchlist around milestone versions. **0.11.0 "Trust & Cost"** ships #47 (token budget), #48 (hallucination rate), #51 (claude-memory show), #53 (first-week ROI nudge — moved up from post-1.0), and a 3-scenario prototype of #49 (harm benchmark). **0.12.0 "Release Discipline"** ships #49 full corpus, #50 (CLAUDE.md baseline), #52 (benchmark scoreboard). **1.0.0** lands soak-validated #54/#55/#56 if time + new #59 API stability audit. See `docs/1_0_punchlist.md` for the full plan with calendar targets. Also added 2026-04-28: two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28) — provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 updates: opened the 1.0 punchlist track + added cq study. Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.6.3, re-studied 2026-03-30)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, re-studied 2026-03-30 — no changes)*
@@ -340,6 +340,74 @@ Amazon's Strands Agent SOPs describe markdown-based parameterized workflows for 
 - **Strands Python package** — wrong language ecosystem.
 - **`.sop/<name>/` artifact filesystem** — would parallel our DB-as-checkpoint substrate and double the cleanup burden.
 - **Adopting "SOP" as user-facing terminology** — Anthropic Skills is the term Claude Code users know; renaming creates confusion for zero gain.
+
+---
+
+## AI Memory Systems Landscape Study (2026-05-23)
+
+Source: `docs/influence/ai-memory-systems-2026.md` — meta-study of the Nakajima/Opus 4.6 Research article surveying 7 memory benchmarks and ~12 memory systems (Hindsight, Zep/Graphiti, MemGPT/Letta, Mem0, Cognee, HippoRAG, etc.).
+
+**Headline finding.** ClaudeMemory's retrieval profile (vector + FTS, light graph, no temporal-aware ranking) sits architecturally closest to Mem0 (49% on LongMemEval). Two unforced gaps separate us from Zep-class systems (71.2%): we already store the graph but don't traverse it at query time, and we have temporal columns we don't rank by. Closing both is ~3-5 days of work without new dependencies.
+
+### High Priority Recommendations
+
+- [ ] **64. Graph Traversal as Third RRF Source** ⭐
+  - Value: Field-wide validated as the difference between Mem0-class (49%) and Zep-class (71.2%) LongMemEval scores. We already store the graph (`entities`, `entity_aliases`, `fact_links`).
+  - Evidence: Article Pattern 1 + Pattern 2; our `lib/claude_memory/recall.rb` has no BFS strategy; `lib/claude_memory/core/rr_fusion.rb` fuses only vec + FTS.
+  - Implementation: Add `Recall::GraphTraversal` strategy that resolves query → seed entities → 1-2 hop BFS over `entities` ↔ `facts` ↔ `entities`, scored by hop distance × edge type. Fuse into existing RRF as a third source. Bound depth so latency stays sub-100ms.
+  - Effort: Medium (2-3 days). Data shape already correct; new strategy class + RRF integration + tests.
+  - Trade-off: Empty graphs degrade gracefully to zero rerank contribution.
+
+- [ ] **65. Temporal-Aware Retrieval Strategy** ⭐
+  - Value: Article identifies temporal reasoning as the hardest field-wide capability (up to 73% gap on LoCoMo). Schema already has `valid_from`, `valid_to`, `last_recalled_at`; ranker doesn't use them.
+  - Evidence: Article Pattern 3.
+  - Implementation: (1) Add `temporal_rank` input to `Core::RRFusion` — facts with newer `valid_from` get a small rank boost (capped at ~0.1× vec contribution). (2) Optional `as_of` ISO 8601 parameter on `memory.recall` filters to `valid_from <= as_of AND (valid_to IS NULL OR valid_to > as_of)`.
+  - Effort: Small (1-2 days). Existing columns; thread parameter and ranker.
+  - Trade-off: Recency over-ranking risk; cap boost weight and tune via eval harness.
+
+- [ ] **66. Bi-Temporal Schema Cleanup (world vs ingest time)**
+  - Value: Today `valid_to` does double duty — "fact ceased to be true in the world" *and* "we superseded this fact during ingestion." Article credits this distinction as Zep's most important innovation. Without it, point-in-time queries silently corrupt the temporal axis.
+  - Evidence: Article: "Every entity edge tracks four timestamps: valid_at, invalid_at, created_at, expired_at." See also our schema (`db/migrations/001_create_initial_schema.rb:64-65`).
+  - Implementation: Schema v18 migration: rename `valid_to` → `world_invalid_at`; add `ingest_expired_at` (datetime, nullable). Resolver sets `ingest_expired_at` on supersession; leaves `world_invalid_at` for explicit "this fact stopped being true on date X" updates. Backfill copies `valid_to` into both columns.
+  - Effort: Medium (2-3 days). Schema migration + resolver update + MCP tool surface + tests. Public API break — needs deprecation alias for one minor version per `docs/api_stability.md`.
+  - Trade-off: API surface change. Lower urgency than #64/#65 but cheaper to do before corpus grows.
+
+- [ ] **67. LongMemEval Benchmark Integration** ⭐
+  - Value: Article calls LongMemEval the "gold standard" — the only benchmark it describes as rigorous. Without an external benchmark score, we can't credibly position ClaudeMemory against the field.
+  - Evidence: Article — Wu et al. ICLR 2025, 500 questions across 115K-1.5M token contexts, three-stage framework with LLM-as-judge.
+  - Implementation: Add `spec/benchmarks/longmemeval/` adapter. Dataset is public. Wire into `bin/run-evals --longmemeval`. Report Recall@k, MRR, nDCG@10 like DevMemBench.
+  - Effort: Medium (2-4 days). Mostly dataset wrangling + adapter code; existing DevMemBench pipeline has the right shape.
+  - Trade-off: Real-mode runs (with LLM judge) cost API spend. Mitigation: stub mode for retrieval-only, real mode opt-in.
+
+### Promotion (existing improvement, article-validated)
+
+- [ ] **#57 Provenance-Strength-Aware Retrieval Ranking** — promote from Medium to High Priority
+  - Rationale: Article describes Hindsight's "epistemic separation" (4 networks: world facts / agent experiences / entity observations / evolving opinions) as a key innovation. Our `provenance.strength` ∈ {stated, inferred, derived} is the soft version of this — already in the schema, just not used by the ranker. This article promotes the change from "nice to have" to "fits the field-wide pattern."
+  - Implementation unchanged from existing #57 entry.
+
+### Medium Priority
+
+- [ ] **Reflect Pass — Background Consolidation on Idle** (see influence doc rec #5)
+  - Value: Hindsight's reflect operation and Letta's sleep-time compute both re-examine stored facts using a background process. Article credits this with preventing noise growth at scale. We don't have it; today our corpus is small enough not to need it.
+  - Recommendation: Track when largest project DB crosses 5K facts. Until then, premature. **CONSIDER for 1.0.0 or later.**
+
+- [ ] **`memory.save_this` Tool — Agent-Initiated Storage** (see influence doc rec #6)
+  - Value: Letta's striking result (74% vs Mem0's 68.5% on LoCoMo) suggests agent-controlled "save this" beats passive extraction. We have `memory.store_extraction` but it's framed as "report an extraction," not "I want to remember this."
+  - Implementation: Thin wrapper over `store_extraction` with friendlier prompt. Document in MCP `memory_guide` prompt.
+  - Effort: Small (1 day).
+  - Recommendation: **CONSIDER** in 0.13.0 if first-week usage shows agents under-use `store_extraction` proactively.
+
+### Features to Avoid (from this study)
+
+- **Cross-encoder LLM reranking** — Article confirms cost as the reason (already in our avoid list).
+- **Full 4-column Graphiti timestamp model** — Recommendation #66 above adopts the simpler 3-timestamp version (world_invalid_at + ingest_expired_at + created_at).
+- **Hindsight 4-network hard epistemic split** — Over-complex for our scale; recommendation #57 promotion is the soft version.
+- **Cloud-required graph DB** (Neo4j / FalkorDB) — Recommendation #64 traverses the graph we already have in SQLite.
+- **Custom fine-tuned models in any pipeline stage** — Article confirms architecture > model size; we can't compete on model investment anyway.
+- **LoCoMo benchmark for cross-vendor comparison** — Article explicitly discredits it: "Mem0 and Zep have publicly contradicted each other's reported scores, making LoCoMo rankings unreliable for cross-vendor comparison." If we cite LoCoMo at all, cite our own number standalone.
+- **Cognee-style RDF/OWL ontology validation** — Our `entity_aliases` + `PredicatePolicy::SYNONYMS` are the right-sized version for a single-developer tool.
+- **Letta-style filesystem-only memory as primary mode** — Consumes user-visible tokens on every interaction; our hook-based passive ingestion is cheaper per session.
+- **Sleep-time compute as a separate background service** — We can achieve the same effect on the next SessionStart via Layer 2 distillation, for free. No separate process needed.
 
 ---
 
