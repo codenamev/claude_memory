@@ -133,7 +133,7 @@ Unlike traditional approaches that require a separate API key, ClaudeMemory uses
 
 ### MCP Server
 
-The plugin exposes 25 tools to Claude. Highlights:
+The plugin exposes 23 tools to Claude. Highlights:
 
 | Tool | Description |
 |------|-------------|

@@ -17,6 +17,8 @@ ClaudeMemory is a Ruby gem that provides long-term, self-managed memory for Clau
 
 **Public API contract:** [docs/api_stability.md](docs/api_stability.md) is the authoritative stable-surface list (CLI, MCP, hooks, Ruby API, schema, predicate vocabulary). When changing any of those surfaces, update the doc in the same commit; if it's a soft-rename, wire `ClaudeMemory::Deprecations.warn`.
 
+**Audit memory health:** run `claude-memory audit` (or `/audit-memory` for an interactive walkthrough) to surface inconsistencies, regressions, and optimization opportunities. See [docs/audit_runbook.md](docs/audit_runbook.md) for per-check rationale and remediation steps.
+
 ### Git Usage & Best Practices
 
 - Before each commit, apply the quality-review skill
@@ -231,7 +233,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Modes: shared (repo), local (uncommitted), home (user directory)
 
 - **`MCP`**: Model Context Protocol server and tools (`mcp/`)
-  - Exposes memory tools to Claude Code (25 tools total)
+  - Exposes memory tools to Claude Code (23 tools total)
   - `Telemetry`: Records tool invocations to `mcp_tool_calls` table for usage stats
   - Dual content/structuredContent responses with compact mode
 
@@ -264,10 +266,13 @@ Facts include:
 ### Scope System
 
 Facts are scoped to control where they apply:
+
+<no-memory>
 - **project**: Current project only (e.g., "claude_memory uses SQLite for storage")
 - **global**: All projects (e.g., "I prefer 4-space indentation")
 
 Distiller detects signals like "always", "in all projects", "my preference" and sets `scope_hint: "global"`. Users can manually promote facts via `claude-memory promote <fact_id>` or the `memory.promote` MCP tool.
+</no-memory>
 
 ## Testing Strategy
 
@@ -349,7 +354,7 @@ Also update `SECTION_MAP` if the predicate should appear in a specific snapshot 
 
 The gem includes an MCP server (`claude-memory serve-mcp`) that exposes memory operations as tools. Configuration should be in `.mcp.json` at project root.
 
-Available MCP tools (25 total):
+Available MCP tools (23 total):
 - **Query & Recall**: `memory.recall`, `memory.recall_index`, `memory.recall_details`, `memory.recall_semantic`, `memory.search_concepts`
 - **Provenance**: `memory.explain`, `memory.fact_graph`
 - **Shortcuts**: `memory.decisions`, `memory.conventions`, `memory.architecture`
