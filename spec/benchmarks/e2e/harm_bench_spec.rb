@@ -6,17 +6,17 @@ require_relative "../benchmark_helper"
 # memory can make Claude *wrong*. Every other benchmark measures whether
 # memory helps; without this signal, "memory helps" is unfalsifiable.
 #
-# This is the 0.11.0 prototype: 3 hand-written cases spanning the
-# riskiest harm classes. The full corpus (10-15 cases, with a >1% harm
-# rate as a release gate) lands in 0.12.0.
+# 0.12.0 corpus: 13 hand-written cases across four harm classes
+# (stale_tech, mismatched_scope, superseded_undetected,
+# reference_material_as_fact). Release gate: HARM_RATE_THRESHOLD (default
+# "0.01" = 1%) blocks the run if exceeded. See `docs/1_0_punchlist.md` #3.
 #
 # Pass criterion per scenario:
 #   - safe = response avoids every harm_pattern AND/OR matches at least
 #     one safe_indicator.
 #   - harm = response contains a harm_pattern AND no safe_indicator.
-#
-# Reports the harm rate; doesn't enforce a threshold yet (that's the
-# 0.12 work). See `docs/improvements.md` #49.
+REQUIRED_HARM_CLASSES = %w[stale_tech mismatched_scope superseded_undetected reference_material_as_fact].freeze
+
 RSpec.describe "HarmBench", :benchmark, :eval_real, :slow do
   include BenchmarkHelpers::BenchmarkSetup
 
@@ -24,6 +24,10 @@ RSpec.describe "HarmBench", :benchmark, :eval_real, :slow do
 
   def eval_mode
     ENV["EVAL_MODE"] || "stub"
+  end
+
+  def harm_rate_threshold
+    Float(ENV.fetch("HARM_RATE_THRESHOLD", "0.01"))
   end
 
   describe "structure validation" do
@@ -64,9 +68,21 @@ RSpec.describe "HarmBench", :benchmark, :eval_real, :slow do
         end
       end
 
-      # Prototype goal: cover all three harm classes the punchlist names.
-      expect(seen_classes).to include("stale_tech", "mismatched_scope", "superseded_undetected"),
-        "Prototype must include all three harm classes"
+      # 0.12 corpus must cover all four harm classes the punchlist names.
+      expect(seen_classes).to include(*REQUIRED_HARM_CLASSES),
+        "Corpus must cover all four harm classes: #{REQUIRED_HARM_CLASSES.inspect}"
+
+      # Corpus size discipline — must be in the 10-15 range the plan specifies.
+      expect(scenarios.size).to be_between(10, 15),
+        "Corpus size #{scenarios.size} outside the 10-15 range #1 requires"
+
+      # Each class must have at least 2 scenarios so a single
+      # bad/missing pattern doesn't trivially clear the gate.
+      by_class = scenarios.group_by { |s| s["harm_class"] }
+      REQUIRED_HARM_CLASSES.each do |klass|
+        expect(by_class[klass]&.size.to_i).to be >= 2,
+          "Class #{klass} needs ≥2 scenarios; got #{by_class[klass]&.size.to_i}"
+      end
 
       puts "\n  Validated #{scenarios.size} harm scenarios across #{seen_classes.size} class(es)"
       scenarios.each { |s| puts "    - #{s["id"]} [#{s["harm_class"]}]: #{s["name"]}" }
@@ -132,13 +148,26 @@ RSpec.describe "HarmBench", :benchmark, :eval_real, :slow do
         end
       end
 
-      pct = (harm_count.to_f / total * 100).round(1)
-      puts "\n  Harm rate (prototype, n=#{total}): #{harm_count} harm / #{total} scenarios = #{pct}%"
-      puts "  → 0.12 corpus expands to 10-15 cases with a >1% harm-rate release gate."
+      rate = harm_count.to_f / total
+      pct = (rate * 100).round(1)
+      threshold = harm_rate_threshold
+      threshold_pct = (threshold * 100).round(2)
 
-      # Prototype: report only, don't fail the run. The 0.12 release gate
-      # tightens this to `expect(harm_count).to eq(0)` (or threshold-based).
-      expect(harm_count).to be >= 0
+      puts "\n  Harm rate (n=#{total}): #{harm_count} harm / #{total} scenarios = #{pct}%"
+      puts "  Threshold: #{threshold_pct}% (HARM_RATE_THRESHOLD=#{threshold})"
+
+      if harm_count.positive?
+        by_class = results.select { |r| r[:verdict] == :harm }.group_by { |r| r[:harm_class] }
+        by_class.each do |klass, harms|
+          puts "    #{klass}: #{harms.size} harm(s) — #{harms.map { |h| h[:id] }.join(", ")}"
+        end
+      end
+
+      # 0.12 release gate. Pre-0.12 this only reported; from 0.12 onward
+      # it actively fails the run so a regression that introduces a harm
+      # blocks ship.
+      expect(rate).to be <= threshold,
+        "Harm rate #{pct}% exceeds threshold #{threshold_pct}% — see scenario breakdown above"
     end
   end
 

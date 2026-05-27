@@ -95,23 +95,27 @@ LongMemEval-inspired end-to-end scenarios across 5 memory abilities:
 
 Each scenario specifies `acceptance_keywords` (must appear), `rejection_keywords` (must not appear), and a pass `threshold`.
 
-### harm_scenarios.yml (3 scenarios, prototype) *(0.11.0+)*
+### harm_scenarios.yml (13 scenarios, full corpus) *(0.12.0+)*
 
-The first ClaudeMemory benchmark that measures whether memory can make Claude **wrong**. Every other benchmark measures whether memory helps; without this signal, "memory helps" is unfalsifiable.
+The only ClaudeMemory benchmark that measures whether memory can make Claude **wrong**. Every other benchmark measures whether memory helps; without this signal, "memory helps" is unfalsifiable.
 
-Three hand-written cases spanning the riskiest harm classes:
+Thirteen hand-written cases across four harm classes:
 
-| Harm class | What it tests |
-|---|---|
-| `stale_tech` | Memory asserts MySQL; project actually uses SQLite. Does Claude write MySQL adapter code blindly, or surface the right tech? |
-| `mismatched_scope` | Global TS/Tailwind preference vs. a Ruby gem. Does Claude apply the irrelevant global fact, or use Ruby idioms? |
-| `superseded_undetected` | Two contradicting `auth_method` facts both still active (HTTP Basic + JWT). Does Claude silently pick one (often the older), or flag the contradiction? |
+| Harm class | n | What it tests |
+|---|---|---|
+| `stale_tech` | 3 | Memory asserts a tech that the project once used and then moved away from (MySQL → SQLite, Rails → Sinatra, Heroku → Fly.io). Does Claude write the stale tech, or surface the current one? |
+| `mismatched_scope` | 3 | Global preferences applied to projects where they don't fit (TS/Tailwind in a Ruby gem; pytest for Ruby tests; pnpm for Gemfile dependencies). Does Claude apply the irrelevant global fact, or use the language's idioms? |
+| `superseded_undetected` | 3 | Two contradicting facts both still active because the predicate is multi-cardinality or the resolver missed the supersession (HTTP Basic + JWT; rubocop + standardrb; staging vs prod DATABASE_URL). Does Claude silently pick one (often the older), or flag the contradiction? |
+| `reference_material_as_fact` | 4 | Generic reference material stored as a project fact (Django ORM in a Ruby gem; React hooks in a CLI tool; Kubernetes Deployments for a RubyGems release; AWS Lambda handlers for a local CLI). Does Claude follow the reference fact, or recognize the project's actual context? |
 
 Each case scores `harm` if the response contains a `harm_pattern` AND no `safe_indicator`, `safe` otherwise.
 
-Run via `EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb` (~30s/scenario, ~$2-8 per full run). Reports harm rate; doesn't enforce a threshold yet (>1% gate lands in 0.12 with the full 10-15-case corpus).
+Run via `EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb` (~30s/scenario, ~$5-15 per full run).
 
-**0.11 prototype baseline:** 0/3 harm.
+**Release gate (0.12+):** the run fails if `harm_rate` exceeds `HARM_RATE_THRESHOLD` (default `0.01` = 1%). At 13 scenarios any single harm trips the gate. Override per-release with e.g. `HARM_RATE_THRESHOLD=0.05` if a known-acceptable harm is being soak-tested.
+
+**0.11 prototype baseline (3 scenarios):** 0/3 harm.
+**0.12 corpus baseline:** TBD — first real-mode run gates 0.12 ship.
 
 ## Metrics
 
