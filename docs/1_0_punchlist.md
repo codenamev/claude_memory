@@ -1,7 +1,9 @@
 # 1.0 Punchlist
 
 *Created: 2026-04-28. Restructured 2026-04-28 (post-0.10.0 release) around
-milestone versions per the path-to-1.0 plan.*
+milestone versions per the path-to-1.0 plan. Re-oriented 2026-05-27 to
+acknowledge OTel + audit-toolkit landings and re-anchor on the three
+1.0 pillars.*
 
 The remaining work for a stable 1.0 release. Distinct from `improvements.md` —
 that file tracks the long tail of inbound study/idea entries; this file tracks
@@ -24,6 +26,27 @@ Not "feature complete" — semver commitment. Once we ship 1.0:
 So 1.0 isn't gated by features. It's gated by **the measurement infrastructure
 being trustworthy enough to defend a 1.0 claim.** That's why this punchlist is
 mostly observability, not capability.
+
+### The three 1.0 pillars
+
+Restated 2026-05-27 to ground prioritization decisions:
+
+1. **Stability** — semver-locked CLI / MCP / hook / Ruby API contracts, schema
+   round-trip discipline, deprecation policy. Anchored by `docs/api_stability.md`
+   (#11 ✅) and the round-trip-spec convention.
+2. **Visibility** — a skeptical user can see what memory costs, what memory
+   contains, what memory contributed, and what is wrong with it, on one screen,
+   in <30s, without trusting our marketing. Anchored by the Trust panel, the
+   digest, OTel ingestion, and the new `claude-memory audit` toolkit.
+3. **Long-horizon quality** — over weeks and months, the repo demonstrably
+   improves session quality rather than degrading it. Anchored by the harm
+   benchmark (#3, the actual release gate), the CLAUDE.md headline baseline
+   (#4), repeat-correction detection (#8), and the drift dashboard (#10).
+
+Every 0.12 item maps to one of those pillars; an item that doesn't map is a
+1.x feature, not a 1.0 gate. The audit toolkit and OTel landed during 0.12
+because they directly serve pillars 1 and 2 — not as scope creep, but as work
+the original punchlist didn't anticipate would be needed.
 
 Items are cross-linked to the canonical entry in `improvements.md` where the
 implementation detail and acceptance criteria live. This file is the
@@ -159,22 +182,32 @@ Effort: ½d.
 
 ---
 
-## 0.12.0 — "Release Discipline" (~1.5 weeks of work)
+## 0.12.0 — "Release Discipline + Observability + Self-Audit" (~4 weeks of work)
 
-Theme: *we can't ship a regression without noticing.* Internal infrastructure
-that prevents future regressions and locks down what "regression" even means.
-Not flashy but the actual prerequisite for 1.0's semver commitment.
+Theme: *we can't ship a regression without noticing, and we can see what's
+happening inside.* Internal infrastructure that prevents future regressions,
+plus the observability primitives the 1.0 visibility pillar requires, plus
+the self-audit toolkit that catches drift in our own DB.
 
-*Restructured 2026-05-01 (post-0.11.0): #11 (API stability audit) promoted
-from 1.0 because the scoreboard #6 needs an explicit stable-surface list to
-gate against. New #12 (pre-release hook smoke gate) added to codify the
+*Restructured 2026-05-01: #11 (API stability audit) promoted from 1.0
+because the scoreboard #6 needs an explicit stable-surface list to gate
+against; new #12 (pre-release hook smoke gate) added to codify the
 verification convention that surfaced during 0.11 work.*
 
-### #3 Negative-fact harm benchmark (full 10-15 scenarios)
+*Restructured 2026-05-27: theme widened from "Release Discipline" to
+acknowledge two unplanned but on-mission work tracks that landed during the
+0.12 window — the OTel observability primitives (~15 commits) and the audit
+toolkit (#13). Both serve 1.0 pillars 1+2 directly and the punchlist now
+reflects that.*
+
+### #3 Negative-fact harm benchmark (full 10-15 scenarios) — **in progress 2026-05-27 (Path B blocker)**
 
 **Gap.** Every benchmark today measures whether memory **helps**. Nothing
 measures whether memory **harms** — i.e. injects a wrong fact and Claude
-follows it. Without this, "memory helps" is unfalsifiable.
+follows it. Without this, "memory helps" is unfalsifiable. This is the
+single 0.12 item that directly serves pillar 3 (long-horizon quality);
+shipping 0.12 without it would tag a release whose central claim is
+unmeasured.
 
 **Acceptance.** `spec/benchmarks/dataset/harm_scenarios.yml` with 10-15 cases
 spanning four harm classes (stale-tech, mismatched-scope, superseded-but-
@@ -189,7 +222,7 @@ in that regime.
 → improvements.md entry: *#49 Negative-Fact Harm Benchmark* (full corpus).
 Effort: 2d.
 
-### #4 Publish the CLAUDE.md baseline in headline E2E results
+### #4 Publish the CLAUDE.md baseline in headline E2E results — **in progress 2026-05-27 (Path B blocker)**
 
 **Gap.** `claude_md_adapter` exists in `spec/benchmarks/comparative/adapters/`
 and is wired into `comparative_helper.rb`. The README's headline comparative
@@ -298,8 +331,73 @@ where the measurement itself doesn't fire.
 
 → improvements.md entry: *#63 Pre-Release Hook Smoke Gate*. Effort: ½d.
 
-**Ship target:** ~5-6 weeks from 0.10.0 (early-to-mid June 2026 at current
-velocity, given the 0.12 scope grew from 3.5d to ~6d).
+### #13 Memory health audit toolkit — *unplanned, landed 2026-05-27* ✅
+
+**Gap.** Drift inside the project DB — duplicate global conventions,
+single-cardinality multiplicity, contamination-driven rejection churn, bare
+conclusions, shortcut tools leaking the wrong predicate — was diagnosable
+only by hand, project by project. The 2026-05-21 audit surfaced 103 rejected
+single-cardinality facts in this project's own DB, all sourced from example
+text in our own docs being re-ingested. Without a productionized check, this
+class of regression silently erodes the 1.0 visibility claim.
+
+**Acceptance.**
+
+- `claude-memory audit` CLI with ten contract checks (C001-C010), `--json`
+  for CI, `--severity`, `--no-exit`
+- `/audit-memory` slash command for interactive walkthrough
+- `docs/audit_runbook.md` per-check rationale + remediation
+- `ReferenceMaterialDetector` example-quote guard + `Resolver` `:discard`
+  path (defense-in-depth at write time)
+- Memory shortcuts (`memory.decisions`/`.conventions`/`.architecture`)
+  switched from FTS text search to predicate-based filtering
+- `claude-memory import-auto-memory` retroactively pulls auto-memory entries
+  `AutoMemoryMirror` missed (slug bug fixed: `tr("/_", "-")`)
+- Signal-health benchmark spec (`spec/benchmarks/health/database_signal_spec.rb`)
+  codifies the cleanup contracts so regressions can be detected in CI
+
+**Why this release.** Serves pillars 1 (stability — guards single-cardinality
+predicates from drifting) and 2 (visibility — surfaces drift as a measurable
+signal). The detector + resolver fixes mean the 0.12 → 1.0 soak is more
+likely to surface real signal vs. doc-text contamination noise.
+
+→ improvements.md entry: not yet promoted; lives in `docs/memory_audit_2026-05-21.md`
+as the originating artifact. Effort: ~2d (across the 2026-05-27 session).
+
+### #14 OpenTelemetry ingestion + Dashboard Telemetry/Prompt Journey — *unplanned, landed 2026-05-21* ✅
+
+**Gap.** The visibility pillar promised "you can see what memory costs and
+what it's doing." Token-budget telemetry (#1) covered the cost; the rest —
+per-tool latency, cost-per-hour, the full prompt-to-response journey across
+hooks/MCP/distillation — was invisible without an external tracer. Claude
+Code already exports OTLP if asked; the question was whether ClaudeMemory
+should ingest its own telemetry rather than punting to Datadog/Honeycomb.
+
+**Acceptance.**
+
+- Schema v18: `otel_metrics`, `otel_events`, `otel_traces` + `prompt_id`
+  on `activity_events` for journey correlation
+- `claude-memory otel` CLI manages the env block (`--enable`, `--disable`,
+  `--enable-traces`, `--capture-prompts`, `--status`, `--verify`, `--backfill`)
+- Dashboard exposes `/v1/metrics`, `/v1/logs`, `/v1/traces` on
+  `127.0.0.1:3377` (OTLP/HTTP/JSON) plus a new "Telemetry" drawer
+- Prompt Journey panel UNIONs `otel_events` with `activity_events` and
+  back-tags activity_events with `prompt.id` via `OTel::PromptScope`
+- Sweep retention: 30d metrics, 14d events, 7d traces
+- Privacy posture: opt-in for prompt capture; traces 501-gated until
+  explicit `--enable-traces`
+
+**Why this release.** Directly serves pillar 2 (visibility) at a depth
+nothing else can — no dashboard polish substitutes for actual per-prompt
+trace data. Loud answer to "what is this thing doing right now?"
+
+→ improvements.md entry: tracked under the OTel research → study line.
+Effort: ~2.5w (Apr 26 → May 21).
+
+**Ship target:** target tag ~2026-06-03 to give the soak window 2-3 weeks
+before 1.0. Remaining 0.12 work: #3 (harm corpus, ~2d) + #4 (CLAUDE.md
+baseline surface, ½d) + ~$5-15 real-mode validation runs. Everything else
+in 0.12 has shipped.
 
 ---
 
@@ -394,7 +492,15 @@ issue is now unlikely.
 Remaining risk for 0.12: **#11 API stability audit reveals the surface is
 larger or messier than we thought**, pushing the doc work past the 2-day
 estimate. Mitigation: scope `Public Ruby API` aggressively to "internal
-unless proven otherwise" — easier to promote later than demote.
+unless proven otherwise" — easier to promote later than demote. *Update
+2026-05-27: #11 landed on time on 2026-05-01; this risk did not materialize.*
+
+Remaining risk for 0.12, take 2 (added 2026-05-27 in light of Path B):
+**the full 13-scenario harm corpus surfaces a >1% harm rate** that the
+3-scenario prototype masked. Mitigation paths if it happens: classify the
+harming class, ship a guard (the way #13 added `ReferenceMaterialDetector`
+example-quote guard for the contamination class), re-run. Worst case
+extends 0.12 by ~3-5 days; doesn't push 1.0 if the soak window has slack.
 
 ---
 
@@ -416,23 +522,27 @@ Average ~2 weeks per minor with substantial work landing each cycle.
 |---|---|---|---|
 | 0.11.0 | ~1 week | ~2026-05-12 | ✅ shipped 2026-04-30 |
 | 0.11.x patches | reactive | as-needed | open |
-| 0.12.0 | ~1.5 weeks | ~2026-06-02 | in planning |
-| Soak | 2-3 weeks | through ~2026-06-23 | future |
-| 1.0.0 | 1-2 days release prep | ~2026-06-23 to 2026-06-30 | future |
+| 0.12.0 (originally planned) | ~1.5 weeks | ~2026-06-02 | superseded — actual scope widened (see 2026-05-27 restructure) |
+| 0.12.0 (actual) | ~4 weeks (#6/#11/#12 + OTel + audit toolkit + Path B #3/#4) | tag ~2026-06-03 | 5 of 7 items shipped; #3 + #4 in progress |
+| Soak | 2-3 weeks | through ~2026-06-24 | future |
+| 1.0.0 | 1-2 days release prep | ~2026-06-24 to 2026-07-01 | future |
 
 *0.12 grew from ~1 week to ~1.5 weeks after 2026-05-01 restructure
-(promoted #11 + added #12). 1.0 calendar shifted ~1 week later in
-return; net no compression of the soak window.*
+(promoted #11 + added #12), then widened again to ~4 weeks after the
+2026-05-27 restructure that absorbed the OTel observability work and the
+audit toolkit. 1.0 calendar shifted ~3 weeks later in total but the soak
+window remains 2-3 weeks — the visibility/stability surface 0.12 now ships
+is materially larger than the original "Release Discipline" scope.*
 
 These are calendar estimates assuming roughly the same focus level as the
 0.10.0 cycle. Real cadence will adjust based on what surfaces during soak.
 
 ---
 
-*Last updated: 2026-05-01 (post-0.11.0 ship). 0.11.0 shipped 2026-04-30
-with all 5 punchlist items + harm prototype reporting 0/3 harm. 0.12
-restructured 2026-05-01: #11 (API stability audit) promoted from 1.0
-because #6's scoreboard needs an explicit stable-surface list to gate
-against; new #12 (pre-release hook smoke gate) added to codify the
-verification convention surfaced during 0.11. 0.12 grew ~1 week → ~1.5
-weeks; 1.0 ship target shifted ~1 week later in return.*
+*Last updated: 2026-05-27 (mid-0.12 cycle). 0.11.0 shipped 2026-04-30 with
+all 5 punchlist items + harm prototype reporting 0/3 harm. 0.12 restructured
+2026-05-01 (promoted #11, added #12) and again 2026-05-27 (absorbed OTel
+#14 + audit toolkit #13, re-anchored on the three 1.0 pillars, committed
+to Path B finishing #3 + #4 before tag). 0.12 grew ~1.5w → ~4w; 1.0 ship
+target shifted ~3w later in return. Soak window held at 2-3w because the
+visibility surface in 0.12 is materially larger than originally scoped.*
