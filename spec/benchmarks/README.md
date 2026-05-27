@@ -177,6 +177,26 @@ E2E DEVMEMEVAL (31 scenarios, requires EVAL_MODE=real):
   Real mode: requires claude CLI + EVAL_MODE=real
 ```
 
+### E2E Comparison vs CLAUDE.md baseline *(headline adoption question)*
+
+The single most important question for adoption: **is dynamic retrieval better than a hand-written CLAUDE.md?** This section reports the comparative E2E acceptance rate of ClaudeMemory vs. the CLAUDE.md static-injection baseline against real Claude across the comparative E2E scenario subset (10 scenarios, 2 per ability category).
+
+Run via `EVAL_MODE=real bundle exec rspec spec/benchmarks/comparative/e2e/comparative_e2e_spec.rb` (~$2-4 per backend, ~$8-12 for the full comparison). The CLAUDE.md baseline adapter (`spec/benchmarks/comparative/adapters/claude_md_adapter.rb`) renders every active fact as a Markdown file in the project's working directory, then runs the prompt with the same Claude CLI. No retrieval happens — Claude sees the whole fact set up-front.
+
+```
+E2E COMPARATIVE (n=10 scenarios, real Claude):
+  Adapter                     acceptance_rate    avg_score
+  ClaudeMemory (hybrid)              <TBD>          <TBD>
+  CLAUDE.md baseline                 <TBD>          <TBD>
+  No memory                          <TBD>          <TBD>
+```
+
+**Methodology.** The CLAUDE.md adapter writes a CLAUDE.md file containing all active facts grouped by predicate (Databases, Frameworks & Tools, Conventions, Decisions, Authentication, Deployment). Claude Code auto-loads CLAUDE.md per its standard behavior; no MCP server, no hooks, no dynamic retrieval. ClaudeMemory runs against the same fact set but exposes them via the MCP server and SessionStart context hook so Claude pulls only what's relevant per prompt.
+
+**What this measures.** Retrieval cost: bigger CLAUDE.md = more tokens spent up-front, regardless of relevance to the current prompt. Retrieval precision: ClaudeMemory should narrow the context window to relevant facts. The headline claim — *"this is better than CLAUDE.md"* — must be backed by measurable acceptance-rate uplift or token-efficiency wins.
+
+**0.12 baseline:** pending first real-mode run (gates the 0.12 ship per Path B / `docs/1_0_punchlist.md` #4).
+
 ### Comparative Results (2026-03-05, 50 queries, 6 adapters)
 
 Head-to-head retrieval comparison against competitor memory tools using a 50-query subset (20 easy, 20 medium, 10 hard) from the benchmark dataset.

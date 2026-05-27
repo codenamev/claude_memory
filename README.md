@@ -322,7 +322,29 @@ The uninstall command removes:
 
 ## Benchmarks
 
-ClaudeMemory includes **DevMemBench**, a developer-domain benchmark suite that measures retrieval quality and truth maintenance accuracy. All offline benchmarks run locally at zero cost.
+ClaudeMemory includes **DevMemBench**, a developer-domain benchmark suite that measures retrieval quality, truth maintenance accuracy, **negative-fact harm**, and **uplift over a hand-written CLAUDE.md baseline**. All offline benchmarks run locally at zero cost; end-to-end and comparative runs use real Claude (~$5-15 per full run).
+
+### Is this better than a hand-written CLAUDE.md?
+
+The single most important question for adoption is whether dynamic retrieval beats static context injection. ClaudeMemory includes a `CLAUDE.md baseline` adapter that renders every active fact as a Markdown file and lets Claude Code auto-load it — no retrieval, no MCP server, just static context. The comparative E2E benchmark pits ClaudeMemory's hybrid retrieval against that baseline on the same scenarios with the same Claude.
+
+The headline numbers land via:
+
+```bash
+EVAL_MODE=real bundle exec rspec spec/benchmarks/comparative/e2e/comparative_e2e_spec.rb
+```
+
+See [`spec/benchmarks/README.md`](spec/benchmarks/README.md#e2e-comparison-vs-claudemd-baseline-headline-adoption-question) for the full methodology and the 0.12 baseline numbers as soon as they land.
+
+### Does memory ever make Claude *wrong*?
+
+Every other benchmark measures whether memory helps. The negative-fact harm benchmark measures whether memory can hurt — injecting a stale, mis-scoped, superseded, or reference-material fact and watching Claude follow it. 13 scenarios across 4 harm classes; the run fails the build if more than 1% of scenarios produce a harm.
+
+```bash
+EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb
+```
+
+See [`spec/benchmarks/README.md`](spec/benchmarks/README.md#harm_scenariosyml-13-scenarios-full-corpus-0120) for the full corpus and 0.11 prototype baseline.
 
 ### Latest Results
 
@@ -335,6 +357,9 @@ ClaudeMemory includes **DevMemBench**, a developer-domain benchmark suite that m
 | **Hybrid Retrieval** | Recall@5 (100 queries aggregate) | **72.7%** |
 | **Hybrid Retrieval** | Recall@10 (20 hard queries) | **62.8%** |
 | **Scope Ranking** | Queries returning expected facts | **5/5** |
+| **Negative-Fact Harm (prototype)** | 0.11 baseline (3 scenarios, real Claude) | **0/3** |
+| **Negative-Fact Harm (full corpus)** | 0.12 baseline (13 scenarios, real Claude) | *pending first real-mode run* |
+| **E2E vs CLAUDE.md baseline** | 0.12 acceptance-rate delta (10 scenarios) | *pending first real-mode run* |
 
 Semantic and hybrid retrieval use [fastembed-rb](https://github.com/khasinski/fastembed-rb) with the BAAI/bge-small-en-v1.5 model (384-dim, runs locally, no API key needed).
 
