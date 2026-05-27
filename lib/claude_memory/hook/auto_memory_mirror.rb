@@ -21,10 +21,14 @@ module ClaudeMemory
       STATE_FILENAME = "auto_memory_mirror.json"
 
       # Derive auto-memory directory from a project path using Claude Code's
-      # slug convention (path separators → hyphens). E.g.
-      # `/Users/me/src/app` → `~/.claude/projects/-Users-me-src-app/memory`.
+      # slug convention. Both path separators and underscores are converted
+      # to hyphens — e.g. `/Users/me/src/my_app` →
+      # `~/.claude/projects/-Users-me-src-my-app/memory`. Before the
+      # underscore conversion was added (2026-05-21 audit), this method
+      # silently missed auto-memory for any project name containing `_`,
+      # including claude_memory itself.
       def self.default_dir(project_path, claude_config_dir)
-        slug = project_path.to_s.tr("/", "-")
+        slug = project_path.to_s.tr("/_", "-")
         File.join(claude_config_dir, "projects", slug, "memory")
       end
 

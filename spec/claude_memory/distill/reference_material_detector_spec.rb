@@ -98,6 +98,44 @@ RSpec.describe ClaudeMemory::Distill::ReferenceMaterialDetector do
       expect { detector.reclassify(extraction) }.not_to raise_error
     end
 
+    it "reclassifies uses_database extracted from 'e.g., ...PostgreSQL' example text as reference" do
+      # The CLAUDE.md scope-system example used to read 'e.g., "this app uses
+      # PostgreSQL"'. Pre-fix, the LLM dutifully extracted this as
+      # uses_database=postgresql, repeatedly contradicting the real
+      # uses_database=sqlite fact. Now: any stack predicate extracted from a
+      # quote containing example markers gets routed to `reference`.
+      extraction = ClaudeMemory::Distill::Extraction.new(
+        facts: [
+          {subject: "repo", predicate: "uses_database", object: "postgresql",
+           quote: 'global: All projects (e.g., "this app uses PostgreSQL")'}
+        ]
+      )
+      out = detector.reclassify(extraction)
+      expect(out.facts.first[:predicate]).to eq("reference")
+    end
+
+    it "reclassifies uses_framework extracted from 'for example: ...' text as reference" do
+      extraction = ClaudeMemory::Distill::Extraction.new(
+        facts: [
+          {subject: "repo", predicate: "uses_framework", object: "rails",
+           quote: "Frameworks vary; for example: Rails, Sinatra, Hanami."}
+        ]
+      )
+      out = detector.reclassify(extraction)
+      expect(out.facts.first[:predicate]).to eq("reference")
+    end
+
+    it "leaves stack predicates with no example markers in the quote alone" do
+      extraction = ClaudeMemory::Distill::Extraction.new(
+        facts: [
+          {subject: "repo", predicate: "uses_database", object: "sqlite",
+           quote: "We decided to use SQLite because operational simplicity matters."}
+        ]
+      )
+      out = detector.reclassify(extraction)
+      expect(out.facts.first[:predicate]).to eq("uses_database")
+    end
+
     it "does not reclassify conventions that merely contain 'by Firstname Lastname' phrasing" do
       # Production data (fact #142 in the claude_memory project DB): a real
       # convention about refresh sequences contains "MCP launched by Claude

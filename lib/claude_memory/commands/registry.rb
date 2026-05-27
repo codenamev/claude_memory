@@ -44,7 +44,8 @@ module ClaudeMemory
         "dashboard" => {class: DashboardCommand, description: "Open debugging dashboard"},
         "digest" => {class: DigestCommand, description: "Render a weekly markdown digest of memory activity"},
         "show" => {class: ShowCommand, description: "Print what memory would inject at the next SessionStart"},
-        "otel" => {class: OtelCommand, description: "Configure or inspect OpenTelemetry ingestion from Claude Code"}
+        "otel" => {class: OtelCommand, description: "Configure or inspect OpenTelemetry ingestion from Claude Code"},
+        "import-auto-memory" => {class: ImportAutoMemoryCommand, description: "Import Claude Code auto-memory .md files into project DB as facts"}
       }.freeze
 
       # Find a command class by name

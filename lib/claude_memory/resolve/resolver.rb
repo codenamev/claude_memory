@@ -120,13 +120,34 @@ module ClaudeMemory
 
         # No exact match: for multi-value predicates the new object is
         # genuinely a new coexisting value. For single-value, either the
-        # user signaled supersession ("now we use X instead") or the new
-        # claim contradicts the current one.
+        # user signaled supersession ("now we use X instead"), the new
+        # claim is example text (silently discarded), or the new claim
+        # contradicts the current one (conflict).
         if PredicatePolicy.single?(fact_data[:predicate])
-          supersession_signal?(fact_data) ? :supersede : :conflict
+          return :supersede if supersession_signal?(fact_data)
+          return :discard if example_text_quote?(fact_data)
+          :conflict
         else
           :insert
         end
+      end
+
+      # Single-cardinality stack predicates extracted from CLAUDE.md-style
+      # example text ('e.g., "this app uses PostgreSQL"') used to create a
+      # disputed fact + conflict row every ingest cycle. The
+      # ReferenceMaterialDetector handles this for the MCP
+      # `store_extraction` path; the resolver-side guard catches the same
+      # pattern when Layer-1 NullDistiller produces a stack fact from
+      # documentation text. Added 2026-05-21 audit Phase 3.6.
+      EXAMPLE_QUOTE_PATTERNS = [
+        /\b(?:e\.?g\.?|i\.?e\.?|for example|for instance|such as)[,:]?\s/i,
+        /\(\s*(?:e\.?g\.?|i\.?e\.?)[,.]/i
+      ].freeze
+
+      def example_text_quote?(fact_data)
+        quote = fact_data[:quote].to_s
+        return false if quote.empty?
+        EXAMPLE_QUOTE_PATTERNS.any? { |re| quote.match?(re) }
       end
 
       def apply_resolution(resolution, fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, project_path:, scope:)
@@ -136,6 +157,12 @@ module ClaudeMemory
         when :conflict
           apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at,
             project_path: project_path, scope: scope)
+        when :discard
+          # Silently drop the fact — its quote looked like documentation
+          # example text against a single-cardinality predicate that
+          # already has a confirmed value. Returning zero across the
+          # board keeps the resolver-result accounting consistent.
+          {created: 0, superseded: 0, conflicts: 0, provenance: 0}
         else
           apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution,
             project_path: project_path, scope: scope)

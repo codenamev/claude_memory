@@ -284,7 +284,7 @@ module ClaudeMemory
           },
           {
             name: "memory.decisions",
-            description: "List architectural decisions, constraints, and rules.",
+            description: "List facts with predicate=decision from both project and global memory (project first). Returns only `decision`-predicate facts — does not include `uses_database`, `uses_framework`, etc.",
             inputSchema: {
               type: "object",
               properties: {
@@ -295,7 +295,7 @@ module ClaudeMemory
           },
           {
             name: "memory.conventions",
-            description: "List coding conventions and style preferences from global memory.",
+            description: "List facts with predicate=convention from both project and global memory (project first). Use this to see project coding conventions alongside user-wide style preferences.",
             inputSchema: {
               type: "object",
               properties: {
@@ -306,7 +306,7 @@ module ClaudeMemory
           },
           {
             name: "memory.architecture",
-            description: "List framework choices and architectural patterns.",
+            description: "List architecture facts and stack-shaping constraints (predicates: architecture, uses_database, uses_framework, uses_language, deployment_platform, auth_method) from both project and global memory.",
             inputSchema: {
               type: "object",
               properties: {

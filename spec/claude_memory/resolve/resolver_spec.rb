@@ -89,6 +89,55 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
           expect(conflicts.size).to eq(1)
         end
 
+        it "silently discards single-cardinality facts extracted from example-text quotes" do
+          # 2026-05-21 audit Phase 3.6: Layer-1 NullDistiller (and any
+          # extraction path that doesn't run through
+          # ReferenceMaterialDetector) used to create disputed facts every
+          # time CLAUDE.md's scope-system example text was re-ingested.
+          # Now the resolver itself recognizes 'e.g., ...' quotes as
+          # documentation example markers and drops the fact silently.
+          extraction1 = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_database", object: "sqlite",
+                     strength: "stated", quote: "We decided to use SQLite because of operational simplicity"}]
+          )
+          resolver.apply(extraction1)
+
+          example_extraction = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_database", object: "postgresql",
+                     strength: "inferred",
+                     quote: 'global: All projects (e.g., "this app uses PostgreSQL")'}]
+          )
+          result = resolver.apply(example_extraction)
+
+          expect(result[:conflicts_created]).to eq(0)
+          expect(result[:facts_created]).to eq(0)
+          expect(result[:provenance_created]).to eq(0)
+          expect(store.open_conflicts).to be_empty
+          expect(store.facts.where(status: "disputed").all).to be_empty
+        end
+
+        it "does NOT discard example-shaped supersession signals (stated wins over e.g.)" do
+          # Defensive: even if a stated supersession arrives with an
+          # example-shaped quote, supersession_signal? wins over
+          # example_text_quote? in determine_resolution. This protects
+          # against a real "we're switching, e.g., from sqlite to
+          # postgres" being silently discarded.
+          extraction1 = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_database", object: "sqlite", strength: "stated"}]
+          )
+          resolver.apply(extraction1)
+
+          stated_example = ClaudeMemory::Distill::Extraction.new(
+            facts: [{subject: "repo", predicate: "uses_database", object: "postgresql",
+                     strength: "stated",
+                     quote: "We're migrating to a different store (e.g., postgresql) starting Q3"}]
+          )
+          result = resolver.apply(stated_example)
+
+          expect(result[:facts_created]).to eq(1)
+          expect(result[:facts_superseded]).to eq(1)
+        end
+
         it "does not duplicate a conflict when the same contradiction is re-extracted" do
           # Audited in .claude/memory.sqlite3 on 2026-04-24: sqlite vs postgresql
           # conflicts appeared 11 times for what is semantically one contradiction.
