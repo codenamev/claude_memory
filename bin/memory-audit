@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Thin shim that delegates to `claude-memory audit`. Kept for users who
+# discovered the script in the 2026-05-21 audit; new automation should
+# call `claude-memory audit` directly so it benefits from CLI features
+# (severity filter, exit semantics, JSON shape) consistently.
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "claude_memory"
+
+exit ClaudeMemory::Commands::AuditCommand.new.call(ARGV)

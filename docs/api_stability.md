@@ -89,6 +89,7 @@ May change in any minor; treat with care.
 | `claude-memory reclassify-references [--dry-run] [--apply]` | Same shape; introduced 0.10.0. |
 | `claude-memory recall --semantic` / `--mode=hybrid` | Semantic-recall flags depend on the embedding backend; `tfidf` is stable, `fastembed`/`api` may change configuration knobs. |
 | `claude-memory embeddings` | Embedding-backend inspection; the JSON shape evolves with provider work. |
+| `claude-memory import-auto-memory [--dry-run]` | Imports Claude Code auto-memory markdown files into the project DB as facts. Introduced 0.12.0 from the 2026-05-21 audit; argument shape and idempotency contract are stable but the heuristic for predicate mapping may evolve. |
 
 ### Internal / not for external automation
 
@@ -112,7 +113,7 @@ Renaming or repurposing a code is a major-version change.
 
 ## 3. Public MCP tool surface
 
-All 25 tools registered via `MCP::ToolDefinitions.all`. Argument schemas, return shapes (both `content` and `structuredContent`), and tool-annotation hints (`readOnlyHint`, `idempotentHint`, `destructiveHint`) are **stable** for the listed tools.
+All 23 tools registered via `MCP::ToolDefinitions.all`. Argument schemas, return shapes (both `content` and `structuredContent`), and tool-annotation hints (`readOnlyHint`, `idempotentHint`, `destructiveHint`) are **stable** for the listed tools.
 
 ### Stable MCP tools
 
@@ -253,7 +254,7 @@ If you need a feature from one of the internal classes, **open an issue** so we 
 
 ### Schema migrations
 
-Schema is at v17 as of 0.12.0 with 8 migrations under `db/migrations/`. Migrations remain forward-compatible per the round-trip-spec convention (`feedback_round_trip_migration_specs.md`): each release's specs verify that DBs from the prior 3 schema boundaries can be migrated into the current schema without data loss.
+Schema is at v18 as of 0.12.0 with 18 migrations under `db/migrations/`. Migrations remain forward-compatible per the round-trip-spec convention (`feedback_round_trip_migration_specs.md`): each release's specs verify that DBs from the prior 3 schema boundaries can be migrated into the current schema without data loss.
 
 **What's stable:**
 
@@ -280,6 +281,35 @@ Always a major-version change. Process:
 1. Mark the surface deprecated via `Deprecations.warn` in the next minor.
 2. Keep reading the column / accepting the predicate for ≥ 1 minor cycle.
 3. Migration to drop the column ships in the major bump.
+
+---
+
+## 7. Database signal-health audit (since 0.12.0)
+
+The memory database itself has stability contracts that, when violated, indicate either a regression in the distillation/resolve pipeline or contamination of the source documentation. These contracts are enforced at two layers:
+
+### `bin/memory-audit` (runtime audit script)
+
+Reports per-DB statistics and exits non-zero on threshold breach. Stable surface:
+
+- Output JSON shape (`--json` flag): `{project_path, global: {active_facts, predicate_counts}, project: {active_facts, predicate_counts, open_conflicts, pending_distillation}, single_cardinality_violations, warnings, failures, ok}`.
+- Exit code: `0` on `failures.empty?`, `1` otherwise. `--no-exit` always returns 0 (informational mode).
+
+Run before tagging a release; wire into CI on the project's own DB to catch in-conversation contamination.
+
+### `spec/benchmarks/health/database_signal_spec.rb`
+
+`:benchmark`-tagged RSpec suite that codifies the contracts:
+
+1. Zero open conflicts in both stores.
+2. At most one active fact per single-cardinality predicate (`uses_database`, `deployment_platform`, `auth_method`).
+3. `memory.conventions` returns at least one project-scope fact when project conventions exist (regression guard against the pre-0.12 global-only filter).
+4. `memory.decisions` returns only `decision`-predicate facts (no `uses_*` leakage).
+5. `memory.architecture` returns only predicates in `Shortcuts::SHORTCUTS[:architecture][:predicates]`.
+6. Distillation backlog < 100 (hard fail) / < 25 (warning).
+7. Project active facts ≥ 5 (sanity floor — catches over-aggressive rejection).
+
+Run via `bundle exec rspec spec/benchmarks/health/ --tag benchmark`.
 
 ---
 
