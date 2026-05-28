@@ -32,11 +32,12 @@ module ClaudeMemory
       # so a bare ID without scope is ambiguous.
       attr_reader :emitted_fact_ids, :emitted_subjects, :emitted_facts_by_scope
 
-      def initialize(manager, source: nil, auto_memory_mirror: nil)
+      def initialize(manager, source: nil, auto_memory_mirror: nil, stale_threshold_days: nil)
         @manager = manager
         @source = source
         @recall = Recall.new(manager)
         @auto_memory_mirror = auto_memory_mirror
+        @stale_threshold_days = stale_threshold_days
         @emitted_fact_ids = []
         @emitted_subjects = []
         @emitted_facts_by_scope = Hash.new { |h, k| h[k] = [] }
@@ -108,11 +109,19 @@ module ClaudeMemory
         predicate = fact[:predicate]
         object = fact[:object_literal]
 
-        if subject && predicate && object
+        line = if subject && predicate && object
           "#{subject}.#{predicate} = #{object}"
         elsif object
           object.to_s
         end
+        return nil unless line
+
+        marker = Recall::StalenessAnnotator.marker_for(fact, threshold_days: stale_threshold_days)
+        marker ? "#{line}  #{marker}" : line
+      end
+
+      def stale_threshold_days
+        @stale_threshold_days ||= Configuration.new.injection_stale_days
       end
 
       def fetch_undistilled(limit)

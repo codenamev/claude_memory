@@ -67,6 +67,25 @@ module ClaudeMemory
       DEFAULT_STALE_DAYS
     end
 
+    # Threshold (in days) for the context-injection staleness marker. A
+    # single-value fact older than this and not recalled within it gets a
+    # "verify before relying" annotation when injected at SessionStart.
+    # Deliberately much longer than DEFAULT_STALE_DAYS (the dashboard's
+    # review-candidate window) — the injection marker should fire only on
+    # facts old enough to be genuinely risky, not merely unused for a
+    # couple weeks. Override via CLAUDE_MEMORY_INJECTION_STALE_DAYS.
+    DEFAULT_INJECTION_STALE_DAYS = 180
+
+    # @return [Integer] injection staleness threshold in days
+    def injection_stale_days
+      raw = env["CLAUDE_MEMORY_INJECTION_STALE_DAYS"]
+      return DEFAULT_INJECTION_STALE_DAYS if raw.nil? || raw.empty?
+      parsed = Integer(raw, 10)
+      (parsed > 0) ? parsed : DEFAULT_INJECTION_STALE_DAYS
+    rescue ArgumentError
+      DEFAULT_INJECTION_STALE_DAYS
+    end
+
     # Whether OTel trace ingestion is opted in. Reads OTEL_TRACES_EXPORTER
     # from .claude/settings.json's env block. Traces are off unless the
     # value is present and non-empty and not "none". Set by

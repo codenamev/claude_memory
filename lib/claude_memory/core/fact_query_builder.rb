@@ -141,6 +141,7 @@ module ClaudeMemory
             Sequel[:facts][:valid_from],
             Sequel[:facts][:valid_to],
             Sequel[:facts][:created_at],
+            Sequel[:facts][:last_recalled_at],
             Sequel[:entities][:canonical_name].as(:subject_name),
             Sequel[:facts][:scope],
             Sequel[:facts][:project_path]

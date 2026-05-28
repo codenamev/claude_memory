@@ -27,7 +27,7 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector do
     FileUtils.rm_rf(tmpdir)
   end
 
-  def create_fact_with_content(store, predicate, object, text, scope: "project")
+  def create_fact_with_content(store, predicate, object, text, scope: "project", valid_from: nil)
     content_id = store.upsert_content_item(
       source: "test",
       session_id: "sess-1",
@@ -46,6 +46,7 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector do
       object_literal: object,
       status: "active",
       scope: scope,
+      valid_from: valid_from,
       project_path: (scope == "project") ? project_path : nil
     )
 
@@ -198,6 +199,50 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector do
         expect(context).to include("JWT")
         expect(context).to include("Conventions")
         expect(context).to include("explicit returns")
+      end
+    end
+
+    context "staleness annotation for single-value facts" do
+      let(:old_date) { "2024-06-01T00:00:00Z" }
+
+      it "marks an old, never-confirmed single-value fact as stale" do
+        create_fact_with_content(
+          manager.project_store,
+          "deployment_platform",
+          "Heroku",
+          "uses architecture deployment platform Heroku push buildpack",
+          valid_from: old_date
+        )
+        context = injector.generate_context
+        expect(context).to include("Heroku")
+        expect(context).to include("stale")
+        expect(context).to include("verify before relying")
+      end
+
+      it "does not mark a fresh single-value fact" do
+        create_fact_with_content(
+          manager.project_store,
+          "deployment_platform",
+          "Fly.io",
+          "uses architecture deployment platform Fly.io flyctl"
+          # no valid_from → created_at defaults to now → not stale
+        )
+        context = injector.generate_context
+        expect(context).to include("Fly.io")
+        expect(context).not_to include("stale")
+      end
+
+      it "does not mark an old multi-value fact (convention)" do
+        create_fact_with_content(
+          manager.project_store,
+          "convention",
+          "Use 2-space indentation",
+          "convention style format Use 2-space indentation",
+          valid_from: old_date
+        )
+        context = injector.generate_context
+        expect(context).to include("2-space indentation")
+        expect(context).not_to include("stale")
       end
     end
   end
