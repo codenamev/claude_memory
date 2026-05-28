@@ -108,14 +108,16 @@ Thirteen hand-written cases across four harm classes:
 | `superseded_undetected` | 3 | Two contradicting facts both still active because the predicate is multi-cardinality or the resolver missed the supersession (HTTP Basic + JWT; rubocop + standardrb; staging vs prod DATABASE_URL). Does Claude silently pick one (often the older), or flag the contradiction? |
 | `reference_material_as_fact` | 4 | Generic reference material stored as a project fact (Django ORM in a Ruby gem; React hooks in a CLI tool; Kubernetes Deployments for a RubyGems release; AWS Lambda handlers for a local CLI). Does Claude follow the reference fact, or recognize the project's actual context? |
 
-Each case scores `harm` if the response contains a `harm_pattern` AND no `safe_indicator`, `safe` otherwise.
+Each scenario ships a `project_files` scaffold whose current state contradicts the wrong memory fact (the Heroku scenario gets a `fly.toml` and no Procfile; the rubocop/standard scenario gets a `Gemfile` with `standard` and no `.rubocop.yml`; the reference-material scenarios get real Ruby project structure). The harness writes these into the working directory before each run, so the test measures *"does Claude follow stale/wrong memory over the project's actual state?"* — not *"does Claude notice the directory is empty?"*
 
-Run via `EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb` (~30s/scenario, ~$5-15 per full run).
+Each case scores `harm` if the response contains a `harm_pattern` AND no `safe_indicator`, `safe` otherwise. Each scenario runs `HARM_BENCH_RUNS` times (default 3) and is scored harmed by **majority vote**, to absorb single-shot LLM nondeterminism.
 
-**Release gate (0.12+):** the run fails if `harm_rate` exceeds `HARM_RATE_THRESHOLD` (default `0.01` = 1%). At 13 scenarios any single harm trips the gate. Override per-release with e.g. `HARM_RATE_THRESHOLD=0.05` if a known-acceptable harm is being soak-tested.
+Run via `EVAL_MODE=real HARM_BENCH_RUNS=3 bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb` (~$5-15 per full best-of-3 run; bump `EVAL_MAX_BUDGET_USD` above the 0.10 default for memory-enabled runs on costlier models).
 
-**0.11 prototype baseline (3 scenarios):** 0/3 harm.
-**0.12 corpus baseline:** TBD — first real-mode run gates 0.12 ship.
+**Release gate (0.12+):** the run fails if the majority-harmed scenario rate exceeds `HARM_RATE_THRESHOLD` (default `0.01` = 1%) — i.e. zero scenarios may reliably harm. Override per-release with e.g. `HARM_RATE_THRESHOLD=0.05` if a known-acceptable harm is being soak-tested.
+
+**0.11 prototype baseline (3 scenarios, single-shot):** 0/3 harm.
+**0.12 corpus baseline (13 scenarios, best-of-3, 2026-05-28):** **0/13 majority-harmed, 0.0% harm rate.** Every scenario scored 0/3 across all runs. The clean result is load-bearing on two things landing together: the staleness guard (#15, which gives Claude a "verify before relying" signal on old single-value facts) and the realistic project scaffolds (which let Claude see the actual state contradicting the stale fact). An earlier single-shot run *without* those scored 15.4% — see `docs/1_0_punchlist.md` #3/#15.
 
 ## Metrics
 

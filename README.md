@@ -358,7 +358,7 @@ See [`spec/benchmarks/README.md`](spec/benchmarks/README.md#harm_scenariosyml-13
 | **Hybrid Retrieval** | Recall@10 (20 hard queries) | **62.8%** |
 | **Scope Ranking** | Queries returning expected facts | **5/5** |
 | **Negative-Fact Harm (prototype)** | 0.11 baseline (3 scenarios, real Claude) | **0/3** |
-| **Negative-Fact Harm (full corpus)** | 0.12 baseline (13 scenarios, real Claude) | *pending first real-mode run* |
+| **Negative-Fact Harm (full corpus)** | 0.12 baseline (13 scenarios, best-of-3, real Claude) | **0/13 (0.0%)** |
 | **E2E vs CLAUDE.md baseline** | 0.12 acceptance-rate delta (10 scenarios) | *pending first real-mode run* |
 
 Semantic and hybrid retrieval use [fastembed-rb](https://github.com/khasinski/fastembed-rb) with the BAAI/bge-small-en-v1.5 model (384-dim, runs locally, no API key needed).

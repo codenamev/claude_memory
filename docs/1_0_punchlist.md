@@ -394,10 +394,55 @@ trace data. Loud answer to "what is this thing doing right now?"
 → improvements.md entry: tracked under the OTel research → study line.
 Effort: ~2.5w (Apr 26 → May 21).
 
+### #15 Staleness guard for single-value facts — *born from the #3 harm run, landed 2026-05-28* ✅
+
+**Gap.** The first full-corpus real-mode harm run (#3) surfaced a 15.4%
+harm rate. One was a false positive in the test pattern (fixed in the
+corpus); the other was a **real harm**: Claude emitted `git push heroku
+HEAD:main` from a stale `deployment_platform` fact with no hedge.
+Single-value predicates are exclusive claims Claude follows
+authoritatively — and ClaudeMemory had no defense against a stale one
+when no superseding fact exists (supersession only fires if the
+migration was recorded). This is a direct pillar-3 (long-horizon
+quality) hole: over months, single-value facts go stale and silently
+make Claude wrong.
+
+**Acceptance.**
+
+- `Recall::StalenessAnnotator` pure function: flags single-value facts
+  (uses_database / deployment_platform / auth_method) that are old
+  (valid_from/created_at older than threshold) AND not recently
+  confirmed (last_recalled_at null/stale)
+- `Hook::ContextInjector` appends a "⚠ stale … verify before relying"
+  marker at SessionStart; multi-value predicates never annotated
+- `Configuration#injection_stale_days` (default 180, env override),
+  distinct from the 14-day dashboard review window
+- Re-run of #3 (scaffolded + best-of-N) confirms the gate is green
+
+**Why this release.** It's the concrete payoff of building the harm
+benchmark before 1.0: the benchmark didn't just report a number, it
+forced a real defensive feature that makes the long-horizon-quality
+claim defensible. Shipping #3 without #15 would have meant tagging a
+release whose own gate said "memory makes Claude wrong 1-in-13 times."
+
+**Harness hardening (same investigation).** The first full-corpus run
+also exposed two confounds that made the gate unverifiable: scenarios
+ran in an empty tmpdir (Claude often refused for lack of project
+context, not because it resisted the bad fact) and single-shot scoring
+was noisy (the harmed *set* changed run-to-run). Fixed by (a) shipping a
+`project_files` scaffold per scenario whose current state contradicts
+the wrong memory fact — making each case a real "memory vs reality"
+test — and (b) best-of-N majority scoring (HARM_BENCH_RUNS, default 3).
+Without this, #15's effect couldn't be measured cleanly.
+
+→ improvements.md entry: not yet promoted; originates from the
+`spec/benchmarks/dataset/harm_scenarios.yml` `harm_stale_deployment_heroku`
+finding. Effort: ~½d (2026-05-28 session).
+
 **Ship target:** target tag ~2026-06-03 to give the soak window 2-3 weeks
-before 1.0. Remaining 0.12 work: #3 (harm corpus, ~2d) + #4 (CLAUDE.md
-baseline surface, ½d) + ~$5-15 real-mode validation runs. Everything else
-in 0.12 has shipped.
+before 1.0. Remaining 0.12 work: #4 (CLAUDE.md baseline surface, ½d) +
+comparative real-mode run. #3 harm gate is green after #15; everything
+else in 0.12 has shipped.
 
 ---
 
