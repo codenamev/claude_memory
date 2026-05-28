@@ -40,7 +40,7 @@ module EvalHelpers
         prompt,
         "--output-format", "text", # Use text format (JSON unreliable with hooks)
         "--no-session-persistence", # Don't save session
-        "--max-budget-usd", "0.10" # Per-test budget limit
+        "--max-budget-usd", ENV.fetch("EVAL_MAX_BUDGET_USD", "0.10") # Per-test budget; bump for memory-enabled E2E on costlier models
       ]
       if @allowed_tools&.any?
         cmd += ["--allowedTools"] + @allowed_tools
