@@ -324,27 +324,19 @@ The uninstall command removes:
 
 ClaudeMemory includes **DevMemBench**, a developer-domain benchmark suite that measures retrieval quality, truth maintenance accuracy, **negative-fact harm**, and **uplift over a hand-written CLAUDE.md baseline**. All offline benchmarks run locally at zero cost; end-to-end and comparative runs use real Claude (~$5-15 per full run).
 
-### Is this better than a hand-written CLAUDE.md?
-
-The single most important question for adoption is whether dynamic retrieval beats static context injection. ClaudeMemory includes a `CLAUDE.md baseline` adapter that renders every active fact as a Markdown file and lets Claude Code auto-load it — no retrieval, no MCP server, just static context. The comparative E2E benchmark pits ClaudeMemory's hybrid retrieval against that baseline on the same scenarios with the same Claude.
-
-The headline numbers land via:
-
-```bash
-EVAL_MODE=real bundle exec rspec spec/benchmarks/comparative/e2e/comparative_e2e_spec.rb
-```
-
-See [`spec/benchmarks/README.md`](spec/benchmarks/README.md#e2e-comparison-vs-claudemd-baseline-headline-adoption-question) for the full methodology and the 0.12 baseline numbers as soon as they land.
-
 ### Does memory ever make Claude *wrong*?
 
-Every other benchmark measures whether memory helps. The negative-fact harm benchmark measures whether memory can hurt — injecting a stale, mis-scoped, superseded, or reference-material fact and watching Claude follow it. 13 scenarios across 4 harm classes; the run fails the build if more than 1% of scenarios produce a harm.
+Every other benchmark measures whether memory helps. The negative-fact harm benchmark measures whether memory can hurt — injecting a stale, mis-scoped, superseded, or reference-material fact and watching Claude follow it. 13 scenarios across 4 harm classes, each with a realistic project scaffold whose actual state contradicts the wrong fact, scored best-of-3 by majority vote. The run fails the build if any scenario reliably produces a harm (>1%).
 
 ```bash
-EVAL_MODE=real bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb
+EVAL_MODE=real HARM_BENCH_RUNS=3 EVAL_MAX_BUDGET_USD=0.50 bundle exec rspec spec/benchmarks/e2e/harm_bench_spec.rb
 ```
 
-See [`spec/benchmarks/README.md`](spec/benchmarks/README.md#harm_scenariosyml-13-scenarios-full-corpus-0120) for the full corpus and 0.11 prototype baseline.
+**0.12 baseline (2026-05-28): 0/13 harm.** See [`spec/benchmarks/README.md`](spec/benchmarks/README.md#harm_scenariosyml-13-scenarios-full-corpus-0120) for the full corpus and methodology.
+
+### Is this better than a hand-written CLAUDE.md?
+
+The single most important question for adoption is whether dynamic retrieval beats static context injection. ClaudeMemory ships a `CLAUDE.md baseline` adapter and a comparative E2E harness for exactly this. **The numbers aren't published yet (as of 0.12):** the current harness compares static CLAUDE.md (auto-loaded into every prompt) against ClaudeMemory's MCP-tool retrieval, but in headless `claude -p` mode Claude doesn't proactively call the recall tools, so the comparison doesn't yet exercise ClaudeMemory's retrieval path fairly. Publishing that gap as a headline number would mislead. The harness fix is tracked for 0.13 — see [`docs/1_0_punchlist.md`](docs/1_0_punchlist.md) #4.
 
 ### Latest Results
 
@@ -359,7 +351,7 @@ See [`spec/benchmarks/README.md`](spec/benchmarks/README.md#harm_scenariosyml-13
 | **Scope Ranking** | Queries returning expected facts | **5/5** |
 | **Negative-Fact Harm (prototype)** | 0.11 baseline (3 scenarios, real Claude) | **0/3** |
 | **Negative-Fact Harm (full corpus)** | 0.12 baseline (13 scenarios, best-of-3, real Claude) | **0/13 (0.0%)** |
-| **E2E vs CLAUDE.md baseline** | 0.12 acceptance-rate delta (10 scenarios) | *pending first real-mode run* |
+| **E2E vs CLAUDE.md baseline** | 0.12 acceptance-rate delta (10 scenarios) | *deferred to 0.13 — harness doesn't exercise headless retrieval (#4)* |
 
 Semantic and hybrid retrieval use [fastembed-rb](https://github.com/khasinski/fastembed-rb) with the BAAI/bge-small-en-v1.5 model (384-dim, runs locally, no API key needed).
 

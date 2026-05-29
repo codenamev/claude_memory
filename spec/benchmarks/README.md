@@ -185,19 +185,13 @@ The single most important question for adoption: **is dynamic retrieval better t
 
 Run via `EVAL_MODE=real bundle exec rspec spec/benchmarks/comparative/e2e/comparative_e2e_spec.rb` (~$2-4 per backend, ~$8-12 for the full comparison). The CLAUDE.md baseline adapter (`spec/benchmarks/comparative/adapters/claude_md_adapter.rb`) renders every active fact as a Markdown file in the project's working directory, then runs the prompt with the same Claude CLI. No retrieval happens — Claude sees the whole fact set up-front.
 
-```
-E2E COMPARATIVE (n=10 scenarios, real Claude):
-  Adapter                     acceptance_rate    avg_score
-  ClaudeMemory (hybrid)              <TBD>          <TBD>
-  CLAUDE.md baseline                 <TBD>          <TBD>
-  No memory                          <TBD>          <TBD>
-```
+> **⚠ Numbers not published yet (0.12). Known harness limitation.** The first real-mode run (2026-05-28) returned ClaudeMemory 0/10, No-memory 0/10, CLAUDE.md baseline 8/10 — but that is a harness artifact, not a verdict on retrieval quality. The CLAUDE.md adapter auto-loads *every* fact into context unconditionally; the ClaudeMemory adapter relies on Claude proactively calling `memory.recall` MCP tools, which `claude -p` headless mode does not do for these prompts (and the SessionStart context hook injects only a generic top-5, not the specific fact each LongMemEval-style scenario needs). So ClaudeMemory's retrieval path is never exercised → it ties no-memory at 0. Publishing 0% vs 80% would mislead. **Fix tracked for 0.13** (`docs/1_0_punchlist.md` #4): either force memory-tool use in the harness, or inject the full fact set via the context hook to match CLAUDE.md's "everything in context" model, then re-run. This also surfaced a genuine product observation worth separate investigation — in fully headless, non-tool-forcing usage, ClaudeMemory's value rides entirely on what the SessionStart hook injects.
 
 **Methodology.** The CLAUDE.md adapter writes a CLAUDE.md file containing all active facts grouped by predicate (Databases, Frameworks & Tools, Conventions, Decisions, Authentication, Deployment). Claude Code auto-loads CLAUDE.md per its standard behavior; no MCP server, no hooks, no dynamic retrieval. ClaudeMemory runs against the same fact set but exposes them via the MCP server and SessionStart context hook so Claude pulls only what's relevant per prompt.
 
-**What this measures.** Retrieval cost: bigger CLAUDE.md = more tokens spent up-front, regardless of relevance to the current prompt. Retrieval precision: ClaudeMemory should narrow the context window to relevant facts. The headline claim — *"this is better than CLAUDE.md"* — must be backed by measurable acceptance-rate uplift or token-efficiency wins.
+**What this is meant to measure (once the harness is fixed).** Retrieval cost: bigger CLAUDE.md = more tokens spent up-front, regardless of relevance to the current prompt. Retrieval precision: ClaudeMemory should narrow the context window to relevant facts. The headline claim — *"this is better than CLAUDE.md"* — must be backed by measurable acceptance-rate uplift or token-efficiency wins, on a harness that actually invokes ClaudeMemory's retrieval.
 
-**0.12 baseline:** pending first real-mode run (gates the 0.12 ship per Path B / `docs/1_0_punchlist.md` #4).
+**0.12 baseline:** deferred to 0.13 (harness limitation above).
 
 ### Comparative Results (2026-03-05, 50 queries, 6 adapters)
 

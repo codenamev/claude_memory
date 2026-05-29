@@ -222,24 +222,54 @@ in that regime.
 → improvements.md entry: *#49 Negative-Fact Harm Benchmark* (full corpus).
 Effort: 2d.
 
-### #4 Publish the CLAUDE.md baseline in headline E2E results — **in progress 2026-05-27 (Path B blocker)**
+### #4 Publish the CLAUDE.md baseline in headline E2E results — **DEFERRED to 0.13 (2026-05-29): harness limitation**
 
 **Gap.** `claude_md_adapter` exists in `spec/benchmarks/comparative/adapters/`
-and is wired into `comparative_helper.rb`. The README's headline comparative
-table doesn't include it. The single most important question for adoption —
-*"is this better than a hand-written CLAUDE.md?"* — is unanswered in our
-published numbers.
+and is wired into `comparative_helper.rb`. The single most important question
+for adoption — *"is this better than a hand-written CLAUDE.md?"* — is
+unanswered in our published numbers.
 
-**Acceptance.** Comparative E2E report includes `CLAUDE.md baseline` row in
-`spec/benchmarks/README.md` and in `bin/run-evals --comparative` summary.
-README explicitly states the win/loss versus the static baseline.
+**What happened.** The first real-mode comparative run (2026-05-28) returned
+ClaudeMemory **0/10**, No-memory **0/10**, CLAUDE.md baseline **8/10** — and
+investigation showed this is a *harness artifact, not a verdict*. The CLAUDE.md
+adapter auto-loads every fact into context unconditionally; the ClaudeMemory
+adapter relies on Claude proactively calling `memory.recall` MCP tools, which
+`claude -p` headless mode doesn't do for these prompts (and the SessionStart
+context hook injects only a generic top-5, not the specific fact each
+LongMemEval-style scenario needs). So ClaudeMemory's retrieval path is never
+exercised and it ties no-memory at 0. Publishing 0% vs 80% would actively
+mislead and violate the visibility pillar's honest-numbers standard.
 
-**Why this release.** Cheapest item on the list — adapter built, just
-surface the number. Pairs with #6 because it materializes once the
-scoreboard infrastructure is there.
+**Decision (2026-05-29).** Defer #4 to 0.13. It was never a release blocker
+(the harm gate was, and it's green at 0/13). 0.12 ships without comparative
+numbers; the README + benchmark README document the limitation honestly.
+
+**0.13 acceptance.** Fix the harness so it fairly exercises ClaudeMemory's
+retrieval — either (a) force memory-tool use (allowedTools + a recall-
+encouraging system turn), or (b) inject the full fact set via the context
+hook to match CLAUDE.md's "everything in context" model — then re-run and
+publish the real win/loss.
 
 → improvements.md entry: *#50 CLAUDE.md Baseline in Headline Results*.
-Effort: 30min code + one $2-8 real-mode run.
+Effort: harness fix ~1d + one real-mode run.
+
+### #16 Headless retrieval gap — *new observation 2026-05-29, investigate for 0.13*
+
+**Observation.** The #4 comparative run surfaced a genuine (separable) product
+concern: in fully headless, non-interactive `claude -p` usage with no
+tool-forcing, Claude does **not** proactively call ClaudeMemory's `memory.recall`
+MCP tools, so memory's contribution rides entirely on what the SessionStart
+context hook injects (a generic top-5 decisions/conventions/architecture). For
+*interactive* sessions — where Claude readily calls MCP tools — this isn't an
+issue, and it's the primary use case. But the gap is real and worth measuring:
+does the context-hook top-5 cover enough, or should headless usage get a richer
+injection (or a recall-on-demand affordance)?
+
+**Why not 0.12.** This is investigation, not a known fix, and it's orthogonal
+to the 0.12 visibility/stability theme. Pair it with the #4 harness fix in 0.13
+since both touch the same headless-retrieval seam.
+
+→ No improvements.md entry yet; originates from the 2026-05-28 comparative run.
 
 ### #6 Release-to-release benchmark scoreboard ✅ landed 2026-05-01
 
@@ -439,10 +469,10 @@ Without this, #15's effect couldn't be measured cleanly.
 `spec/benchmarks/dataset/harm_scenarios.yml` `harm_stale_deployment_heroku`
 finding. Effort: ~½d (2026-05-28 session).
 
-**Ship target:** target tag ~2026-06-03 to give the soak window 2-3 weeks
-before 1.0. Remaining 0.12 work: #4 (CLAUDE.md baseline surface, ½d) +
-comparative real-mode run. #3 harm gate is green after #15; everything
-else in 0.12 has shipped.
+**Ship target:** ready to tag (2026-05-29). #3 harm gate is green at 0/13
+(best-of-3) after #15; #4 deferred to 0.13 (harness limitation, never a
+blocker); everything else in 0.12 has shipped. 0.12 tags now; soak window
+2-3 weeks before 1.0.
 
 ---
 
