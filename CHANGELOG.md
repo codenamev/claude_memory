@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-05-29
+
+Theme: **Release Discipline + Observability + Self-Audit** — the infrastructure that makes a 1.0 semver promise defensible. This release locks down the public API surface, adds the observability primitives (OTel ingestion, dashboard Telemetry) and the self-audit toolkit (`claude-memory audit`) that serve the visibility pillar, and ships the negative-fact harm benchmark + staleness guard that make the long-horizon-quality claim measurable rather than aspirational.
+
 ### Added
 
 - **Staleness guard for single-value facts** — single-value predicates (`uses_database` / `deployment_platform` / `auth_method`) are exclusive claims Claude follows authoritatively, so a *stale* one is the most dangerous kind of memory. The 0.12 harm benchmark caught Claude emitting `git push heroku HEAD:main` from a stale `deployment_platform` fact with zero hedge — and supersession only protects against this if the replacement was recorded. New `Recall::StalenessAnnotator` (pure function) flags single-value facts that are old (`valid_from`/`created_at` older than `injection_stale_days`, default 180) AND not recently confirmed (`last_recalled_at` null or stale); `Hook::ContextInjector` appends a `⚠ stale: recorded YYYY-MM-DD … verify before relying` marker at SessionStart so Claude can hedge or verify instead of blindly following. Multi-value predicates are never annotated (they accumulate; one stale entry isn't authoritative). New `Configuration#injection_stale_days` (`CLAUDE_MEMORY_INJECTION_STALE_DAYS`), deliberately much longer than the 14-day dashboard review window. Serves the 1.0 long-horizon-quality pillar — it's the first defense against memory degrading session quality over months.
@@ -15,6 +19,16 @@ All notable changes to this project will be documented in this file.
 - **`/study-repo` memory-discipline guard (prompt-only)** — top-level "CRITICAL: Memory Discipline" section in `.claude/skills/study-repo/SKILL.md` explicitly forbids the LLM from extracting external projects' tech stack as project-level facts. Roots the cleanup work `claude-memory reject` had to do during 0.11 (27-fact misattribution cluster on 2026-04-23/24, see `quality_review.md` 2026-04-30 cause-4 finding). Defense-in-depth detector deferred to 0.12.x or later, only built if measurement shows persistent leakage.
 - **API stability audit (`docs/api_stability.md`)** — authoritative public-API contract enumerating which CLI commands, MCP tools, hook events, Ruby classes, and schema surfaces are stable / experimental / internal. Default-to-internal applied throughout; the doc is the source of truth for what 1.0's semver promise will lock down. New `ClaudeMemory::Deprecations.warn(name:, replacement:, removed_in:)` module wired into `PredicatePolicy.canonicalize` as the first soft-rename — `has_convention` and `primary_language` synonyms now emit deprecation warnings scheduled for removal in `1.0.0`. README + CLAUDE.md link to the new doc; suppress noise via `CLAUDE_MEMORY_NO_DEPRECATIONS=1`.
 - **Release-to-release benchmark scoreboard** — `bin/run-evals` now writes `spec/benchmarks/results/<version>.json` after each run; new `bin/bench-diff` compares the current scoreboard against the most recent prior tagged version's and exits non-zero if any tracked pass-rate dropped beyond the threshold (default -5%, configurable via `--threshold`). Wired into `/release` skill Phase 1 as Step 7 — the release aborts on regressions before publish. First release with this gate is 0.12.0 itself; from 0.13.0 onward bench-diff actively gates against 0.12 baselines.
+
+### Deferred to 0.13
+
+- **CLAUDE.md comparative baseline numbers (#4)** — the comparative E2E harness compares static CLAUDE.md (auto-loaded into context) against ClaudeMemory's MCP-tool retrieval, but in headless `claude -p` mode Claude doesn't proactively call the recall tools, so the comparison doesn't yet exercise ClaudeMemory's retrieval path fairly (first run returned a misleading ClaudeMemory 0/10 = no-memory 0/10 vs CLAUDE.md 8/10). Publishing that would mislead, so the numbers are withheld and the harness fix is tracked for 0.13. This surfaced a genuine separable observation — in fully headless, non-tool-forcing usage, ClaudeMemory's contribution rides entirely on the SessionStart context-hook injection — also tracked for 0.13. See `docs/1_0_punchlist.md` #4 / #16.
+
+### Upgrade Notes
+
+- **Schema migrates automatically to v18** (OTel telemetry tables + `prompt_id` on `activity_events`) on first DB open via `Sequel::Migrator` — no manual step. Round-trip migration specs cover the upgrade path from prior release boundaries.
+- **The staleness marker now appears in SessionStart context** for single-value facts (`uses_database` / `deployment_platform` / `auth_method`) older than 180 days and not recently recalled. This is additive and advisory (a `⚠ stale … verify before relying` note). Tune the window with `CLAUDE_MEMORY_INJECTION_STALE_DAYS`; the existing `CLAUDE_MEMORY_STALE_DAYS` (dashboard review window) is unchanged.
+- No breaking API changes. `has_convention` / `primary_language` predicate synonyms continue to emit deprecation warnings (scheduled for removal in 1.0.0); suppress via `CLAUDE_MEMORY_NO_DEPRECATIONS=1`.
 
 ## [0.11.0] - 2026-04-30
 
