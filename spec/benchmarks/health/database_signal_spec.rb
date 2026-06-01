@@ -24,18 +24,20 @@ require_relative "../benchmark_helper"
 
 RSpec.describe "memory database signal health", :benchmark do
   # Skip the entire suite when the committed `.claude/memory.sqlite3` is an
-  # unresolved git-lfs pointer (CI checkout without `lfs: true`, an LFS
-  # bandwidth cap, or a fresh clone before `git lfs pull`). Reading the
-  # pointer text as a SQLite file raises `Extralite::Error: file is not a
-  # database`, which would fail benchmarks on unrelated changes — the
-  # signal-health contracts only mean something when run against the real
-  # committed DB.
+  # unresolved git-lfs pointer (CI checkout without LFS, an LFS bandwidth
+  # cap, or a fresh clone before `git lfs pull`). Reading the pointer text
+  # as a SQLite file raises `Extralite::Error: file is not a database`,
+  # which would fail benchmarks on unrelated changes — and the project's
+  # LFS blobs aren't reliably present on the GitHub LFS server, so CI runs
+  # always see the pointer. The signal-health contracts only mean something
+  # against the real committed DB; run locally after `git lfs pull` to
+  # validate them before tagging a release (see docs/api_stability.md §7).
   before(:all) do
     project_db = ClaudeMemory::Configuration.new.project_db_path
     if File.exist?(project_db)
       header = File.binread(project_db, 16).to_s
       unless header.start_with?("SQLite format 3")
-        skip "skipping: #{project_db} is not a SQLite file (likely an unresolved git-lfs pointer); run `git lfs pull` or set `lfs: true` in CI checkout"
+        skip "skipping: #{project_db} is not a SQLite file (likely an unresolved git-lfs pointer). Run `git lfs pull` locally to validate signal contracts."
       end
     end
   end

@@ -20,15 +20,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          # Fetch git-lfs objects so `.claude/memory.sqlite3` resolves to the
-          # real SQLite file rather than a pointer text blob. The signal-health
-          # benchmark (spec/benchmarks/health/database_signal_spec.rb) reads
-          # the live committed DB to catch in-conversation contamination; it
-          # errors with "file is not a database" if checkout leaves an LFS
-          # pointer behind. The spec itself skips gracefully when the pointer
-          # is unresolved, so this flag preserves the intended coverage when
-          # LFS is healthy without making the spec a flaky CI dependency.
-          lfs: true
+          # Leave LFS off (the default). `.claude/memory.sqlite3` is
+          # LFS-tracked but the project's LFS blobs aren't reliably present
+          # on the GitHub LFS server, so enabling `lfs: true` hard-fails
+          # checkout with `Object does not exist on the server [404]`. The
+          # signal-health benchmark (spec/benchmarks/health/) skips itself
+          # when it sees an LFS-pointer file instead of a SQLite header, so
+          # CI still passes; the benchmark must be run locally (where `git
+          # lfs pull` resolves the pointer) to validate signal contracts.
+          # See docs/api_stability.md §7.
+          lfs: false
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:

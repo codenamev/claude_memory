@@ -309,7 +309,11 @@ Run before tagging a release; wire into CI on the project's own DB to catch in-c
 6. Distillation backlog < 100 (hard fail) / < 25 (warning).
 7. Project active facts ≥ 5 (sanity floor — catches over-aggressive rejection).
 
-Run via `bundle exec rspec spec/benchmarks/health/ --tag benchmark`.
+Run via `bundle exec rspec spec/benchmarks/health/ --tag benchmark`. The
+spec is **local-only** — `.claude/memory.sqlite3` is git-lfs tracked and CI
+checkout doesn't pull LFS objects, so the spec auto-skips on CI when it
+detects the unresolved pointer. Run it locally after `git lfs pull` to
+validate signal contracts before tagging a release.
 
 ---
 
