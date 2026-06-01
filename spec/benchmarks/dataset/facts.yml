@@ -1,4 +1,12 @@
 # DevMemBench Facts Dataset
+#
+# Wrapped in <no-memory> tags so transcripts that capture this file's
+# content skip ingestion — these are the fact triples used as benchmark
+# fixtures across 5 simulated projects, NOT claims about this project.
+# Ingest::Ingester::EXCLUSION_TAGS excludes the entire delta on <no-memory>.
+#
+# <no-memory>
+#
 # ~200 developer-domain facts across 6 predicate types and 5 simulated projects
 #
 # Predicate cardinalities (from PredicatePolicy):
@@ -1046,3 +1054,5 @@
   fts_keywords: "database snowflake warehouse analytics"
   strength: inferred
   confidence: 0.5
+
+# </no-memory>

@@ -1,4 +1,12 @@
 # DevMemBench Resolution Cases
+#
+# Wrapped in <no-memory> tags so transcripts that capture this file's
+# content skip ingestion — the fixture facts below would otherwise be
+# re-extracted as project facts. Ingest::Ingester::EXCLUSION_TAGS
+# excludes the entire delta on <no-memory>.
+#
+# <no-memory>
+#
 # ~100 FEVER-inspired truth maintenance scenarios
 #
 # Expected outcomes:
@@ -1434,3 +1442,5 @@
     strength: stated
   expected_outcome: corroborate
   rationale: "CSS framework re-confirmed"
+
+# </no-memory>

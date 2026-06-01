@@ -1,4 +1,12 @@
 # DevMemEval End-to-End Scenarios
+#
+# Wrapped in <no-memory> tags so transcripts that capture this file's
+# content skip ingestion — the fixture facts below would otherwise be
+# re-extracted as project facts. Ingest::Ingester::EXCLUSION_TAGS
+# excludes the entire delta on <no-memory>.
+#
+# <no-memory>
+#
 # ~30 scenarios across LongMemEval's 5 memory ability categories
 #
 # Abilities:
@@ -385,3 +393,5 @@
   acceptance_keywords: ["don't have", "no information", "not sure", "not specified", "don't know", "not mentioned", "no memory", "no data", "no GraphQL"]
   rejection_keywords: ["Apollo", "graphql-ruby", "Absinthe", "Sangria"]
   threshold: 0.5
+
+# </no-memory>

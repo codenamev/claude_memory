@@ -1,4 +1,13 @@
 # Distillation Extraction Quality Dataset
+#
+# Wrapped in <no-memory> tags so transcripts that capture this file's
+# content skip ingestion — these cases contain annotated example facts
+# (the densest source of trigger words in the dataset). Without the wrap
+# every read of this file leaks tech-stack names into the project DB.
+# Ingest::Ingester::EXCLUSION_TAGS excludes the entire delta on <no-memory>.
+#
+# <no-memory>
+#
 # ~30 annotated cases for measuring NullDistiller extraction accuracy.
 #
 # Categories: entity (~12), fact (~18)
@@ -417,3 +426,5 @@
     facts:
       - {predicate: uses_database, object: mongodb, scope_hint: project}
       - {predicate: uses_database, object: redis, scope_hint: project}
+
+# </no-memory>

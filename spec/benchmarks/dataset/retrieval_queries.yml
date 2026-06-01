@@ -1,4 +1,12 @@
 # DevMemBench Retrieval Queries
+#
+# Wrapped in <no-memory> tags so transcripts that capture this file's
+# content skip ingestion — the queries reference fixture facts that
+# would otherwise be re-extracted as project facts.
+# Ingest::Ingester::EXCLUSION_TAGS excludes the entire delta on <no-memory>.
+#
+# <no-memory>
+#
 # ~150 queries organized by difficulty level
 #
 # Difficulty levels:
@@ -898,3 +906,5 @@
   preferred_scope: global
   difficulty: scope
   tests: [fts5, semantic, hybrid]
+
+# </no-memory>
