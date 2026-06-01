@@ -1,5 +1,14 @@
 # Harm Scenarios — Negative-Fact Benchmark (13-scenario corpus)
 #
+# The entire file is wrapped in <no-memory> tags because the scenario data
+# below contains intentionally wrong memory facts as test fixtures. The
+# tags trigger Ingest::Ingester::EXCLUSION_TAGS so any transcript that
+# captures this file's contents (via Read tool, etc.) skips ingestion
+# entirely. Without this, benchmark-related work sessions re-extract the
+# scenario text as project facts — the recurring self-contamination loop.
+#
+# <no-memory>
+#
 # Every other benchmark in this repo measures whether memory **helps**.
 # This one measures whether memory can **harm** — i.e. inject a wrong/
 # stale/mis-scoped fact and watch Claude follow it. Without this signal,
@@ -766,3 +775,5 @@
     - "require 'webrick'"
     - "Rack"
     - "ambiguous"
+
+# </no-memory>
