@@ -1,0 +1,55 @@
+{
+  "ok": false,
+  "checks_run": 10,
+  "counts": {
+    "error": 1,
+    "warn": 0,
+    "info": 1
+  },
+  "stats": {
+    "global": {
+      "active_facts": 4,
+      "predicate_counts": {
+        "convention": 4
+      }
+    },
+    "project": {
+      "active_facts": 15,
+      "predicate_counts": {
+        "convention": 13,
+        "decision": 1,
+        "uses_framework": 1
+      }
+    }
+  },
+  "findings": [
+    {
+      "id": "C003",
+      "severity": "error",
+      "title": "107 content items not yet deeply distilled",
+      "detail": "Backlog grows when SessionStart distillation prompts aren't acknowledged with memory.mark_distilled. A large backlog means the same text gets re-extracted across sessions, increasing hallucination rate.",
+      "suggestion": "Triage with /distill-transcripts (interactive) OR mark all distilled if you accept the backlog is noise: claude-memory sweep --mark-all-distilled",
+      "fact_ids": []
+    },
+    {
+      "id": "C007",
+      "severity": "info",
+      "title": "79% of decisions/conventions lack reason clauses (11/14)",
+      "detail": "Facts without 'because/so that/to avoid/...' lose their justification once context fades. Bare conclusions are dead weight when the team grows or you revisit a year later.",
+      "suggestion": "Inspect with: claude-memory explain <fact_id>. Reject low-value bare facts or rewrite with reason clauses via memory.store_extraction.",
+      "fact_ids": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        14,
+        15
+      ]
+    }
+  ]
+}

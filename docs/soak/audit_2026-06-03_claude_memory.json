@@ -1,0 +1,111 @@
+{
+  "ok": true,
+  "checks_run": 10,
+  "counts": {
+    "error": 0,
+    "warn": 2,
+    "info": 2
+  },
+  "stats": {
+    "global": {
+      "active_facts": 4,
+      "predicate_counts": {
+        "convention": 4
+      }
+    },
+    "project": {
+      "active_facts": 76,
+      "predicate_counts": {
+        "convention": 50,
+        "reference": 7,
+        "architecture": 6,
+        "uses_language": 5,
+        "uses_framework": 4,
+        "decision": 3,
+        "uses_database": 1
+      }
+    }
+  },
+  "findings": [
+    {
+      "id": "C010",
+      "severity": "warn",
+      "title": "predicate=uses_database shows churn: 9 historical non-active facts",
+      "detail": "Repeated supersession/dispute on a single-cardinality predicate usually means a contamination source (e.g., example text in CLAUDE.md or docs) keeps re-introducing the same hallucination.",
+      "suggestion": "Find the contamination source: claude-memory recall <bad_value> --scope=project. Wrap the trigger text in <no-memory> tags. See docs/audit_runbook.md.",
+      "fact_ids": []
+    },
+    {
+      "id": "C010",
+      "severity": "warn",
+      "title": "predicate=deployment_platform shows churn: 9 historical non-active facts",
+      "detail": "Repeated supersession/dispute on a single-cardinality predicate usually means a contamination source (e.g., example text in CLAUDE.md or docs) keeps re-introducing the same hallucination.",
+      "suggestion": "Find the contamination source: claude-memory recall <bad_value> --scope=project. Wrap the trigger text in <no-memory> tags. See docs/audit_runbook.md.",
+      "fact_ids": []
+    },
+    {
+      "id": "C007",
+      "severity": "info",
+      "title": "89% of decisions/conventions lack reason clauses (47/53)",
+      "detail": "Facts without 'because/so that/to avoid/...' lose their justification once context fades. Bare conclusions are dead weight when the team grows or you revisit a year later.",
+      "suggestion": "Inspect with: claude-memory explain <fact_id>. Reject low-value bare facts or rewrite with reason clauses via memory.store_extraction.",
+      "fact_ids": [
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        18,
+        19,
+        20,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        81,
+        82,
+        87,
+        143,
+        144,
+        146,
+        200,
+        212,
+        213,
+        214,
+        216,
+        217,
+        218,
+        219,
+        220,
+        222,
+        224,
+        225,
+        226,
+        227,
+        228,
+        229,
+        230,
+        231,
+        232,
+        233
+      ]
+    },
+    {
+      "id": "C009",
+      "severity": "info",
+      "title": "1 auto-memory file(s) not yet imported",
+      "detail": "~/.claude/projects/<slug>/memory/*.md files contain durable knowledge that isn't reachable via memory.recall until imported. AutoMemoryMirror only surfaces them transiently at SessionStart.",
+      "suggestion": "Preview: claude-memory import-auto-memory --dry-run. Import: claude-memory import-auto-memory.",
+      "fact_ids": []
+    }
+  ]
+}
