@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "checks_run": 10,
+  "counts": {
+    "error": 0,
+    "warn": 0,
+    "info": 0
+  },
+  "stats": {
+    "global": {
+      "active_facts": 4,
+      "predicate_counts": {
+        "convention": 4
+      }
+    },
+    "project": null
+  },
+  "findings": []
+}

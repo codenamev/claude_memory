@@ -14,9 +14,9 @@
       }
     },
     "project": {
-      "active_facts": 31,
+      "active_facts": 27,
       "predicate_counts": {
-        "convention": 24,
+        "convention": 20,
         "uses_language": 3,
         "uses_framework": 2,
         "deployment_platform": 1,
@@ -28,34 +28,17 @@
     {
       "id": "C007",
       "severity": "info",
-      "title": "100% of decisions/conventions lack reason clauses (24/24)",
+      "title": "35% of decisions/conventions lack reason clauses (7/20)",
       "detail": "Facts without 'because/so that/to avoid/...' lose their justification once context fades. Bare conclusions are dead weight when the team grows or you revisit a year later.",
       "suggestion": "Inspect with: claude-memory explain <fact_id>. Reject low-value bare facts or rewrite with reason clauses via memory.store_extraction.",
       "fact_ids": [
         4,
-        5,
         6,
-        7,
-        8,
         9,
-        10,
-        11,
-        12,
         13,
-        14,
-        15,
-        16,
-        17,
-        18,
         21,
-        22,
         23,
-        24,
-        26,
-        27,
-        28,
-        29,
-        31
+        24
       ]
     },
     {

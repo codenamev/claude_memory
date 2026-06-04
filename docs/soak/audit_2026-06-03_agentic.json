@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "checks_run": 10,
+  "counts": {
+    "error": 0,
+    "warn": 1,
+    "info": 0
+  },
+  "stats": {
+    "global": {
+      "active_facts": 4,
+      "predicate_counts": {
+        "convention": 4
+      }
+    },
+    "project": {
+      "active_facts": 0,
+      "predicate_counts": {}
+    }
+  },
+  "findings": [
+    {
+      "id": "C008",
+      "severity": "warn",
+      "title": "Only 0 active project fact(s)",
+      "detail": "A nearly-empty project DB suggests either a fresh install (ignore) OR a broken ingest pipeline / overzealous rejection. Verify hooks are firing: claude-memory doctor.",
+      "suggestion": "claude-memory doctor; claude-memory stats; check .claude/settings.json hook configuration.",
+      "fact_ids": []
+    }
+  ]
+}
