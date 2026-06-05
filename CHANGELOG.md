@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-06-05
+
+Theme: **Upgrade-experience patches surfaced by the 0.12.0 soak.** Four small but high-impact fixes — all uncovered by one user upgrading a single project — closing visibility gaps in the doctor and the plugin manifest. No schema changes, no breaking changes.
+
+### Added
+
+- **`claude-memory setup-vectors` command** — the documented opt-in path for end users who want vector recall via the BAAI/bge-small-en-v1.5 model. fastembed remains a dev/test gem dependency by design (the default install stays light); this command verifies the chosen provider is loadable (gracefully prompts to `gem install fastembed` if not), writes `CLAUDE_MEMORY_EMBEDDING_PROVIDER` (and optional `CLAUDE_MEMORY_EMBEDDING_MODEL`) to the project's `.claude/settings.json` env block — the same mechanism Claude Code uses for OTel — and re-indexes existing facts via the existing `IndexCommand` (skip with `--no-reindex`). Supports `--status` for current config and `--dry-run` for inspection. Preserves unrelated settings.json keys.
+- **`Checks::EmbeddingsCheck`** in `claude-memory doctor` — surfaces the active embedding provider name and dimensions, hints to set `CLAUDE_MEMORY_EMBEDDING_PROVIDER=fastembed` when on tfidf default and fastembed is loadable, and reports dimension mismatches between stored vectors and the current provider. Closes the visibility gap where a user could see `sqlite-vec available ✓` while silently running on tfidf without knowing.
+
+### Fixed
+
+- **`plugin.json` declared `skills: "./skills/"` and `outputStyles: "./output-styles/"` pointing at non-existent directories.** Per Claude Code's plugin reference, `distill-transcripts.md` is correctly a flat *command* (not a skill); both forms register as `/<name>` slash commands. Dead keys removed. Plugin spec rewritten as deletion-safe ("every directory key in plugin.json points at an existing directory") so this can't regress.
+
+### Documentation
+
+- **README "Upgrading" section** now documents the marketplace-refresh + `/reload-plugins` flow explicitly. After `/plugin marketplace update <name>` users must run `/reload-plugins` or restart Claude Code for new slash commands to appear — this bit one user upgrading to 0.12.0 looking for `/distill-transcripts`. Includes `/audit-memory` and `/distill-transcripts` as named examples.
+
+### Upgrade Notes
+
+- No DB migrations. Schema stays at v18.
+- After `gem update claude_memory`, run `/plugin marketplace update claude-memory && /reload-plugins` (or restart Claude Code) to see the new `/distill-transcripts` and `/audit-memory` slash commands.
+- Existing fact bases continue to use whatever embedding provider they were indexed under. To opt into fastembed, run `claude-memory setup-vectors` — it handles provider switching + re-index in one step.
+- `claude-memory doctor` will now emit a warning on tfidf default with fastembed loadable. This is informational, not an error; the system continues to function on tfidf.
+
 ## [0.12.0] - 2026-05-29
 
 Theme: **Release Discipline + Observability + Self-Audit** — the infrastructure that makes a 1.0 semver promise defensible. This release locks down the public API surface, adds the observability primitives (OTel ingestion, dashboard Telemetry) and the self-audit toolkit (`claude-memory audit`) that serve the visibility pillar, and ships the negative-fact harm benchmark + staleness guard that make the long-horizon-quality claim measurable rather than aspirational.

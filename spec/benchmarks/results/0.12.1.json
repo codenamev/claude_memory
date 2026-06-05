@@ -1,0 +1,69 @@
+{
+  "version": "0.12.1",
+  "timestamp": "2026-06-05T12:34:36Z",
+  "git_sha": "1fc336452dc8a3f20e676fc99a4fdfc42efebea1",
+  "git_branch": "main",
+  "ran": {
+    "evals": true,
+    "benchmarks": true,
+    "comparative": false,
+    "real_mode": false
+  },
+  "metrics": {
+    "evals": {
+      "total": 60,
+      "passed": 60,
+      "failed": 0,
+      "pass_rate": 1.0,
+      "duration_seconds": 0.96,
+      "by_scenario": {
+        "error_handling_patterns": {
+          "total": 5,
+          "passed": 5,
+          "pass_rate": 1.0
+        },
+        "architectural_decision": {
+          "total": 7,
+          "passed": 5,
+          "pass_rate": 0.7143
+        },
+        "convention_recall": {
+          "total": 7,
+          "passed": 5,
+          "pass_rate": 0.7143
+        },
+        "simple_acceptance_criteria": {
+          "total": 10,
+          "passed": 10,
+          "pass_rate": 1.0
+        },
+        "framework_api_usage": {
+          "total": 5,
+          "passed": 5,
+          "pass_rate": 1.0
+        },
+        "claude_cli_runner": {
+          "total": 9,
+          "passed": 9,
+          "pass_rate": 1.0
+        },
+        "implementation_consistency": {
+          "total": 5,
+          "passed": 5,
+          "pass_rate": 1.0
+        },
+        "tech_stack_recall": {
+          "total": 7,
+          "passed": 5,
+          "pass_rate": 0.7143
+        },
+        "code_style_adherence": {
+          "total": 5,
+          "passed": 5,
+          "pass_rate": 1.0
+        }
+      }
+    }
+  },
+  "overall_exit_code": 0
+}

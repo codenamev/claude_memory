@@ -47,7 +47,7 @@ When ambiguous, default is **internal** — easier to promote later than demote.
 
 ## 2. Public CLI surface
 
-All commands listed in `Commands::Registry::COMMANDS` are reachable via `claude-memory <subcommand>`. The full registered set (34 commands as of 0.12.0) is canonically stored in `lib/claude_memory/commands/registry.rb`. Stability:
+All commands listed in `Commands::Registry::COMMANDS` are reachable via `claude-memory <subcommand>`. The full registered set (38 commands as of 0.12.1) is canonically stored in `lib/claude_memory/commands/registry.rb`. Stability:
 
 ### Stable commands (covered by semver)
 
@@ -90,6 +90,7 @@ May change in any minor; treat with care.
 | `claude-memory recall --semantic` / `--mode=hybrid` | Semantic-recall flags depend on the embedding backend; `tfidf` is stable, `fastembed`/`api` may change configuration knobs. |
 | `claude-memory embeddings` | Embedding-backend inspection; the JSON shape evolves with provider work. |
 | `claude-memory import-auto-memory [--dry-run]` | Imports Claude Code auto-memory markdown files into the project DB as facts. Introduced 0.12.0 from the 2026-05-21 audit; argument shape and idempotency contract are stable but the heuristic for predicate mapping may evolve. |
+| `claude-memory setup-vectors [--provider=NAME] [--model=NAME] [--no-reindex] [--dry-run] [--status]` | Documented opt-in path for enabling vector recall via fastembed. Introduced 0.12.1. Writes `CLAUDE_MEMORY_EMBEDDING_PROVIDER` (and optional `CLAUDE_MEMORY_EMBEDDING_MODEL`) to `.claude/settings.json` env block, then re-embeds via `IndexCommand`. fastembed remains a dev/test gem dep by design; install via `gem install fastembed` if not present. Argument shape stable; the underlying re-index implementation may evolve. |
 
 ### Internal / not for external automation
 
