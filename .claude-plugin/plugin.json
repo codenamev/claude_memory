@@ -16,7 +16,5 @@
       "args": []
     }
   },
-  "skills": "./skills/",
-  "commands": "./commands/",
-  "outputStyles": "./output-styles/"
+  "commands": "./commands/"
 }

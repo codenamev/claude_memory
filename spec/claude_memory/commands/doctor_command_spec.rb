@@ -83,8 +83,15 @@ RSpec.describe ClaudeMemory::Commands::DoctorCommand do
           )
 
           exit_code = command.call(["--brief"])
+          # 0.12.1: EmbeddingsCheck flags tfidf-default as a warning when
+          # fastembed is loadable. In dev environments fastembed is in the
+          # Gemfile so brief mode emits WARNING + a bracketed details
+          # section; in production-only installs the bracket section is
+          # absent. Match both shapes.
           expect(exit_code).to eq(0)
-          expect(stdout.string.strip).to match(/^Memory OK: \d+ facts \(global\), \d+ facts \(project\)$/)
+          expect(stdout.string.strip).to match(
+            /^Memory (OK|WARNING): \d+ facts \(global\), \d+ facts \(project\)( \[.*\])?$/
+          )
         end
       end
 

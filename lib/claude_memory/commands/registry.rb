@@ -45,6 +45,7 @@ module ClaudeMemory
         "digest" => {class: DigestCommand, description: "Render a weekly markdown digest of memory activity"},
         "show" => {class: ShowCommand, description: "Print what memory would inject at the next SessionStart"},
         "otel" => {class: OtelCommand, description: "Configure or inspect OpenTelemetry ingestion from Claude Code"},
+        "setup-vectors" => {class: SetupVectorsCommand, description: "Opt into vector recall — write provider env to .claude/settings.json + re-index"},
         "import-auto-memory" => {class: ImportAutoMemoryCommand, description: "Import Claude Code auto-memory .md files into project DB as facts"},
         "audit" => {class: AuditCommand, description: "Run memory health audit; report inconsistencies and optimizations"}
       }.freeze

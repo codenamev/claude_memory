@@ -238,6 +238,17 @@ gem update claude_memory
 
 All database migrations happen automatically. Run `claude-memory doctor` to verify.
 
+### After upgrading: refresh the Claude Code plugin
+
+If you installed claude-memory as a Claude Code plugin (via the marketplace), pull the latest plugin spec **and reload it in your current session**:
+
+```
+/plugin marketplace update claude-memory
+/reload-plugins
+```
+
+`/plugin marketplace update` refreshes the plugin manifest from the source, but **the new slash commands won't appear until you run `/reload-plugins` (or restart Claude Code)** — slash commands are loaded once at session start. This bites every release that adds a new command (e.g. `/distill-transcripts` in 0.11, `/audit-memory` in 0.12); if a documented slash command doesn't autocomplete after upgrade, `/reload-plugins` is the fix.
+
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 ## Troubleshooting

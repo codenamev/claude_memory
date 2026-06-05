@@ -23,6 +23,7 @@ module ClaudeMemory
           Checks::DistillCheck.new(manager.global_db_path, "global"),
           Checks::DistillCheck.new(manager.project_db_path, "project"),
           Checks::VecCheck.new,
+          Checks::EmbeddingsCheck.new,
           Checks::SnapshotCheck.new,
           Checks::ClaudeMdCheck.new,
           Checks::HooksCheck.new

@@ -38,16 +38,18 @@ RSpec.describe "Plugin distribution files" do
       expect(plugin).not_to have_key("hooks")
     end
 
-    it "references skills directory" do
-      expect(plugin["skills"]).to eq("./skills/")
-    end
-
     it "references commands directory" do
       expect(plugin["commands"]).to eq("./commands/")
     end
 
-    it "references output styles directory" do
-      expect(plugin["outputStyles"]).to eq("./output-styles/")
+    # 0.12.1: plugin.json previously also declared "skills" and "outputStyles"
+    # keys pointing at directories that didn't exist. Removed to avoid plugin
+    # loader warnings — distill-transcripts.md is a flat command, not a skill
+    # (per Claude Code's plugin reference). Reintroduce these assertions only
+    # if/when those directories are populated.
+    it "does not declare skills or output-styles directories that don't exist" do
+      expect(plugin).not_to have_key("skills")
+      expect(plugin).not_to have_key("outputStyles")
     end
 
     it "has version matching gem version" do
@@ -126,19 +128,22 @@ RSpec.describe "Plugin distribution files" do
       expect(File.exist?(hooks_path)).to be true
     end
 
-    it "skills directory exists" do
-      skills_path = File.join(project_root, plugin["skills"])
-      expect(File.directory?(skills_path)).to be true
-    end
-
     it "commands directory exists" do
       commands_path = File.join(project_root, plugin["commands"])
       expect(File.directory?(commands_path)).to be true
     end
 
-    it "output-styles directory exists" do
-      styles_path = File.join(project_root, plugin["outputStyles"])
-      expect(File.directory?(styles_path)).to be true
+    # 0.12.1: every directory key declared in plugin.json must exist on disk.
+    # Previously plugin.json carried dead "skills" and "outputStyles" keys
+    # pointing at missing directories; that's a plugin-loader warning source
+    # and the documented cause of the user-facing "/distill-transcripts not
+    # found" confusion in #upgrade-experience-2026-06-04.
+    it "every directory key in plugin.json points at an existing directory" do
+      %w[skills commands outputStyles].each do |key|
+        next unless plugin.key?(key)
+        path = File.join(project_root, plugin[key])
+        expect(File.directory?(path)).to be(true), "plugin.json #{key.inspect} → #{plugin[key]} (missing on disk)"
+      end
     end
 
     it "serve-mcp.sh script exists and is executable" do
