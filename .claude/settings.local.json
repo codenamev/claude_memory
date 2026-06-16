@@ -53,6 +53,7 @@
       "mcp__memory__memory_conflicts"
     ]
   },
-  "enableAllProjectMcpServers": true,
+  "enableAllProjectMcpServers": false,
+  "disabledMcpjsonServers": ["memory"],
   "outputStyle": "memory-aware"
 }
