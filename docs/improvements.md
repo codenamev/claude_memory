@@ -426,10 +426,10 @@ Source: `docs/influence/mastra-observational-memory.md` — architecture study o
   - Implementation (phased):
     1. Schema v18 `observations` table (`body`, `kind`, `priority` 🔴/🟡/🟢, `scope`, `source_content_item_id`, `consolidated_into` lineage, `token_count`); NullDistiller emits observation rows; `memory.observations` read tool. **Append-only with tombstoning, not lossy drop** — preserves provenance.
     2. Two-block cache-stable SessionStart injection: Block 1 = consolidated observations (🔴+plain only, 🟡/🟢 stripped as Mastra does for the actor); Block 2 = recent undistilled tail. Publish `.claude/rules/claude_memory.observations.md`.
-    3. Free Reflector pass in Sweep (dedupe / drop stale 🟢 / merge by entity-time window — pure Ruby) + threshold nudge near ~40k observation tokens.
-    4. `/reflect` skill (Layer-3 analog) for deep semantic consolidation + observation→fact promotion bridge.
+    3. **Automatic Reflector (free):** deterministic GC (dedupe / drop stale 🟢 / merge by entity-time window — pure Ruby) run shell-side inside the `PreCompact` and `SessionEnd` hooks. `PreCompact` is the trigger because it fires on context pressure — the analog of Mastra's ~40k-token threshold.
+    4. **Automatic semantic reflection:** `PreCompact` injects an `additionalContext` consolidation instruction (Claude-as-reflector inline, next turn) + observation→fact promotion bridge. Retain a manual `/reflect` skill for on-demand deep passes.
   - Effort: Large, phased. Phase 1 ~2-3 days; full arc ~2 weeks. Reuses distill/resolve/sweep/publish/context-hook machinery and `context_tokens` telemetry.
-  - Trade-off: Observer/Reflector must be Claude-as-distiller (context hooks) + free Sweep + manual `/reflect` — NOT Mastra's two paid background agents (would violate the no-extra-API-cost convention). Augments dynamic recall, does not replace it.
+  - Trade-off: reflection is automatic on *lifecycle events* (compaction/session boundaries), not a wall clock — Claude Code has no timer/cron hook, and Routines/subagents incur separate token budgets (rejected). Observer/Reflector reuse the existing session (no extra API cost). **Augments dynamic recall, does not replace it (user-confirmed 2026-06-16).** See claude-code-guide consultation in the influence doc.
 
 ### Medium Priority
 
@@ -439,7 +439,8 @@ Source: `docs/influence/mastra-observational-memory.md` — architecture study o
 
 ### Features to Avoid (from this study)
 
-- **Two always-on background LLM agents** — violates the no-separate-API-call convention. Observer = context-hook injection; Reflector = free Sweep + manual `/reflect`.
+- **Two always-on background LLM agents** — violates the no-separate-API-call convention. Observer = context-hook injection; Reflector = deterministic shell-side GC + `PreCompact`-injected semantic consolidation (rides the existing session).
+- **Claude Code Routines / subagents for recurring reflection** — Routines run as a separate scheduled cloud session; subagents run in their own context (~7× tokens). Both incur extra spend; reserve only for an explicitly opted-in one-off backfill.
 - **Lossy drop on reflection** ("never forgives") — we tombstone via `consolidated_into` and retain raw `content_items`; provenance is non-negotiable.
 - **Replacing dynamic recall with a wholesale-loaded log** — augment, don't replace; keep `memory.recall` for targeted lookups.
 
