@@ -27,3 +27,10 @@ mise.toml
 
 # Runtime locks (e.g. /loop / scheduled-task harness state)
 .claude/scheduled_tasks.lock
+
+# AutoMemoryMirror md5-diff state — per-machine runtime state
+.claude/auto_memory_mirror.json
+
+# Personal session-resume helpers (claude --resume <id>)
+.last-session
+.dashboard-demo-session
