@@ -1,6 +1,6 @@
 # Improvements to Consider
 
-*Updated: 2026-05-23 - Added AI Memory Systems Landscape Analysis (Nakajima/Opus 4.6 Research article, 2026-03-26) — meta-study of 7 benchmarks + ~12 systems. Four High Priority items: graph traversal as third RRF source (#64), temporal-aware retrieval (#65), bi-temporal schema cleanup (#66), LongMemEval integration (#67). One promotion: improvement #57 (provenance-strength ranking) Medium → High, validated as the "soft epistemic separation" pattern. See `docs/influence/ai-memory-systems-2026.md`. Previously: 2026-05-01 - Added Strands Agent SOPs study (article, not repo) — one M-priority item (parameter blocks in skill frontmatter); rest already implemented or deferred. See `docs/influence/strands-agent-sops.md`. Previously: 2026-04-28 (post-0.10.0) - Restructured 1.0 punchlist around milestone versions. **0.11.0 "Trust & Cost"** ships #47 (token budget), #48 (hallucination rate), #51 (claude-memory show), #53 (first-week ROI nudge — moved up from post-1.0), and a 3-scenario prototype of #49 (harm benchmark). **0.12.0 "Release Discipline"** ships #49 full corpus, #50 (CLAUDE.md baseline), #52 (benchmark scoreboard). **1.0.0** lands soak-validated #54/#55/#56 if time + new #59 API stability audit. See `docs/1_0_punchlist.md` for the full plan with calendar targets. Also added 2026-04-28: two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28) — provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 updates: opened the 1.0 punchlist track + added cq study. Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
+*Updated: 2026-06-16 - Added Mastra Observational Memory study — one High Priority item (#68, episodic observation layer: Observer + Reflector + observation→fact promotion bridge) and one Medium item (compression/cache telemetry + LongMemEval episodic suite). Key insight: ClaudeMemory has no episodic layer; observations ("what happened") complement facts ("what is true"). See `docs/influence/mastra-observational-memory.md`. Previously: 2026-05-23 - Added AI Memory Systems Landscape Analysis (Nakajima/Opus 4.6 Research article, 2026-03-26) — meta-study of 7 benchmarks + ~12 systems. Four High Priority items: graph traversal as third RRF source (#64), temporal-aware retrieval (#65), bi-temporal schema cleanup (#66), LongMemEval integration (#67). One promotion: improvement #57 (provenance-strength ranking) Medium → High, validated as the "soft epistemic separation" pattern. See `docs/influence/ai-memory-systems-2026.md`. Previously: 2026-05-01 - Added Strands Agent SOPs study (article, not repo) — one M-priority item (parameter blocks in skill frontmatter); rest already implemented or deferred. See `docs/influence/strands-agent-sops.md`. Previously: 2026-04-28 (post-0.10.0) - Restructured 1.0 punchlist around milestone versions. **0.11.0 "Trust & Cost"** ships #47 (token budget), #48 (hallucination rate), #51 (claude-memory show), #53 (first-week ROI nudge — moved up from post-1.0), and a 3-scenario prototype of #49 (harm benchmark). **0.12.0 "Release Discipline"** ships #49 full corpus, #50 (CLAUDE.md baseline), #52 (benchmark scoreboard). **1.0.0** lands soak-validated #54/#55/#56 if time + new #59 API stability audit. See `docs/1_0_punchlist.md` for the full plan with calendar targets. Also added 2026-04-28: two ranking-signal gaps surfaced by the Mercury / "Why Karpathy's Second Brain Breaks" article (Zaid, 2026-04-28) — provenance-strength-aware ranking (#57) and reinforcement/decay scoring (#58). Earlier 2026-04-28 updates: opened the 1.0 punchlist track + added cq study. Previously: 2026-03-30 - Re-studied all 7 influencer repos. New recommendations: CLAUDE_CONFIG_DIR support (#26, from episodic-memory), Usage Stats / ROI Tracking (#27, from grepai v0.35.0). New Features to Avoid: AST-Aware Code Chunking (QMD), Custom Instructions via Env Var (lossless-claw v0.5.2), OpenClaw Context Injection (claude-mem v10.6.0). Repos with no changes: kbs (v0.2.1), claude-supermemory (v2.0.1), episodic-memory (v1.0.15). Previously: 14 features implemented through 2026-03-24.*
 *Sources:*
 - *[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem) - Memory compression system (v10.6.3, re-studied 2026-03-30)*
 - *[obra/episodic-memory](https://github.com/obra/episodic-memory) - Semantic conversation search (v1.0.15, re-studied 2026-03-30 — no changes)*
@@ -9,6 +9,7 @@
 - *[tobi/qmd](https://github.com/tobi/qmd) - On-device hybrid search engine (v2.0.1+unreleased, re-studied 2026-03-30)*
 - *[MadBomber/kbs](https://github.com/MadBomber/kbs) - Knowledge-Based System with RETE inference (v0.2.1, studied 2026-03-30 — no changes)*
 - *[martian-engineering/lossless-claw](https://github.com/martian-engineering/lossless-claw) - DAG-based lossless context management (v0.5.2, re-studied 2026-03-30)*
+- *[Mastra Observational Memory](https://mastra.ai/blog/observational-memory) - Text-based dual-agent episodic memory (studied 2026-06-16)*
 
 This document contains only unimplemented improvements. Completed items are removed.
 
@@ -408,6 +409,39 @@ Source: `docs/influence/ai-memory-systems-2026.md` — meta-study of the Nakajim
 - **Cognee-style RDF/OWL ontology validation** — Our `entity_aliases` + `PredicatePolicy::SYNONYMS` are the right-sized version for a single-developer tool.
 - **Letta-style filesystem-only memory as primary mode** — Consumes user-visible tokens on every interaction; our hook-based passive ingestion is cheaper per session.
 - **Sleep-time compute as a separate background service** — We can achieve the same effect on the next SessionStart via Layer 2 distillation, for free. No separate process needed.
+
+---
+
+## Mastra Observational Memory Study (2026-06-16)
+
+Source: `docs/influence/mastra-observational-memory.md` — architecture study of Mastra's Observational Memory (OM), a text-based dual-agent (Observer + Reflector) episodic memory that compresses raw messages into an append-only, dated observation log living in the context window. SOTA on LongMemEval (84–95%) at 3–6× compression, cache-stable by design.
+
+**Headline finding.** In OM's taxonomy ClaudeMemory is the thing it positions against: a structured *semantic* store injected *dynamically per query*. The gap OM exposes is not retrieval quality — it's that **ClaudeMemory has no episodic layer at all.** Facts answer "what is true"; observations answer "what happened." OM is purely episodic, we are purely semantic. The two are complementary, and we already own analogues of OM's Observer (distillation pipeline) and Reflector (Resolve + Sweep) — they just emit facts, not a narrative log.
+
+### High Priority Recommendations
+
+- [ ] **68. Episodic Observation Layer (Observer + Reflector + promotion bridge)** ⭐
+  - Value: Adds the missing episodic half of memory (narrative "what happened" log) and a cache-stable injection mode, on top of the existing semantic fact store. The promotion bridge (observation→fact on corroboration) doubles as an anti-hallucination gate for the documented reject-churn problem (distiller commits `uses_database`/`uses_framework` facts from one-off doc example text).
+  - Evidence: `docs/influence/mastra-observational-memory.md`. Our distill pipeline (`lib/claude_memory/distill/`) is already an Observer that emits facts; `resolve/` + `sweep/` is already a Reflector over facts. No episodic store exists.
+  - Implementation (phased):
+    1. Schema v18 `observations` table (`body`, `kind`, `priority` 🔴/🟡/🟢, `scope`, `source_content_item_id`, `consolidated_into` lineage, `token_count`); NullDistiller emits observation rows; `memory.observations` read tool. **Append-only with tombstoning, not lossy drop** — preserves provenance.
+    2. Two-block cache-stable SessionStart injection: Block 1 = consolidated observations (🔴+plain only, 🟡/🟢 stripped as Mastra does for the actor); Block 2 = recent undistilled tail. Publish `.claude/rules/claude_memory.observations.md`.
+    3. Free Reflector pass in Sweep (dedupe / drop stale 🟢 / merge by entity-time window — pure Ruby) + threshold nudge near ~40k observation tokens.
+    4. `/reflect` skill (Layer-3 analog) for deep semantic consolidation + observation→fact promotion bridge.
+  - Effort: Large, phased. Phase 1 ~2-3 days; full arc ~2 weeks. Reuses distill/resolve/sweep/publish/context-hook machinery and `context_tokens` telemetry.
+  - Trade-off: Observer/Reflector must be Claude-as-distiller (context hooks) + free Sweep + manual `/reflect` — NOT Mastra's two paid background agents (would violate the no-extra-API-cost convention). Augments dynamic recall, does not replace it.
+
+### Medium Priority
+
+- [ ] **Compression / cache telemetry + LongMemEval episodic suite** (see influence doc rec E)
+  - Value: Report compression ratio and token reduction on Trust/Health panels using existing `context_tokens` events (0.11.0). Add a LongMemEval-style long-session suite to DevMemBench to score the episodic layer. Overlaps with existing item #67 (LongMemEval integration) — coordinate.
+  - Effort: Medium. Depends on #68 phase 1-2.
+
+### Features to Avoid (from this study)
+
+- **Two always-on background LLM agents** — violates the no-separate-API-call convention. Observer = context-hook injection; Reflector = free Sweep + manual `/reflect`.
+- **Lossy drop on reflection** ("never forgives") — we tombstone via `consolidated_into` and retain raw `content_items`; provenance is non-negotiable.
+- **Replacing dynamic recall with a wholesale-loaded log** — augment, don't replace; keep `memory.recall` for targeted lookups.
 
 ---
 
