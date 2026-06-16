@@ -9,6 +9,7 @@ module ClaudeMemory
       MAX_DECISIONS = 5
       MAX_CONVENTIONS = 5
       MAX_ARCHITECTURE = 5
+      MAX_OBSERVATIONS = 10
       MAX_UNDISTILLED = 3
       MAX_TEXT_PER_ITEM = 1500
       MAX_MIRROR_CANDIDATES = 5
@@ -30,7 +31,8 @@ module ClaudeMemory
       # ({"project" => [...], "global" => [...]}) so telemetry can resolve
       # each fact from the correct store. Fact IDs autoincrement per-DB,
       # so a bare ID without scope is ambiguous.
-      attr_reader :emitted_fact_ids, :emitted_subjects, :emitted_facts_by_scope
+      attr_reader :emitted_fact_ids, :emitted_subjects, :emitted_facts_by_scope,
+        :emitted_observation_count
 
       def initialize(manager, source: nil, auto_memory_mirror: nil, stale_threshold_days: nil)
         @manager = manager
@@ -41,12 +43,14 @@ module ClaudeMemory
         @emitted_fact_ids = []
         @emitted_subjects = []
         @emitted_facts_by_scope = Hash.new { |h, k| h[k] = [] }
+        @emitted_observation_count = 0
       end
 
       def generate_context
         @emitted_fact_ids = []
         @emitted_subjects = []
         @emitted_facts_by_scope = Hash.new { |h, k| h[k] = [] }
+        @emitted_observation_count = 0
         sections = []
 
         decisions = fetch(:decisions, MAX_DECISIONS)
@@ -57,6 +61,14 @@ module ClaudeMemory
 
         architecture = fetch(:architecture, MAX_ARCHITECTURE)
         sections << format_section("Architecture", architecture) if architecture.any?
+
+        # Block 1 of the two-block context: the episodic observation log. Sits
+        # ahead of the (fresh-session) undistilled "Pending Knowledge Extraction"
+        # tail (Block 2). Newest-first; only 🔴 carries a marker for the actor.
+        observations = fetch_observations(MAX_OBSERVATIONS)
+        @emitted_observation_count = observations.size
+        obs_section = Observe::ObservationsRenderer.render(observations)
+        sections << obs_section if obs_section
 
         if fresh_session?
           undistilled = fetch_undistilled(MAX_UNDISTILLED)
@@ -122,6 +134,21 @@ module ClaudeMemory
 
       def stale_threshold_days
         @stale_threshold_days ||= Configuration.new.injection_stale_days
+      end
+
+      def fetch_observations(limit)
+        stores = []
+        stores << @manager.project_store if @manager.project_store
+        stores << @manager.global_store if @manager.global_store
+
+        stores
+          .flat_map { |s| s.recent_observations(limit: limit) }
+          .sort_by { |o| o[:observed_at] || "" }
+          .reverse
+          .first(limit)
+      rescue => e
+        ClaudeMemory.logger.warn("ContextInjector#fetch_observations failed: #{e.message}")
+        []
       end
 
       def fetch_undistilled(limit)

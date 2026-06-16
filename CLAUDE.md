@@ -378,6 +378,7 @@ ClaudeMemory integrates with Claude Code via hooks in `.claude/settings.json`:
 - **Context hook**: Triggers on SessionStart
   - Calls `claude-memory hook context`
   - Injects recent facts via `hookSpecificOutput.additionalContext`
+  - Two-block layout (observational layer): Block 1 = the episodic observation log (`Observe::ObservationsRenderer`, 🔴-marked), Block 2 = the undistilled "Pending Knowledge Extraction" tail. `ContextInjector#emitted_observation_count` feeds the `hook_context` telemetry.
 
 - **Sweep hook**: Triggers on PreCompact/SessionEnd events
   - Runs time-bounded maintenance on both databases

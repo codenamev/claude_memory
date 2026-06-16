@@ -243,7 +243,8 @@ module ClaudeMemory
           top_fact_ids: injector.emitted_fact_ids.first(10),
           top_facts_by_scope: (by_scope if by_scope.any?),
           top_subjects: injector.emitted_subjects.uniq.first(10),
-          fact_count: injector.emitted_fact_ids.size
+          fact_count: injector.emitted_fact_ids.size,
+          observation_count: injector.emitted_observation_count
         }.compact
 
         ClaudeMemory::ActivityLog.record(store,
