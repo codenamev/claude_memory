@@ -120,6 +120,9 @@ module ClaudeMemory
       # @return [Sequel::Dataset]
       def otel_traces = @db[:otel_traces]
 
+      # @return [Sequel::Dataset]
+      def observations = @db[:observations]
+
       # Upsert a thumbs-up/down verdict for a moment. One row per event_id
       # (unique constraint on the column) — repeat clicks overwrite. Returns
       # the persisted row.
@@ -678,6 +681,73 @@ module ClaudeMemory
           .limit(limit)
           .select_all(:content_items)
           .all
+      end
+
+      # --- Observations (episodic layer) ---
+
+      # Insert an episodic observation. token_count is estimated from the body
+      # when not supplied (rough ~4 chars/token) so Phase 2 budget math has a
+      # value to work with.
+      #
+      # @param body [String] dense narrative text (required)
+      # @param kind [String] one of Domain::Observation::KINDS
+      # @param priority [Integer] 1=important, 2=maybe, 3=info
+      # @param scope [String] "project" or "global"
+      # @param project_path [String, nil] project directory for project-scoped rows
+      # @param source_content_item_id [Integer, nil] provenance link to the raw chunk
+      # @param session_id [String, nil] session that produced the observation
+      # @param observed_at [String, nil] ISO 8601 event time (defaults to now UTC)
+      # @param token_count [Integer, nil] precomputed token estimate
+      # @return [Integer] inserted observation row id
+      def insert_observation(body:, kind: "event", priority: 3, scope: "project",
+        project_path: nil, source_content_item_id: nil, session_id: nil,
+        observed_at: nil, token_count: nil)
+        now = Time.now.utc.iso8601
+        with_retry("insert_observation") do
+          observations.insert(
+            body: body,
+            kind: kind,
+            priority: priority,
+            scope: scope,
+            project_path: project_path,
+            source_content_item_id: source_content_item_id,
+            token_count: token_count || (body.length / 4.0).ceil,
+            status: "active",
+            session_id: session_id,
+            observed_at: observed_at || now,
+            created_at: now
+          )
+        end
+      end
+
+      # Fetch active observations, newest first. Used by the memory.observations
+      # MCP tool and (later) the stable-prefix injection.
+      #
+      # @param scope [String, nil] filter by "project"/"global"; nil for any
+      # @param limit [Integer] maximum rows to return
+      # @param min_priority [Integer, nil] only rows with priority <= this
+      #   (1 returns only 🔴; nil returns all)
+      # @return [Array<Hash>]
+      def recent_observations(scope: nil, limit: 20, min_priority: nil)
+        ds = observations.where(status: "active")
+        ds = ds.where(scope: scope) if scope
+        ds = ds.where { priority <= min_priority } if min_priority
+        ds.order(Sequel.desc(:observed_at), Sequel.desc(:id)).limit(limit).all
+      end
+
+      # Tombstone an observation by pointing it at the consolidated row that
+      # replaced it (append-only supersession — the row is preserved, not
+      # deleted, mirroring fact_links). Used by the Reflector.
+      #
+      # @param observation_id [Integer] the superseded observation
+      # @param into_id [Integer] the consolidated observation it was merged into
+      # @return [Boolean] true if a row was updated
+      def tombstone_observation(observation_id, into_id:)
+        now = Time.now.utc.iso8601
+        updated = observations.where(id: observation_id).update(
+          status: "consolidated", consolidated_into: into_id, reflected_at: now
+        )
+        updated > 0
       end
 
       # --- Meta ---

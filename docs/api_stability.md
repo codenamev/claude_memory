@@ -146,6 +146,14 @@ All 23 tools registered via `MCP::ToolDefinitions.all`. Argument schemas, return
 | `memory.check_setup` | Discovery | Stable. |
 | `memory.list_projects` | Discovery | Stable since 0.10.0. |
 
+### Experimental MCP tools
+
+These are registered in `MCP::ToolDefinitions.all` but **not yet covered by the stability guarantees above** — argument schema and return shape may change while the feature is built out.
+
+| Tool | Group | Status |
+|---|---|---|
+| `memory.observations` | Observational layer | Experimental (Phase 1, unreleased). Read-only listing of episodic observations. Shape may change as the observation→fact promotion and stable-prefix injection phases land. |
+
 ### Stability of tool responses
 
 Both response shapes are stable:
@@ -255,7 +263,7 @@ If you need a feature from one of the internal classes, **open an issue** so we 
 
 ### Schema migrations
 
-Schema is at v18 as of 0.12.0 with 18 migrations under `db/migrations/`. Migrations remain forward-compatible per the round-trip-spec convention (`feedback_round_trip_migration_specs.md`): each release's specs verify that DBs from the prior 3 schema boundaries can be migrated into the current schema without data loss.
+Schema is at v19 (unreleased; v18 shipped in 0.12.0) with 19 migrations under `db/migrations/`. Migrations remain forward-compatible per the round-trip-spec convention (`feedback_round_trip_migration_specs.md`): each release's specs verify that DBs from the prior 3 schema boundaries can be migrated into the current schema without data loss.
 
 **What's stable:**
 
@@ -268,6 +276,7 @@ Schema is at v18 as of 0.12.0 with 18 migrations under `db/migrations/`. Migrati
 
 - The `vec0` virtual-table internals — sqlite-vec evolution may shift representation.
 - `mcp_tool_calls` retention behavior (currently 90 days, configurable); the column set is stable, the retention default is not.
+- The `observations` table (v19) — episodic layer, Phase 1. Column set may change as the observation→fact promotion and reflection phases land.
 
 **What's internal:**
 

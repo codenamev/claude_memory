@@ -256,6 +256,7 @@ Key tables (defined in `sqlite_store.rb`):
 - `mcp_tool_calls`: MCP server tool invocation telemetry (schema v13)
 - `activity_events`: Hook/recall/context/sweep/nudge telemetry (schema v15) — powers the dashboard timeline, moments feed, efficacy reports. Event types: `hook_ingest`, `hook_context` (carries `context_tokens` since 0.11.0), `hook_sweep`, `hook_publish`, `recall`, `store_extraction`, `roi_nudge` (since 0.11.0).
 - `moment_feedback`: Per-moment 👍/👎 verdicts with optional notes (schema v16) — unique on event_id, repeat clicks upsert
+- `observations`: Episodic "what happened" layer (schema v19) — append-only narrative rows complementing facts ("what is true"). Columns: `body`, `kind` (decision/preference/event/…), `priority` (1=🔴/2=🟡/3=info), `scope`, `source_content_item_id` (provenance), `consolidated_into` (Reflector tombstone lineage — never hard-deleted), `token_count`, `status`. Written by the Resolver from `Extraction#observations` (NullDistiller is the Layer-1 Observer). Phase 1 of the observational layer; see [docs/influence/mastra-observational-memory.md](docs/influence/mastra-observational-memory.md).
 
 Facts include:
 - `scope`: "global" or "project" (determines applicability)
@@ -362,6 +363,7 @@ Available MCP tools (23 total):
 - **Management**: `memory.promote`, `memory.reject_fact`, `memory.store_extraction`
 - **Distillation**: `memory.undistilled`, `memory.mark_distilled`
 - **Monitoring**: `memory.status`, `memory.stats`, `memory.changes`, `memory.conflicts`, `memory.activity`
+- **Observational layer** (experimental): `memory.observations` (read-only episodic log)
 - **Maintenance**: `memory.sweep_now`
 - **Discovery**: `memory.check_setup`, `memory.list_projects`
 
