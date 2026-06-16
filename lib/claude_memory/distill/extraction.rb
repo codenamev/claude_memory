@@ -3,17 +3,18 @@
 module ClaudeMemory
   module Distill
     class Extraction
-      attr_reader :entities, :facts, :decisions, :signals
+      attr_reader :entities, :facts, :decisions, :signals, :observations
 
-      def initialize(entities: [], facts: [], decisions: [], signals: [])
+      def initialize(entities: [], facts: [], decisions: [], signals: [], observations: [])
         @entities = entities
         @facts = facts
         @decisions = decisions
         @signals = signals
+        @observations = observations
       end
 
       def empty?
-        entities.empty? && facts.empty? && decisions.empty? && signals.empty?
+        entities.empty? && facts.empty? && decisions.empty? && signals.empty? && observations.empty?
       end
 
       def to_h
@@ -21,7 +22,8 @@ module ClaudeMemory
           entities: entities,
           facts: facts,
           decisions: decisions,
-          signals: signals
+          signals: signals,
+          observations: observations
         }
       end
     end

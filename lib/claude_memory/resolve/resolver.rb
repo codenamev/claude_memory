@@ -36,7 +36,8 @@ module ClaudeMemory
           facts_created: 0,
           facts_superseded: 0,
           conflicts_created: 0,
-          provenance_created: 0
+          provenance_created: 0,
+          observations_created: 0
         }
 
         # Wrap entire extraction in a single transaction for better concurrency
@@ -53,12 +54,39 @@ module ClaudeMemory
             result[:conflicts_created] += outcome[:conflicts]
             result[:provenance_created] += outcome[:provenance]
           end
+
+          # Episodic layer: persist observations alongside facts. Append-only,
+          # no truth maintenance — observations accumulate; the Reflector
+          # consolidates them later. Older extractions (and the empty default)
+          # carry no observations, so fact behavior is unchanged.
+          result[:observations_created] = persist_observations(
+            extraction, content_item_id, occurred_at, project_path: project_path, scope: scope
+          )
         end
 
         result
       end
 
       private
+
+      # Write each observation candidate from the extraction as an episodic
+      # row. scope_hint is advisory and never overrides the resolver-determined
+      # scope (the same discipline facts follow).
+      def persist_observations(extraction, content_item_id, occurred_at, project_path:, scope:)
+        candidates = extraction.respond_to?(:observations) ? extraction.observations : []
+        candidates.each do |obs|
+          @store.insert_observation(
+            body: obs[:body],
+            kind: obs[:kind] || "event",
+            priority: obs[:priority] || Domain::Observation::INFO,
+            scope: scope,
+            project_path: (scope == "global") ? nil : project_path,
+            source_content_item_id: content_item_id,
+            observed_at: occurred_at
+          )
+        end
+        candidates.size
+      end
 
       def resolve_entities(entities)
         entity_ids = {}

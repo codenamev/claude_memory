@@ -84,7 +84,7 @@ Plain text in a standard backend (Postgres / LibSQL / MongoDB), loaded directly 
 
 ### High Priority
 
-**A. Episodic observation store + Layer-1 Observer.** New `observations` table (schema v18); NullDistiller emits observation rows alongside facts; `memory.observations` read tool. Append-only with `consolidated_into` lineage (mirrors `fact_links`) rather than Mastra's lossy drop — preserves our provenance guarantee. Zero behavior change to facts.
+**A. Episodic observation store + Layer-1 Observer.** New `observations` table (schema v19 — v18 was taken by OTel telemetry); NullDistiller emits observation rows alongside facts; `memory.observations` read tool. Append-only with `consolidated_into` lineage (mirrors `fact_links`) rather than Mastra's lossy drop — preserves our provenance guarantee. Zero behavior change to facts.
 
 **B. Cache-stable injection.** Publish `.claude/rules/claude_memory.observations.md` (append-only, dated, 🔴+plain only — 🟡/🟢 stripped as Mastra does for the actor). SessionStart injects a two-block context: Block 1 = consolidated observations (stable, cache-friendly), Block 2 = recent undistilled tail. Front-loading a stable block reduces the per-turn `memory.recall` churn that busts caching. *Honest limit:* we influence Claude Code's cache via a stable `additionalContext` prefix within a session; we don't control it. Cross-session caching remains Claude Code's domain.
 
@@ -112,7 +112,7 @@ See the dedicated section below for why `PreCompact` is the right trigger and wh
 ## Proposed Data Model (sketch)
 
 ```
-observations  (schema v18)
+observations  (schema v19)
   id, ts (event time), session_id
   body            -- dense narrative text, the observation itself
   kind            -- user_statement | agent_action | tool_result | preference | decision | event

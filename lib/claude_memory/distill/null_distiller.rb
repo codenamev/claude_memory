@@ -40,12 +40,14 @@ module ClaudeMemory
         facts = extract_facts(text, entities)
         decisions = extract_decisions(text)
         signals = extract_signals(text)
+        observations = extract_observations(text)
 
         Extraction.new(
           entities: entities,
           facts: facts,
           decisions: decisions,
-          signals: signals
+          signals: signals,
+          observations: observations
         )
       end
 
@@ -101,6 +103,40 @@ module ClaudeMemory
         signals << {kind: "conflict", value: true} if text.match?(/\b(disagree|conflict|contradiction|but.*said|however.*different)\b/i)
         signals << {kind: "global_scope", value: true} if global_scope_signal?(text)
         signals
+      end
+
+      # Layer-1 Observer: emit episodic observations for the same signals the
+      # distiller can detect by regex. A decision being made and a convention
+      # being stated are both "things that happened" worth logging in the
+      # episodic layer, independent of the semantic facts they also produce.
+      # Decisions are 🔴 (important), conventions 🟡 (maybe) — the priority is
+      # an internal Observer/Reflector signal. Richer observations come from
+      # the Layer-2 Claude-as-observer pass (a later phase).
+      def extract_observations(text)
+        observations = []
+
+        DECISION_PATTERNS.each do |pattern|
+          text.scan(pattern).flatten.each do |match|
+            observations << build_observation("decision", Domain::Observation::IMPORTANT, "decided to #{match.strip}", text)
+          end
+        end
+
+        CONVENTION_PATTERNS.each do |pattern|
+          text.scan(pattern).flatten.each do |match|
+            observations << build_observation("preference", Domain::Observation::MAYBE, match.strip, text)
+          end
+        end
+
+        observations.uniq { |o| [o[:kind], o[:body]] }.first(10)
+      end
+
+      def build_observation(kind, priority, body, text)
+        {
+          kind: kind,
+          priority: priority,
+          body: body.slice(0, 500),
+          scope_hint: global_scope_signal?(text) ? "global" : "project"
+        }
       end
 
       def global_scope_signal?(text)

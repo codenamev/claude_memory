@@ -109,6 +109,41 @@ module ClaudeMemory
             }
           }
         end
+
+        # List recent episodic observations (the "what happened" log). Read-only.
+        # Phase 1 queries one scope's store (default project); cross-scope merge
+        # comes with the stable-prefix injection phase.
+        def observations(args)
+          return database_not_found_error unless databases_exist?
+
+          scope = args["scope"] || "project"
+          limit = extract_limit(args, default: 20)
+          min_priority = (args["important_only"] == true) ? Domain::Observation::IMPORTANT : nil
+
+          store = get_store_for_scope(scope)
+          return {error: "Database not available"} unless store
+
+          rows = store.recent_observations(scope: scope, limit: limit, min_priority: min_priority)
+
+          {
+            observation_count: rows.size,
+            observations: rows.map { |row|
+              obs = Domain::Observation.new(row)
+              {
+                id: obs.id,
+                kind: obs.kind,
+                priority: obs.priority,
+                body: obs.body,
+                scope: obs.scope,
+                source_content_item_id: obs.source_content_item_id,
+                observed_at: obs.observed_at,
+                observed_ago: Core::RelativeTime.format(obs.observed_at)
+              }
+            }
+          }
+        rescue Sequel::DatabaseError, Sequel::DatabaseConnectionError, Errno::ENOENT => e
+          classified_error(e, tool_name: "memory.observations")
+        end
       end
     end
   end

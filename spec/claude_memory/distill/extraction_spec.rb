@@ -29,7 +29,8 @@ RSpec.describe ClaudeMemory::Distill::Extraction do
         entities: [{type: "db"}],
         facts: [{predicate: "uses"}],
         decisions: [],
-        signals: []
+        signals: [],
+        observations: []
       })
     end
   end

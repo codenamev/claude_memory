@@ -98,6 +98,7 @@ module ClaudeMemory
         when "memory.check_setup" then check_setup
         when "memory.list_projects" then list_projects
         when "memory.activity" then activity(arguments)
+        when "memory.observations" then observations(arguments)
         else {error: "Unknown tool: #{name}"}
         end
       end

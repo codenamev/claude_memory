@@ -451,6 +451,19 @@ module ClaudeMemory
               }
             },
             annotations: READ_ONLY
+          },
+          {
+            name: "memory.observations",
+            description: "List recent episodic observations — the 'what happened' log that complements facts ('what is true'). Append-only, newest first. Priority is an internal signal (1=important, 2=maybe, 3=info).",
+            inputSchema: {
+              type: "object",
+              properties: {
+                scope: {type: "string", enum: %w[project global], description: "Filter by scope; omit for any"},
+                limit: {type: "integer", default: 20, description: "Maximum observations to return"},
+                important_only: {type: "boolean", default: false, description: "Return only priority-1 (🔴) observations"}
+              }
+            },
+            annotations: READ_ONLY
           }
         ]
       end
