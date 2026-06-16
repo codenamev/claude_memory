@@ -209,7 +209,7 @@ Adding a new field to `detail_json` is a stable-surface addition (non-breaking).
 
 Current covered events (0.11.0):
 
-- `hook_context`: `context_length`, `context_tokens` (since 0.11.0), `top_fact_ids`, `fact_count`.
+- `hook_context`: `context_length`, `context_tokens` (since 0.11.0), `top_fact_ids`, `fact_count`. (`observation_count`, added with the observational layer, is additive and **experimental** — not yet on the smoke-gate manifest.)
 - `roi_nudge`: `n`, `used`, `pct`, `prior_count` (all since 0.11.0).
 
 `hook_ingest`, `hook_sweep`, `hook_publish` event detail fields are currently **internal** (not on the smoke-gate manifest). Promoting them to stable is a 0.12.x or later task.
@@ -333,7 +333,7 @@ Listed here for honesty — these surfaces look public but are not.
 
 - **Dashboard JSON HTTP API.** The `claude-memory dashboard` server's endpoints are an internal interface for the bundled UI. Don't build scripts against `GET /api/trust` etc. — endpoints, response shapes, and even URL paths may change without notice.
 - **`activity_events.detail_json` fields not in `spec/smoke/expected_fields.yml`.** Inspecting a missing field during debugging is fine; relying on it in scripts is not.
-- **The exact text of `additionalContext`.** The Markdown sections (`## Decisions`, `## Conventions`, `## Architecture`, `## Pending Knowledge Extraction`, `## Auto-Memory Mirror`) and their order are stable; the per-fact rendering format inside each section is tuned for prompt quality and may change.
+- **The exact text of `additionalContext`.** The Markdown sections (`## Decisions`, `## Conventions`, `## Architecture`, `## Pending Knowledge Extraction`, `## Auto-Memory Mirror`) and their order are stable; the per-fact rendering format inside each section is tuned for prompt quality and may change. The `## Observations` section (observational layer) and the published `.claude/rules/claude_memory.observations.md` snapshot are **experimental** while the layer is built out.
 - **Internal env vars** (anything not listed in `Configuration` instance methods or in this doc). Examples that exist but are internal: `CLAUDE_MEMORY_LOG_LEVEL`, debug flags surfaced during development.
 - **Test/spec/fixture infrastructure.** `spec/benchmarks/`, `spec/evals/`, `spec/support/` are not public APIs.
 - **Plugin-format paths.** `.claude-plugin/`, `scripts/serve-mcp.sh`, etc. are part of the Claude Code plugin format integration; treat them as opaque.
