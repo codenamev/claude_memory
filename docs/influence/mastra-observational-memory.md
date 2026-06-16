@@ -177,6 +177,21 @@ Per the `/study-repo` memory discipline, the following are decisions about **cla
 - **Decision:** reflection will tombstone superseded observations via a `consolidated_into` link rather than hard-deleting them (unlike Mastra's lossy drop) — to preserve claude_memory's provenance guarantee while still bounding context size.
 - **Decision:** an observation is promoted to a structured fact only after corroboration across multiple observations — because requiring repeated sightings before commitment doubles as an anti-hallucination gate against the documented reject-churn from one-off doc/example text.
 
+> **Pending memory ingestion (deferred 2026-06-16).** These were NOT written to the project DB in the remote design session: `.claude/memory.sqlite3` is git-LFS-backed and the container had only the pointer (no `git-lfs`, real DB not materialized), so writing would have clobbered it. Store them in a local session via `memory.store_extraction` with this payload:
+>
+> ```json
+> {
+>   "scope": "project",
+>   "facts": [
+>     {"subject": "claude_memory", "predicate": "decision", "object": "Add an episodic observation layer that augments (does not replace) the dynamic-recall semantic fact store, because facts answer 'what is true' and observations answer 'what happened' and we currently lack the episodic half; recall stays for targeted lookups."},
+>     {"subject": "claude_memory", "predicate": "decision", "object": "Make observation reflection automatic via the PreCompact and SessionEnd hooks rather than a manual-only skill, because Claude Code exposes no timer/cron hook but PreCompact fires on context pressure (the analog of Mastra's token threshold) and rides the existing session at no extra API cost."},
+>     {"subject": "claude_memory", "predicate": "decision", "object": "Run the Reflector's deterministic GC shell-side in Ruby and its semantic consolidation via PreCompact additionalContext (Claude-as-reflector inline), to keep automatic reflection within the no-extra-API-cost convention, explicitly rejecting Claude Code Routines and subagents because each incurs a separate token budget."},
+>     {"subject": "claude_memory", "predicate": "decision", "object": "Tombstone superseded observations via a consolidated_into link rather than hard-deleting them (unlike Mastra's lossy drop), to preserve claude_memory's provenance guarantee while still bounding context size."},
+>     {"subject": "claude_memory", "predicate": "decision", "object": "Promote an observation to a structured fact only after corroboration across multiple observations, because requiring repeated sightings before commitment doubles as an anti-hallucination gate against reject-churn from one-off doc/example text."}
+>   ]
+> }
+> ```
+
 ## Open Questions
 
 - **Augment vs replace recall?** Resolved: **augment** (user-confirmed 2026-06-16). Observations become a front-loaded episodic block; `memory.recall` stays for targeted lookups.
