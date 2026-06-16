@@ -92,13 +92,18 @@ Plain text in a standard backend (Postgres / LibSQL / MongoDB), loaded directly 
 
 ### Medium Priority
 
-**D. Free + manual Reflector.** Free heuristic pass in Sweep (dedupe near-identical observations, drop stale 🟢 past a TTL, merge by entity/time window — pure Ruby, no LLM). Plus a `/reflect` skill (Layer-3 analog) for deep semantic consolidation and pattern-finding on demand, leveraging the live Claude Code session. Threshold nudge (`roi_nudge`-style) when a scope's observation budget crosses ~40k — *not* a paid background agent.
+**D. Automatic Reflector (free) — confirmed feasible.** A consultation with the claude-code-guide agent (2026-06-16) confirms automatic reflection is achievable with zero extra API cost, in two tiers:
+- **Deterministic tier (fully autonomous, no model):** dedupe near-identical observations, drop stale 🟢 past a TTL, merge by entity/time window — pure Ruby, run shell-side inside the `PreCompact` and `SessionEnd` hooks (and the existing Sweep). This needs no model and fires automatically.
+- **Semantic tier (autonomous-on-next-turn, rides the session):** at `PreCompact`, the hook injects a reflection instruction via `additionalContext` ("consolidate the observation log: combine related items, surface patterns, drop the irrelevant"). Claude Code itself performs the consolidation on its next turn, inside the existing session — no separate paid call.
+
+See the dedicated section below for why `PreCompact` is the right trigger and what the constraints are. This **supersedes** the earlier "manual `/reflect` only" recommendation: `/reflect` remains as a manual on-demand deep pass, but reflection is now primarily automatic.
 
 **E. Compression / cache telemetry.** Reuse the `context_tokens` telemetry on `hook_context` events (0.11.0) and the Trust/Health panels to report compression ratio and token reduction. Add a LongMemEval-style episodic/long-session suite to DevMemBench alongside the existing retrieval and truth-maintenance suites.
 
 ### Features to Avoid (from this study)
 
-- **Two always-on background LLM agents.** Violates the standing convention against features requiring separate Anthropic API calls. Our Observer = context-hook injection (Claude-as-distiller); our Reflector = free Sweep pass + manual `/reflect`.
+- **Two always-on background LLM agents.** Violates the standing convention against features requiring separate Anthropic API calls. Our Observer = context-hook injection (Claude-as-distiller); our Reflector = deterministic shell-side GC + `PreCompact`-injected semantic consolidation that rides the existing session (see automatic-reflection section).
+- **Claude Code Routines / subagents for reflection.** Routines run as a separate scheduled cloud session (separate token budget); subagents run in their own context window (~7× token burn). Both incur extra spend — rejected for recurring reflection. Reserve them, if ever, for a one-off heavy backfill the user explicitly opts into.
 - **Lossy drop on reflection.** Mastra truly discards observations ("never forgives"). We tombstone via `consolidated_into` and retain raw `content_items` — provenance is non-negotiable.
 - **Replacing dynamic recall.** Augment, don't replace. Observations become a front-loaded episodic block; `memory.recall` stays for targeted lookups.
 
@@ -138,16 +143,41 @@ Transcripts → Ingest → Index (FTS5)
    Publish: stable observation block (cache-friendly) + fact snapshot
 ```
 
+## Automatic Reflection in Claude Code (consultation findings, 2026-06-16)
+
+Source: claude-code-guide agent consultation. Citations: [Hooks reference](https://code.claude.com/docs/en/hooks.md), [Subagents](https://code.claude.com/docs/en/subagents.md), [Routines / scheduled tasks](https://code.claude.com/docs/en/web-scheduled-tasks).
+
+**What does not exist:** There is no timer-, cron-, or idle-based hook event. Hook events are lifecycle-driven only — `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `Stop`/`StopFailure`, `PreCompact`/`PostCompact`, `PreToolUse`/`PostToolUse(Failure)`, plus async signals (`FileChanged`, etc.). No hook can force a model turn or enqueue a prompt; a hook can only inject `additionalContext` that the model acts on at its *next* invocation.
+
+**What this unlocks anyway:** `PreCompact` is the right reflection trigger because it fires precisely when the context window is filling — i.e. on *context pressure*. That is conceptually the same signal Mastra uses (Reflector fires at a ~40k-token observation threshold). So "reflect when memory gets big" maps cleanly onto "reflect when Claude Code is about to compact."
+
+**The free automatic pattern (recommended):**
+- `PreCompact` + `SessionEnd` hooks run the **deterministic** Reflector shell-side in Ruby (dedupe / TTL-drop 🟢 / merge) — fully autonomous, no model, no cost.
+- `PreCompact` injects an `additionalContext` instruction that makes Claude perform the **semantic** consolidation (pattern-finding, observation→fact promotion) on its next turn, inside the existing session — no separate paid call.
+- `SessionStart` injects the consolidated two-block observation log (already in recommendation B).
+
+**Where extra cost is unavoidable (and therefore rejected):** truly autonomous *between-session* reflection on a wall clock. That requires Claude Code Routines (separate paid cloud session) or a headless `claude -p` call or a subagent (~7× tokens) — all separate spend. We accept the tradeoff: our reflection is automatic on *lifecycle events* (compaction, session boundaries), not on a wall-clock timer. For our single-developer, local-first scale this is sufficient.
+
 ## Suggested Phasing
 
 1. Schema + Layer-1 Observer (table, NullDistiller rows, `memory.observations`).
 2. Stable two-block injection; measure token/compression deltas.
-3. Free Reflector (dedupe/GC/TTL in Sweep) + threshold nudge.
-4. `/reflect` skill + observation→fact promotion bridge.
+3. **Automatic Reflector**: deterministic GC shell-side in `PreCompact` + `SessionEnd`/Sweep.
+4. **Automatic semantic reflection**: `PreCompact` `additionalContext` consolidation instruction + observation→fact promotion bridge. Keep a manual `/reflect` skill for on-demand deep passes.
 
 Phase 4 is where this stops being "Mastra-on-Ruby" and becomes a hybrid episodic+semantic system stronger than either alone.
 
+## Decisions for ClaudeMemory (memory-convention format)
+
+Per the `/study-repo` memory discipline, the following are decisions about **claude_memory itself** derived from this study — to be stored via `memory.store_extraction` (`subject=claude_memory`, `decision`/`architecture` predicate, reason clause embedded) once the memory MCP server is connected. External facts about Mastra stay in this influence doc, not in memory.
+
+- **Decision:** claude_memory will add an episodic observation layer that *augments* (does not replace) the dynamic-recall semantic fact store — because facts answer "what is true" and observations answer "what happened," and we currently have no episodic half; recall stays for targeted lookups while observations provide a stable front-loaded narrative. (User-confirmed "augment" on 2026-06-16.)
+- **Decision:** observation reflection will be automatic via the `PreCompact` and `SessionEnd` hooks rather than a manual-only skill — because Claude Code exposes no timer/cron hook, but `PreCompact` fires on context pressure (the analog of Mastra's token-threshold trigger) and rides the existing session at no extra API cost.
+- **Decision:** the Reflector's deterministic GC runs shell-side in Ruby and its semantic consolidation runs via `PreCompact` `additionalContext` (Claude-as-reflector inline) — to keep automatic reflection within the no-extra-API-cost convention, explicitly rejecting Claude Code Routines and subagents because each incurs a separate token budget.
+- **Decision:** reflection will tombstone superseded observations via a `consolidated_into` link rather than hard-deleting them (unlike Mastra's lossy drop) — to preserve claude_memory's provenance guarantee while still bounding context size.
+- **Decision:** an observation is promoted to a structured fact only after corroboration across multiple observations — because requiring repeated sightings before commitment doubles as an anti-hallucination gate against the documented reject-churn from one-off doc/example text.
+
 ## Open Questions
 
-- **Augment vs replace recall?** Recommend augment (front-loaded episodic block; keep recall for targeted lookups).
-- **Automatic vs manual reflection?** Free Sweep pass auto-handles dedup/GC; semantic pattern-finding stays manual (`/reflect`) to honor the no-API-cost rule. Tradeoff vs Mastra's always-on reflection: free but less timely.
+- **Augment vs replace recall?** Resolved: **augment** (user-confirmed 2026-06-16). Observations become a front-loaded episodic block; `memory.recall` stays for targeted lookups.
+- **Automatic vs manual reflection?** Resolved: **automatic** via `PreCompact`/`SessionEnd` (deterministic GC shell-side + semantic consolidation injected for the next turn), with `/reflect` retained for manual deep passes. The only thing we forgo is wall-clock between-session reflection, which would cost extra (Routines/subagents) — deliberately rejected.
