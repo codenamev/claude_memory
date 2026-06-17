@@ -128,16 +128,17 @@ module ClaudeMemory
       # the Layer-2 Claude-as-observer pass (a later phase).
       def extract_observations(text)
         observations = []
+        scope_hint = global_scope_signal?(text) ? "global" : "project"
 
         DECISION_PATTERNS.each do |pattern|
           text.scan(pattern).flatten.each do |match|
-            observations << build_observation("decision", Domain::Observation::IMPORTANT, "decided to #{match.strip}", text)
+            observations << build_observation("decision", Domain::Observation::IMPORTANT, "decided to #{match.strip}", scope_hint)
           end
         end
 
         OBSERVATION_CONVENTION_PATTERNS.each do |pattern|
           text.scan(pattern).flatten.each do |match|
-            observations << build_observation("preference", Domain::Observation::MAYBE, match.strip, text)
+            observations << build_observation("preference", Domain::Observation::MAYBE, match.strip, scope_hint)
           end
         end
 
@@ -146,16 +147,11 @@ module ClaudeMemory
 
       # Returns nil for content that isn't a usable statement: code/JSON noise,
       # or fewer than three words after trimming to the first sentence.
-      def build_observation(kind, priority, body, text)
+      def build_observation(kind, priority, body, scope_hint)
         cleaned = trim_to_statement(clean_observation_body(body))
         return nil if cleaned.empty? || noise_body?(cleaned) || cleaned.split.size < 3
 
-        {
-          kind: kind,
-          priority: priority,
-          body: cleaned.slice(0, 500),
-          scope_hint: global_scope_signal?(text) ? "global" : "project"
-        }
+        {kind: kind, priority: priority, body: cleaned.slice(0, 500), scope_hint: scope_hint}
       end
 
       # Cap a captured span to its first sentence (and a hard length limit) so a
