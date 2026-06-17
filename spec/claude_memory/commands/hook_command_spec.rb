@@ -186,7 +186,14 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
         expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
         output = JSON.parse(stdout.string)
         expect(output.dig("hookSpecificOutput", "hookEventName")).to eq("SessionStart")
-        expect(output.dig("hookSpecificOutput", "additionalContext")).to include("Docker")
+        context = output.dig("hookSpecificOutput", "additionalContext")
+        expect(context).to include("Docker")
+        # Wrapped in <claude-memory-context> so a later ingest strips our own
+        # injected snapshot back out (ContentSanitizer SYSTEM_TAGS) — prevents
+        # the self-ingestion feedback loop where injected memory is re-observed.
+        expect(context).to start_with("<claude-memory-context>")
+        expect(context).to end_with("</claude-memory-context>")
+        expect(ClaudeMemory::Ingest::ContentSanitizer.strip_tags(context).strip).to eq("")
       end
 
       it "records context_tokens on the activity event" do

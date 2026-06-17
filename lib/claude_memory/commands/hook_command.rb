@@ -212,7 +212,13 @@ module ClaudeMemory
           response = {
             hookSpecificOutput: {
               hookEventName: "SessionStart",
-              additionalContext: context_text
+              # Wrap in <claude-memory-context> so a later ingest strips our own
+              # injected snapshot back out (ContentSanitizer lists this tag in
+              # SYSTEM_TAGS). Without the wrapper, memory's injected facts and
+              # observation log leak into the transcript and get re-distilled —
+              # a self-ingestion feedback loop. Claude still reads the content;
+              # only the re-ingestion path treats it as strippable.
+              additionalContext: "<claude-memory-context>\n#{context_text}\n</claude-memory-context>"
             }
           }
           stdout.puts JSON.generate(response)
