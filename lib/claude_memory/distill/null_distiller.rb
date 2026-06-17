@@ -134,9 +134,25 @@ module ClaudeMemory
         {
           kind: kind,
           priority: priority,
-          body: body.slice(0, 500),
+          body: clean_observation_body(body).slice(0, 500),
           scope_hint: global_scope_signal?(text) ? "global" : "project"
         }
+      end
+
+      # The distiller scans raw transcript text, which is JSONL — so a captured
+      # body can carry JSON/escaping artifacts (`\n`, `\"`, a trailing `"}`,
+      # a leading `= `/`### ` from injected memory/markdown). Normalize them out:
+      # cleaner bodies read better in the injected log AND normalize more
+      # consistently, which is what the Reflector's dedup/corroboration keys off.
+      def clean_observation_body(body)
+        body.to_s
+          .gsub(/\\+[ntr]/, " ")   # literal \n \t \r (even multiply-escaped) -> space
+          .gsub(/\\+"/, '"')       # escaped quote -> quote
+          .gsub(/\\+/, "")         # residual backslashes
+          .gsub(/\s+/, " ")        # collapse whitespace
+          .sub(/\A[\s"'`,:=#*>\-\]}]+/, "")  # leading JSON/markdown artifacts
+          .sub(/[\s"'`,:\-\]}]+\z/, "")       # trailing JSON artifacts
+          .strip
       end
 
       def global_scope_signal?(text)

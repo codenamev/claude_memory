@@ -29,6 +29,24 @@ RSpec.describe ClaudeMemory::Distill::NullDistiller, "observations (Layer-1 Obse
     expect(obs.first[:scope_hint]).to eq("global")
   end
 
+  it "strips JSON/escaping artifacts from bodies scraped off raw JSONL" do
+    jsonl = '{"role":"assistant","content":"We decided to use PostgreSQL because we need JSONB.\\nIt scales."}'
+    obs = distiller.distill(jsonl).observations
+    decision = obs.find { |o| o[:kind] == "decision" }
+
+    expect(decision[:body]).to start_with("decided to use PostgreSQL")
+    expect(decision[:body]).not_to include('"}')
+    expect(decision[:body]).not_to include("\\n")
+    expect(decision[:body]).not_to match(/["{}\\]$/)
+  end
+
+  it "trims leading injected-memory / markdown artifacts" do
+    obs = distiller.distill("### Convention: always run rubocop").observations
+    pref = obs.find { |o| o[:kind] == "preference" }
+    expect(pref[:body]).not_to start_with("#")
+    expect(pref[:body]).not_to match(/\A[\s=>*-]/)
+  end
+
   it "dedups identical observations and caps the count" do
     obs = distiller.distill("We decided to ship. We decided to ship.").observations
     bodies = obs.map { |o| [o[:kind], o[:body]] }
