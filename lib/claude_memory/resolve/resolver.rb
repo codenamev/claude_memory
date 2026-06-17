@@ -37,7 +37,12 @@ module ClaudeMemory
           facts_superseded: 0,
           conflicts_created: 0,
           provenance_created: 0,
-          observations_created: 0
+          observations_created: 0,
+          # Ids of the facts each input touched (insert/reinforce/conflict),
+          # positionally aligned with extraction.facts — so callers like the
+          # promotion bridge don't have to re-query for what the resolver
+          # already knows.
+          fact_ids: []
         }
 
         # Wrap entire extraction in a single transaction for better concurrency
@@ -53,6 +58,7 @@ module ClaudeMemory
             result[:facts_superseded] += outcome[:superseded]
             result[:conflicts_created] += outcome[:conflicts]
             result[:provenance_created] += outcome[:provenance]
+            result[:fact_ids] << outcome[:fact_id]
           end
 
           # Episodic layer: persist observations alongside facts. Append-only,
@@ -190,7 +196,7 @@ module ClaudeMemory
           # example text against a single-cardinality predicate that
           # already has a confirmed value. Returning zero across the
           # board keeps the resolver-result accounting consistent.
-          {created: 0, superseded: 0, conflicts: 0, provenance: 0}
+          {created: 0, superseded: 0, conflicts: 0, provenance: 0, fact_id: nil}
         else
           apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution,
             project_path: project_path, scope: scope)
@@ -201,7 +207,7 @@ module ClaudeMemory
         object_entity_id = entity_ids[fact_data[:object]]
         matching = existing_facts.find { |f| values_match?(f, fact_data[:object], object_entity_id) }
         add_provenance(matching[:id], content_item_id, fact_data)
-        {created: 0, superseded: 0, conflicts: 0, provenance: 1}
+        {created: 0, superseded: 0, conflicts: 0, provenance: 1, fact_id: matching[:id]}
       end
 
       def apply_conflict(existing_facts, fact_data, subject_id, content_item_id, occurred_at, project_path:, scope:)
@@ -216,12 +222,12 @@ module ClaudeMemory
         matching = existing_disputed.find { |f| values_match?(f, fact_data[:object], nil) }
         if matching
           add_provenance(matching[:id], content_item_id, fact_data)
-          return {created: 0, superseded: 0, conflicts: 0, provenance: 1}
+          return {created: 0, superseded: 0, conflicts: 0, provenance: 1, fact_id: matching[:id]}
         end
 
-        create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at,
+        disputed_fact_id = create_conflict(existing_facts.first[:id], fact_data, subject_id, content_item_id, occurred_at,
           project_path: project_path, scope: scope)
-        {created: 0, superseded: 0, conflicts: 1, provenance: 0}
+        {created: 0, superseded: 0, conflicts: 1, provenance: 0, fact_id: disputed_fact_id}
       end
 
       def apply_insert(fact_data, subject_id, entity_ids, content_item_id, occurred_at, existing_facts, resolution, project_path:, scope:)
@@ -236,7 +242,7 @@ module ClaudeMemory
         link_superseded_facts(fact_id, existing_facts) if superseded_count > 0
         add_provenance(fact_id, content_item_id, fact_data)
 
-        {created: 1, superseded: superseded_count, conflicts: 0, provenance: 1}
+        {created: 1, superseded: superseded_count, conflicts: 0, provenance: 1, fact_id: fact_id}
       end
 
       def insert_new_fact(fact_data, subject_id, entity_ids, occurred_at, project_path:, scope:)
@@ -306,6 +312,7 @@ module ClaudeMemory
         )
 
         add_provenance(new_fact_id, content_item_id, new_fact_data)
+        new_fact_id
       end
 
       def add_provenance(fact_id, content_item_id, fact_data)

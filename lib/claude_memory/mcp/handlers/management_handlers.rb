@@ -96,7 +96,9 @@ module ClaudeMemory
             occurred_at: occurred_at, project_path: project_path, scope: scope
           )
 
-          fact_id = promoted_fact_id(store, subject, predicate, object)
+          # The resolver reports the id of the fact it actually touched
+          # (inserted, reinforced, or disputed) — no need to re-query for it.
+          fact_id = result[:fact_ids].compact.first
           return {error: "Promotion failed: the fact for observation #{observation_id} could not be resolved after creation"} unless fact_id
 
           store.mark_observation_promoted(observation_id, fact_id: fact_id)
@@ -226,19 +228,6 @@ module ClaudeMemory
 
         def symbolize_keys(hash)
           Core::TextBuilder.symbolize_keys(hash)
-        end
-
-        # Resolve the fact id the resolver just produced for a promotion, by
-        # the canonical (subject, predicate, object) slot — newest row wins.
-        def promoted_fact_id(store, subject, predicate, object)
-          subject_type = (subject == "user") ? "person" : "repo"
-          subject_id = store.find_or_create_entity(type: subject_type, name: subject)
-          canonical = Resolve::PredicatePolicy.canonicalize(predicate)
-          row = store.facts
-            .where(subject_entity_id: subject_id, predicate: canonical, object_literal: object)
-            .order(Sequel.desc(:id))
-            .first
-          row && row[:id]
         end
       end
     end
