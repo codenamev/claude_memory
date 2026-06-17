@@ -62,6 +62,7 @@ module ClaudeMemory
           }
         }
         @server.mount_proc("/api/timeline") { |_req, res| with_fresh_connections { json_response(res, api.timeline) } }
+        @server.mount_proc("/api/observations") { |_req, res| with_fresh_connections { json_response(res, api.observations) } }
         @server.mount_proc("/api/recall") { |req, res| with_fresh_connections { json_response(res, api.recall(req.query)) } }
         @server.mount_proc("/api/conflicts") { |req, res| with_fresh_connections { handle_conflicts(api, req, res) } }
         @server.mount_proc("/api/moments") { |req, res| with_fresh_connections { handle_moments(api, req, res) } }
