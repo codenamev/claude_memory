@@ -788,6 +788,44 @@ module ClaudeMemory
         updated > 0
       end
 
+      # Semantic consolidation: merge several related observations into one
+      # synthesized observation, atomically. The new row carries the *summed*
+      # corroboration of its sources (combined sighting weight, which can tip it
+      # over the promotion threshold); each source is tombstoned into it. This
+      # is the Claude-as-reflector counterpart to the deterministic dedup — it
+      # collapses observations that say the same thing in different words, which
+      # exact-match dedup can't.
+      #
+      # @param from_ids [Array<Integer>] source observation ids (need >= 2 active in scope)
+      # @param body [String] the synthesized observation text
+      # @return [Hash, nil] {id:, merged:, corroboration_count:}, or nil when
+      #   fewer than two of the ids are active in this scope
+      def consolidate_observations(from_ids, body:, kind: "event", priority: 3, scope: "project",
+        project_path: nil, source_content_item_id: nil, observed_at: nil)
+        sources = observations
+          .where(id: from_ids, status: "active", scope: scope)
+          .select(:id, :corroboration_count)
+          .all
+        return nil if sources.size < 2
+
+        now = Time.now.utc.iso8601
+        combined = sources.sum { |s| s[:corroboration_count] || 1 }
+
+        with_retry("consolidate_observations") do
+          @db.transaction do
+            new_id = observations.insert(
+              body: body, kind: kind, priority: priority, scope: scope, project_path: project_path,
+              source_content_item_id: source_content_item_id,
+              token_count: (body.length / 4.0).ceil, corroboration_count: combined,
+              status: "active", observed_at: observed_at || now, created_at: now
+            )
+            observations.where(id: sources.map { |s| s[:id] })
+              .update(status: "consolidated", consolidated_into: new_id, reflected_at: now)
+            {id: new_id, merged: sources.size, corroboration_count: combined}
+          end
+        end
+      end
+
       # Active, not-yet-promoted observations corroborated at least
       # `min_corroboration` times — i.e. eligible for promotion to a fact.
       # Highest corroboration first.

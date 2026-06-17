@@ -28,8 +28,8 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector, "observations (Block 1)" do
     context = injector.generate_context
 
     expect(context).to include("## Observations (what happened)")
-    expect(context).to include("- 🔴 decided to add episodic layer")
-    expect(context).to include("- prefer do...end blocks")
+    expect(context).to match(/- \[#\d+\] 🔴 decided to add episodic layer/)
+    expect(context).to match(/- \[#\d+\] prefer do\.\.\.end blocks/)
     expect(injector.emitted_observation_count).to eq(2)
   end
 
@@ -76,6 +76,7 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector, "observations (Block 1)" do
 
     expect(context).to include("## Observation Reflection")
     expect(context).to include("memory.promote_observation")
+    expect(context).to include("memory.consolidate_observations")
     expect(context).to include("[obs ##{id} ×3] use SQLite for storage")
   end
 

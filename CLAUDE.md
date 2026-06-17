@@ -363,7 +363,7 @@ Available MCP tools (23 total):
 - **Management**: `memory.promote`, `memory.reject_fact`, `memory.store_extraction`
 - **Distillation**: `memory.undistilled`, `memory.mark_distilled`
 - **Monitoring**: `memory.status`, `memory.stats`, `memory.changes`, `memory.conflicts`, `memory.activity`
-- **Observational layer** (experimental): `memory.observations` (read-only episodic log), `memory.promote_observation` (corroboration-gated observation→fact promotion)
+- **Observational layer** (experimental): `memory.observations` (read-only episodic log), `memory.promote_observation` (corroboration-gated observation→fact promotion), `memory.consolidate_observations` (semantic reflection: merge related observations, combine corroboration)
 - **Maintenance**: `memory.sweep_now`
 - **Discovery**: `memory.check_setup`, `memory.list_projects`
 

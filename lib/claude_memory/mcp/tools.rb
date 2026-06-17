@@ -100,6 +100,7 @@ module ClaudeMemory
         when "memory.activity" then activity(arguments)
         when "memory.observations" then observations(arguments)
         when "memory.promote_observation" then promote_observation(arguments)
+        when "memory.consolidate_observations" then consolidate_observations(arguments)
         else {error: "Unknown tool: #{name}"}
         end
       end

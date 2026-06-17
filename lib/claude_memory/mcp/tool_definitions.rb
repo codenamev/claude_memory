@@ -493,6 +493,22 @@ module ClaudeMemory
               required: ["observation_id", "predicate", "object"]
             },
             annotations: WRITE
+          },
+          {
+            name: "memory.consolidate_observations",
+            description: "Semantic reflection: merge several related observations (that say the same thing in different words) into one synthesized observation. Corroboration combines, which can tip the result over the promotion threshold. The originals are tombstoned (preserved, linked), not deleted.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                from_ids: {type: "array", items: {type: "integer"}, minItems: 2, description: "Observation ids to merge (>= 2, same scope)"},
+                body: {type: "string", description: "The synthesized observation text"},
+                kind: {type: "string", enum: %w[user_statement agent_action tool_result preference decision event], description: "Kind of the merged observation (default: event)"},
+                priority: {type: "integer", enum: [1, 2, 3], description: "1=important, 2=maybe, 3=info (default: 3)"},
+                scope: {type: "string", enum: %w[project global], default: "project"}
+              },
+              required: ["from_ids", "body"]
+            },
+            annotations: WRITE
           }
         ]
       end

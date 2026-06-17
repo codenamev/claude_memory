@@ -154,6 +154,7 @@ These are registered in `MCP::ToolDefinitions.all` but **not yet covered by the 
 |---|---|---|
 | `memory.observations` | Observational layer | Experimental (unreleased). Read-only listing of episodic observations. |
 | `memory.promote_observation` | Observational layer | Experimental (unreleased). Promotes a corroborated observation into a fact; refuses uncorroborated ones (anti-hallucination gate). Args/shape may change. |
+| `memory.consolidate_observations` | Observational layer | Experimental (unreleased). Merges related observations into one synthesized row (corroboration combines, sources tombstoned). Args/shape may change. |
 
 ### Stability of tool responses
 
