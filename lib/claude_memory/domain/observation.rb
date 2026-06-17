@@ -14,9 +14,15 @@ module ClaudeMemory
       MAYBE = 2
       INFO = 3
 
+      # Minimum corroboration (repeated sightings) before an observation may be
+      # promoted to a structured fact. The anti-hallucination gate: a one-off
+      # mention never becomes a committed fact.
+      PROMOTION_THRESHOLD = 2
+
       attr_reader :id, :body, :kind, :priority, :scope, :project_path,
         :source_content_item_id, :consolidated_into, :token_count,
-        :status, :session_id, :observed_at, :created_at, :reflected_at
+        :status, :session_id, :observed_at, :created_at, :reflected_at,
+        :corroboration_count, :promoted_at, :promoted_fact_id
 
       # @param attributes [Hash] observation attributes (see column list)
       # @raise [ArgumentError] if body is blank or priority is out of range
@@ -35,6 +41,9 @@ module ClaudeMemory
         @observed_at = attributes[:observed_at]
         @created_at = attributes[:created_at]
         @reflected_at = attributes[:reflected_at]
+        @corroboration_count = attributes[:corroboration_count] || 1
+        @promoted_at = attributes[:promoted_at]
+        @promoted_fact_id = attributes[:promoted_fact_id]
 
         validate!
         freeze
@@ -53,6 +62,16 @@ module ClaudeMemory
       # @return [Boolean] true when the Reflector retired this on TTL
       def expired?
         status == "expired"
+      end
+
+      # @return [Boolean] true once promoted into a structured fact
+      def promoted?
+        !promoted_at.nil?
+      end
+
+      # @return [Boolean] true when corroborated enough to be promotion-eligible
+      def corroborated?(threshold)
+        corroboration_count >= threshold
       end
 
       # @return [Boolean] true for 🔴 — the only priority shown to the actor
@@ -81,7 +100,10 @@ module ClaudeMemory
           session_id: session_id,
           observed_at: observed_at,
           created_at: created_at,
-          reflected_at: reflected_at
+          reflected_at: reflected_at,
+          corroboration_count: corroboration_count,
+          promoted_at: promoted_at,
+          promoted_fact_id: promoted_fact_id
         }
       end
 

@@ -30,6 +30,16 @@ RSpec.describe ClaudeMemory::Observe::Reflector do
       expect(loser[:consolidated_into]).to eq(new)
     end
 
+    it "folds the losers' corroboration counts into the keeper (promotion signal)" do
+      store.insert_observation(body: "use SQLite", priority: 1, observed_at: days_ago(10))
+      keep = store.insert_observation(body: "use   SQLite", priority: 1, observed_at: days_ago(1))
+
+      described_class.new(store).reflect!
+
+      expect(store.observations.where(id: keep).get(:corroboration_count)).to eq(2)
+      expect(store.promotion_candidates(min_corroboration: 2).map { |r| r[:id] }).to eq([keep])
+    end
+
     it "keeps observations with different bodies or different scopes apart" do
       store.insert_observation(body: "alpha", priority: 1, scope: "project")
       store.insert_observation(body: "beta", priority: 1, scope: "project")

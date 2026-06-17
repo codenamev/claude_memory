@@ -59,6 +59,10 @@ module ClaudeMemory
           keeper = rows.max_by { |r| [r[:observed_at].to_s, r[:id]] }
           rows.each do |loser|
             next if loser[:id] == keeper[:id]
+            # Fold the loser's sightings into the keeper before tombstoning so
+            # corroboration survives consolidation and can cross the promotion
+            # threshold. A duplicate IS a repeated sighting.
+            @store.increment_corroboration(keeper[:id], by: loser[:corroboration_count] || 1)
             @store.tombstone_observation(loser[:id], into_id: keeper[:id])
             merged += 1
           end

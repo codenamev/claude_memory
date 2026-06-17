@@ -152,7 +152,8 @@ These are registered in `MCP::ToolDefinitions.all` but **not yet covered by the 
 
 | Tool | Group | Status |
 |---|---|---|
-| `memory.observations` | Observational layer | Experimental (Phase 1, unreleased). Read-only listing of episodic observations. Shape may change as the observation→fact promotion and stable-prefix injection phases land. |
+| `memory.observations` | Observational layer | Experimental (unreleased). Read-only listing of episodic observations. |
+| `memory.promote_observation` | Observational layer | Experimental (unreleased). Promotes a corroborated observation into a fact; refuses uncorroborated ones (anti-hallucination gate). Args/shape may change. |
 
 ### Stability of tool responses
 
@@ -263,7 +264,7 @@ If you need a feature from one of the internal classes, **open an issue** so we 
 
 ### Schema migrations
 
-Schema is at v19 (unreleased; v18 shipped in 0.12.0) with 19 migrations under `db/migrations/`. Migrations remain forward-compatible per the round-trip-spec convention (`feedback_round_trip_migration_specs.md`): each release's specs verify that DBs from the prior 3 schema boundaries can be migrated into the current schema without data loss.
+Schema is at v20 (unreleased; v18 shipped in 0.12.0) with 20 migrations under `db/migrations/`. Migrations remain forward-compatible per the round-trip-spec convention (`feedback_round_trip_migration_specs.md`): each release's specs verify that DBs from the prior 3 schema boundaries can be migrated into the current schema without data loss.
 
 **What's stable:**
 
@@ -276,7 +277,7 @@ Schema is at v19 (unreleased; v18 shipped in 0.12.0) with 19 migrations under `d
 
 - The `vec0` virtual-table internals — sqlite-vec evolution may shift representation.
 - `mcp_tool_calls` retention behavior (currently 90 days, configurable); the column set is stable, the retention default is not.
-- The `observations` table (v19) — episodic layer, Phase 1. Column set may change as the observation→fact promotion and reflection phases land.
+- The `observations` table (v19–v20, incl. `corroboration_count`/`promoted_at`/`promoted_fact_id`) — episodic layer. Column set may still change while the layer is experimental.
 
 **What's internal:**
 
@@ -333,7 +334,7 @@ Listed here for honesty — these surfaces look public but are not.
 
 - **Dashboard JSON HTTP API.** The `claude-memory dashboard` server's endpoints are an internal interface for the bundled UI. Don't build scripts against `GET /api/trust` etc. — endpoints, response shapes, and even URL paths may change without notice.
 - **`activity_events.detail_json` fields not in `spec/smoke/expected_fields.yml`.** Inspecting a missing field during debugging is fine; relying on it in scripts is not.
-- **The exact text of `additionalContext`.** The Markdown sections (`## Decisions`, `## Conventions`, `## Architecture`, `## Pending Knowledge Extraction`, `## Auto-Memory Mirror`) and their order are stable; the per-fact rendering format inside each section is tuned for prompt quality and may change. The `## Observations` section (observational layer) and the published `.claude/rules/claude_memory.observations.md` snapshot are **experimental** while the layer is built out.
+- **The exact text of `additionalContext`.** The Markdown sections (`## Decisions`, `## Conventions`, `## Architecture`, `## Pending Knowledge Extraction`, `## Auto-Memory Mirror`) and their order are stable; the per-fact rendering format inside each section is tuned for prompt quality and may change. The `## Observations` and `## Observation Reflection` sections (observational layer) and the published `.claude/rules/claude_memory.observations.md` snapshot are **experimental** while the layer is built out.
 - **Internal env vars** (anything not listed in `Configuration` instance methods or in this doc). Examples that exist but are internal: `CLAUDE_MEMORY_LOG_LEVEL`, debug flags surfaced during development.
 - **Test/spec/fixture infrastructure.** `spec/benchmarks/`, `spec/evals/`, `spec/support/` are not public APIs.
 - **Plugin-format paths.** `.claude-plugin/`, `scripts/serve-mcp.sh`, etc. are part of the Claude Code plugin format integration; treat them as opaque.
