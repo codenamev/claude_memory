@@ -45,6 +45,20 @@ RSpec.describe ClaudeMemory::Resolve::Resolver do
         expect(result[:provenance_created]).to eq(1)
       end
 
+      it "returns the ids of the facts it touched (insert and reinforce), so callers need not re-query" do
+        fact = {subject: "repo", predicate: "uses_language", object: "ruby", quote: "ruby"}
+
+        inserted = resolver.apply(ClaudeMemory::Distill::Extraction.new(facts: [fact]))
+        expect(inserted[:fact_ids]).to contain_exactly(an_instance_of(Integer))
+        new_id = inserted[:fact_ids].first
+        expect(store.facts.where(id: new_id).get(:object_literal)).to eq("ruby")
+
+        # re-applying the same fact reinforces the existing row — same id back
+        reinforced = resolver.apply(ClaudeMemory::Distill::Extraction.new(facts: [fact]))
+        expect(reinforced[:facts_created]).to eq(0)
+        expect(reinforced[:fact_ids]).to eq([new_id])
+      end
+
       context "for single-cardinality predicates" do
         it "supersedes existing fact when signal is present" do
           extraction1 = ClaudeMemory::Distill::Extraction.new(
