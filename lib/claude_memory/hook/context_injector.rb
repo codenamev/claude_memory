@@ -224,7 +224,15 @@ module ClaudeMemory
           "in the object (e.g., \"… because …\", \"… so that …\", \"caused by …\",",
           "\"breaks when …\"). A fact with a reason is recoverable once stale; a",
           "bare conclusion is dead weight. Prefer one fact-with-reason over two",
-          "facts-without."
+          "facts-without.",
+          "",
+          "**Also log what happened (episodic layer):** in the same",
+          "`memory.store_extraction` call, populate `observations` — one per",
+          "discrete event (a decision made, a preference stated, a notable action",
+          "or outcome). Each: a concise `body` of what happened, a `kind`",
+          "(decision/preference/event/…), and a reason for decisions/preferences.",
+          "Observations record \"what happened\"; facts record \"what is true\". They",
+          "accumulate, and a corroborated observation can later graduate into a fact."
         ]
 
         items.each do |item|

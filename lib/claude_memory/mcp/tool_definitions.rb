@@ -276,6 +276,19 @@ module ClaudeMemory
                     required: ["title", "summary"]
                   }
                 },
+                observations: {
+                  type: "array",
+                  description: "Episodic observations — what happened this session (experimental, observational layer). Complements facts ('what is true') with 'what happened': decisions made, preferences stated, notable actions/outcomes. One per discrete event; embed a reason for decisions/preferences.",
+                  items: {
+                    type: "object",
+                    properties: {
+                      body: {type: "string", description: "Concise statement of what happened"},
+                      kind: {type: "string", enum: %w[user_statement agent_action tool_result preference decision event], description: "What kind of event (default: event)"},
+                      priority: {type: "integer", enum: [1, 2, 3], description: "Internal signal: 1=important, 2=maybe, 3=info (default: 3)"}
+                    },
+                    required: ["body"]
+                  }
+                },
                 scope: {type: "string", enum: ["global", "project"], description: "Default scope for facts", default: "project"}
               },
               required: ["facts"]

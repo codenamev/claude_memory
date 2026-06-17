@@ -4,6 +4,23 @@ RSpec.describe ClaudeMemory::Distill::ReferenceMaterialDetector do
   let(:detector) { described_class.new }
 
   describe "#reclassify" do
+    it "passes non-fact fields (observations, decisions, signals, entities) through unchanged" do
+      extraction = ClaudeMemory::Distill::Extraction.new(
+        entities: [{type: "database", name: "sqlite"}],
+        facts: [{subject: "repo", predicate: "uses_database", object: "sqlite"}],
+        decisions: [{title: "t", summary: "s"}],
+        signals: [{kind: "global_scope", value: true}],
+        observations: [{kind: "decision", priority: 1, body: "decided to use SQLite"}]
+      )
+
+      out = detector.reclassify(extraction)
+
+      expect(out.observations).to eq(extraction.observations)
+      expect(out.decisions).to eq(extraction.decisions)
+      expect(out.signals).to eq(extraction.signals)
+      expect(out.entities).to eq(extraction.entities)
+    end
+
     it "reclassifies LOC-count descriptions of external plugins from convention to reference" do
       # Observed in production data: project fact labeled 'convention' with
       # the object literal "Cloud-backed Claude Code plugin (~1,195 LOC JavaScript)
