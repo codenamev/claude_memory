@@ -47,6 +47,37 @@ RSpec.describe ClaudeMemory::Distill::NullDistiller, "observations (Layer-1 Obse
     expect(pref[:body]).not_to match(/\A[\s=>*-]/)
   end
 
+  it "does not emit observations from bare always/never in code or instructions" do
+    noisy = [
+      "never answer from memory; OR the task is LLM-shaped with provider unstated",
+      "returns a usable template, never nil. def template_for(locale) row = @db.get",
+      "always returns a collection so callers don't type-check"
+    ].join("\n")
+    expect(distiller.distill(noisy).observations).to be_empty
+  end
+
+  it "still observes explicitly-framed conventions" do
+    obs = distiller.distill("Convention: always run rubocop before every commit.").observations
+    pref = obs.find { |o| o[:kind] == "preference" }
+    expect(pref).not_to be_nil
+    expect(pref[:body]).to match(/run rubocop/)
+  end
+
+  it "observes first-person 'we always/never' conventions" do
+    obs = distiller.distill("We always run the linter before pushing to main.").observations
+    expect(obs.map { |o| o[:body] }).to include(a_string_matching(/run the linter/))
+  end
+
+  it "caps a greedy decision capture to its first sentence" do
+    text = "We decided to use Postgres. Then we wrote a long migration with lots of unrelated detail that should not be swallowed into the observation body at all."
+    decision = distiller.distill(text).observations.find { |o| o[:kind] == "decision" }
+    expect(decision[:body]).to eq("decided to use Postgres.")
+  end
+
+  it "skips bodies that are code/JSON noise" do
+    expect(distiller.distill('We always {"cmd":"ls","description":"list"}').observations).to be_empty
+  end
+
   it "dedups identical observations and caps the count" do
     obs = distiller.distill("We decided to ship. We decided to ship.").observations
     bodies = obs.map { |o| [o[:kind], o[:body]] }

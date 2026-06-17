@@ -35,6 +35,20 @@ module ClaudeMemory
         /\buniversally\b/i
       ].freeze
 
+      # Observation-specific convention patterns: stricter than the shared
+      # CONVENTION_PATTERNS. Bare `always (.+)` / `never (.+)` / `we use (.+)`
+      # match code, prose, and instruction text ("never answer from memory",
+      # "never nil. def …"), so observations require explicit convention
+      # framing or a first-person "we always/never".
+      OBSERVATION_CONVENTION_PATTERNS = [
+        /\bconvention[:\s]+(.+)/i,
+        /\bstandard[:\s]+(.+)/i,
+        /\bwe\s+(?:should\s+)?(?:always|never)\s+(.+)/i
+      ].freeze
+
+      # Bodies that look like code / JSON / shell rather than a statement.
+      NOISE_BODY_SIGNATURE = /\bdef\s|\bclass\s|\bmodule\s|=>|::|","|":\s*"|[{}]|\$\(|&&|\|\|/
+
       def distill(text, content_item_id: nil)
         entities = extract_entities(text)
         facts = extract_facts(text, entities)
@@ -121,22 +135,38 @@ module ClaudeMemory
           end
         end
 
-        CONVENTION_PATTERNS.each do |pattern|
+        OBSERVATION_CONVENTION_PATTERNS.each do |pattern|
           text.scan(pattern).flatten.each do |match|
             observations << build_observation("preference", Domain::Observation::MAYBE, match.strip, text)
           end
         end
 
-        observations.uniq { |o| [o[:kind], o[:body]] }.first(10)
+        observations.compact.uniq { |o| [o[:kind], o[:body]] }.first(10)
       end
 
+      # Returns nil for content that isn't a usable statement: code/JSON noise,
+      # or fewer than three words after trimming to the first sentence.
       def build_observation(kind, priority, body, text)
+        cleaned = trim_to_statement(clean_observation_body(body))
+        return nil if cleaned.empty? || noise_body?(cleaned) || cleaned.split.size < 3
+
         {
           kind: kind,
           priority: priority,
-          body: clean_observation_body(body).slice(0, 500),
+          body: cleaned.slice(0, 500),
           scope_hint: global_scope_signal?(text) ? "global" : "project"
         }
+      end
+
+      # Cap a captured span to its first sentence (and a hard length limit) so a
+      # greedy `.+` match can't swallow a whole code block or JSON line.
+      def trim_to_statement(text)
+        s = text.to_s.strip
+        (s[/\A.{0,240}?[.!?](?=\s|\z)/m] || s[0, 240]).to_s.strip
+      end
+
+      def noise_body?(body)
+        body.match?(NOISE_BODY_SIGNATURE)
       end
 
       # The distiller scans raw transcript text, which is JSONL — so a captured
