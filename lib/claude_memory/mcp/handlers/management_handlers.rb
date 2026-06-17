@@ -97,7 +97,9 @@ module ClaudeMemory
           )
 
           fact_id = promoted_fact_id(store, subject, predicate, object)
-          store.mark_observation_promoted(observation_id, fact_id: fact_id) if fact_id
+          return {error: "Promotion failed: the fact for observation #{observation_id} could not be resolved after creation"} unless fact_id
+
+          store.mark_observation_promoted(observation_id, fact_id: fact_id)
 
           {
             success: true,
