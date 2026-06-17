@@ -113,7 +113,7 @@ bin/run-evals --comparative --setup-competitors  # Install + run in one step
 
 NullDistiller (regex, Layer 1):
   - Concept Recall: 0.952 (regex-detectable entities/facts)
-  - Fact Precision: 1.000, Fact Recall: 1.000 (on 31 test cases)
+  - Fact Precision: 0.935, Fact Recall: 1.000 (on 31 test cases) — deliberately high-recall ("extract every mention, filter downstream"); see improvements.md #70
   - Pipeline latency: P95 < 5ms (medium text)
 
 Claude Code (LLM, Layers 2+3):

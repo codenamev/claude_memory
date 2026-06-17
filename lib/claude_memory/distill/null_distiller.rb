@@ -21,7 +21,10 @@ module ClaudeMemory
       ENTITY_PATTERNS = {
         "database" => /\b(postgresql|postgres|mysql|sqlite|mongodb|redis)\b/i,
         "framework" => /\b(rails|sinatra|django|express|next\.?js|react|vue)\b/i,
-        "language" => /\b(ruby|python|javascript|typescript|go|rust)\b/i,
+        # `Go` is matched case-sensitively (via the inline (?-i:) flag) so the
+        # English verb "go" / "go-to" doesn't masquerade as the language; the
+        # other languages stay case-insensitive. `golang` normalizes to `go`.
+        "language" => /\b(ruby|python|javascript|typescript|rust|(?-i:Go)|golang)\b/i,
         "platform" => /\b(aws|gcp|azure|heroku|vercel|netlify|docker|kubernetes)\b/i
       }.freeze
 
@@ -71,7 +74,9 @@ module ClaudeMemory
         found = []
         ENTITY_PATTERNS.each do |type, pattern|
           text.scan(pattern).flatten.uniq.each do |name|
-            found << {type: type, name: name.downcase, confidence: 0.7}
+            normalized = name.downcase
+            normalized = "go" if normalized == "golang"
+            found << {type: type, name: normalized, confidence: 0.7}
           end
         end
         found.uniq { |e| [e[:type], e[:name]] }

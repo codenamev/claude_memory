@@ -330,15 +330,16 @@ Source: 2026-06-17 obs-experiment live session — observed first-hand.
 | baseline | 0.919 | 1.0 | 0.958 |
 | + claim-context | 0.615 | 0.667 | **0.64** |
 
-Regex can't separate terse legit claims (`MongoDB database`, `on AWS`, `Dockerized`) from terse prose mentions (`Postgres/MySQL buy you…`) — claim-context trades recall ~1:1 and even loses precision on the clean corpus. **Reverted.** So the lever must be recall-preserving and downstream of the regex.
+Regex can't separate terse legit claims (`MongoDB database`, `on AWS`, `Dockerized`) from terse prose mentions (`Postgres/MySQL buy you…`) — claim-context trades recall ~1:1 and even loses precision on the clean corpus. **Reverted.**
 
-**Implementation (recall-preserving).**
+**Why distiller-level tightening is mostly off the table (2026-06-17 finding).** The benchmark *enforces* high-recall: case `ext_ent_negative` — "We looked at MongoDB but **decided against it**" — still **expects** `uses_database: mongodb`. The fact distiller is deliberately "extract every mention, filter downstream." So negation/comparison **exclusion** also regresses recall (it would drop the rejected-MongoDB case). The genuine downstream precision lever is Layer-2 / the observation→fact promotion gate, which already prevents Layer-1 noise from being *committed* as corroborated facts.
 
-- **Wire `Distill::ReferenceMaterialDetector` into the ingest path.** It already runs inside `ManagementHandlers#store_extraction` to reclassify reference-material; `Hook::DistillationRunner#distill_item` → `Resolve::Resolver#apply` does **not** run it. Reclassifying (not dropping) mislabeled facts is recall-safe. Extend the detector's heuristics toward comparison/negation framing (`X/Y buy you…`, `shouldn't require X`, `no X-specific`).
-- **Lean on Layer-2 (Claude-as-observer/distiller).** The design always scoped semantic precision to Layer-2, not Layer-1 regex. The SessionStart Layer-2 pass and the observation→fact promotion gate already prevent Layer-1 noise from being *committed* as corroborated facts — this item is about not surfacing it in the first place.
-- **Optional micro-fix:** make the `go`/`express`-class English-word entity keywords require stronger context (capitalization / `golang`) — verify against the benchmark first.
+**Done (recall-safe slice):**
+- ✅ **English-word collision fix** — `go` is matched case-sensitively (`Go`/`golang`) so the verb "go" / "go-to" no longer fires `uses_language=go`. Benchmark Fact Precision **0.919 → 0.935**, Recall held at **1.0** (it removed a real false positive — "my go-to database"). `react`/`rust`/`express` are the same collision class and can follow the same `(?-i:)` pattern, each verified against the benchmark.
 
-**Acceptance.** Re-ingesting a real mixed-content transcript yields tech-stack facts only for genuine project claims, with the distillation benchmark Fact F1 held at ≥ baseline (no recall regression).
+**Deferred / not worth it:** wiring `ReferenceMaterialDetector` into the ingest path is a no-op for current Layer-1 (it produces stack predicates, not `convention` facts the detector targets) — skip until Layer-1 emits conventions.
+
+**Acceptance (revised).** Distiller-level work is bounded to recall-safe English-word-collision fixes (benchmark Fact F1 ≥ baseline). Broader fact precision is owned by Layer-2 + the promotion gate, not regex.
 
 **Effort.** Medium. Wiring the existing detector is small; extending its heuristics + a real-transcript precision fixture is the bulk.
 
