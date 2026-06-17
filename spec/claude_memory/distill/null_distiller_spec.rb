@@ -34,6 +34,21 @@ RSpec.describe ClaudeMemory::Distill::NullDistiller do
         result = distiller.distill("Rails app with PostgreSQL on AWS")
         expect(result.entities.size).to eq(3)
       end
+
+      it "does not treat the English word 'go' (verb / 'go-to') as the Go language" do
+        %w[go].each do |_|
+          expect(distiller.distill("we want this to go now").entities).to be_empty
+          expect(distiller.distill("PostgreSQL is my go-to database")
+            .entities.map { |e| e[:name] }).not_to include("go")
+        end
+      end
+
+      it "extracts the Go language from a capitalized mention or 'golang' (normalized to 'go')" do
+        expect(distiller.distill("the service is written in Go").entities)
+          .to include(hash_including(type: "language", name: "go"))
+        expect(distiller.distill("we use golang on the backend").entities)
+          .to include(hash_including(type: "language", name: "go"))
+      end
     end
 
     context "fact extraction" do
