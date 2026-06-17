@@ -15,6 +15,10 @@ module ClaudeMemory
         "distill-transcripts" => {
           file: "distill-transcripts.md",
           description: "Distill transcripts — extract facts/entities/decisions from undistilled content"
+        },
+        "reflect" => {
+          file: "reflect.md",
+          description: "Reflect on observations — consolidate the episodic log and promote corroborated observations to facts"
         }
       }.freeze
 

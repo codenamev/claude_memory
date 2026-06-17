@@ -54,6 +54,23 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector, "observations (Block 1)" do
     expect(injector.emitted_observation_count).to eq(0)
   end
 
+  it "surfaces an Observation Reflection section for corroborated, unpromoted observations" do
+    id = manager.project_store.insert_observation(body: "use SQLite for storage", priority: 1)
+    manager.project_store.increment_corroboration(id, by: 2) # count 3 >= threshold
+
+    context = injector.generate_context
+
+    expect(context).to include("## Observation Reflection")
+    expect(context).to include("memory.promote_observation")
+    expect(context).to include("[obs ##{id} ×3] use SQLite for storage")
+  end
+
+  it "omits the reflection section when nothing is corroborated yet" do
+    manager.project_store.insert_observation(body: "seen once", priority: 1) # count 1
+
+    expect(injector.generate_context.to_s).not_to include("## Observation Reflection")
+  end
+
   it "excludes consolidated (tombstoned) observations" do
     keep = manager.project_store.insert_observation(body: "active note", priority: 1)
     gone = manager.project_store.insert_observation(body: "merged away", priority: 1)

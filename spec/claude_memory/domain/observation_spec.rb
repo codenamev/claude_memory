@@ -56,6 +56,26 @@ RSpec.describe ClaudeMemory::Domain::Observation do
       expect(described_class.new(body: "x", scope: "global")).to be_global
       expect(described_class.new(body: "x", scope: "project")).not_to be_global
     end
+
+    it "#expired? reflects status" do
+      expect(described_class.new(body: "x", status: "expired")).to be_expired
+    end
+  end
+
+  describe "promotion" do
+    it "defaults corroboration_count to 1" do
+      expect(described_class.new(body: "x").corroboration_count).to eq(1)
+    end
+
+    it "#promoted? is true once promoted_at is set" do
+      expect(described_class.new(body: "x")).not_to be_promoted
+      expect(described_class.new(body: "x", promoted_at: "2026-06-17T00:00:00Z", promoted_fact_id: 9)).to be_promoted
+    end
+
+    it "#corroborated? compares against a threshold" do
+      expect(described_class.new(body: "x", corroboration_count: 2)).to be_corroborated(2)
+      expect(described_class.new(body: "x", corroboration_count: 1)).not_to be_corroborated(2)
+    end
   end
 
   describe "#to_h" do
@@ -65,7 +85,7 @@ RSpec.describe ClaudeMemory::Domain::Observation do
         project_path: nil, source_content_item_id: 3, consolidated_into: nil,
         token_count: 5, status: "active", session_id: "s1",
         observed_at: "2026-06-16T00:00:00Z", created_at: "2026-06-16T00:00:00Z",
-        reflected_at: nil
+        reflected_at: nil, corroboration_count: 4, promoted_at: nil, promoted_fact_id: nil
       }
       expect(described_class.new(attrs).to_h).to eq(attrs)
     end

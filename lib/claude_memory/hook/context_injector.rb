@@ -10,6 +10,7 @@ module ClaudeMemory
       MAX_CONVENTIONS = 5
       MAX_ARCHITECTURE = 5
       MAX_OBSERVATIONS = 10
+      MAX_PROMOTION_CANDIDATES = 5
       MAX_UNDISTILLED = 3
       MAX_TEXT_PER_ITEM = 1500
       MAX_MIRROR_CANDIDATES = 5
@@ -74,6 +75,9 @@ module ClaudeMemory
           undistilled = fetch_undistilled(MAX_UNDISTILLED)
           sections << format_distillation_prompt(undistilled) if undistilled.any?
 
+          promotion = fetch_promotion_candidates(MAX_PROMOTION_CANDIDATES)
+          sections << format_observation_reflection(promotion) if promotion.any?
+
           mirror_candidates = fetch_mirror_candidates(MAX_MIRROR_CANDIDATES)
           if mirror_candidates.any?
             sections << format_auto_memory_mirror(mirror_candidates)
@@ -134,6 +138,42 @@ module ClaudeMemory
 
       def stale_threshold_days
         @stale_threshold_days ||= Configuration.new.injection_stale_days
+      end
+
+      # Automatic semantic reflection (Phase 4): surface observations that have
+      # been corroborated past the promotion threshold so Claude can promote
+      # them to facts inline, this session, at no extra API cost.
+      def fetch_promotion_candidates(limit)
+        stores = []
+        stores << @manager.project_store if @manager.project_store
+        stores << @manager.global_store if @manager.global_store
+
+        stores
+          .flat_map { |s| s.promotion_candidates(min_corroboration: Domain::Observation::PROMOTION_THRESHOLD, limit: limit) }
+          .sort_by { |o| -(o[:corroboration_count] || 0) }
+          .first(limit)
+      rescue => e
+        ClaudeMemory.logger.warn("ContextInjector#fetch_promotion_candidates failed: #{e.message}")
+        []
+      end
+
+      def format_observation_reflection(candidates)
+        lines = [
+          "## Observation Reflection",
+          "",
+          "These observations have recurred enough to be worth committing as facts",
+          "(corroboration gate passed). For each that represents a stable truth,",
+          "promote it with `memory.promote_observation(observation_id, predicate, object)`",
+          "— embed a reason in the object (\"… because …\", \"… so that …\"). Skip any that",
+          "are noise or already captured."
+        ]
+
+        candidates.each do |obs|
+          lines << ""
+          lines << "- [obs ##{obs[:id]} ×#{obs[:corroboration_count]}] #{obs[:body]}"
+        end
+
+        lines.join("\n")
       end
 
       def fetch_observations(limit)

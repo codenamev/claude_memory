@@ -762,6 +762,49 @@ module ClaudeMemory
         updated > 0
       end
 
+      # Fold a duplicate's sighting count into the keeper. Called by the
+      # Reflector's dedup pass so corroboration survives consolidation — the
+      # signal the promotion gate keys off.
+      #
+      # @param observation_id [Integer] keeper observation
+      # @param by [Integer] how much to add (the loser's corroboration_count)
+      # @return [void]
+      def increment_corroboration(observation_id, by: 1)
+        observations.where(id: observation_id)
+          .update(corroboration_count: Sequel[:corroboration_count] + by)
+      end
+
+      # Mark an observation as promoted to a structured fact. Append-only: the
+      # row is preserved (provenance), it just stops being a promotion
+      # candidate.
+      #
+      # @param observation_id [Integer]
+      # @param fact_id [Integer] the fact this observation was promoted into
+      # @return [Boolean] true if a row was updated
+      def mark_observation_promoted(observation_id, fact_id:)
+        now = Time.now.utc.iso8601
+        updated = observations.where(id: observation_id)
+          .update(promoted_at: now, promoted_fact_id: fact_id, reflected_at: now)
+        updated > 0
+      end
+
+      # Active, not-yet-promoted observations corroborated at least
+      # `min_corroboration` times — i.e. eligible for promotion to a fact.
+      # Highest corroboration first.
+      #
+      # @param scope [String, nil] filter by scope; nil for any
+      # @param min_corroboration [Integer] sightings required (the gate)
+      # @param limit [Integer]
+      # @return [Array<Hash>]
+      def promotion_candidates(scope: nil, min_corroboration: 2, limit: 10)
+        ds = observations.where(status: "active", promoted_at: nil)
+        ds = ds.where(scope: scope) if scope
+        ds.where { corroboration_count >= min_corroboration }
+          .order(Sequel.desc(:corroboration_count), Sequel.desc(:observed_at))
+          .limit(limit)
+          .all
+      end
+
       # --- Meta ---
 
       # Set a key-value pair in the meta table (upsert).

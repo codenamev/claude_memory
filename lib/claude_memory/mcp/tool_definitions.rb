@@ -464,6 +464,22 @@ module ClaudeMemory
               }
             },
             annotations: READ_ONLY
+          },
+          {
+            name: "memory.promote_observation",
+            description: "Promote a corroborated observation into a structured fact (the observation→fact bridge). Refuses observations sighted fewer than the corroboration threshold (anti-hallucination gate). Embed a reason in the object (because…/so that…). Surfaced by the SessionStart 'Observation Reflection' section.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                observation_id: {type: "integer", description: "The corroborated observation to promote"},
+                predicate: {type: "string", description: "Fact predicate (e.g. decision, convention, architecture)"},
+                object: {type: "string", description: "Fact object — include a reason clause"},
+                subject: {type: "string", default: "repo", description: "Fact subject (default: repo)"},
+                scope: {type: "string", enum: %w[project global], default: "project"}
+              },
+              required: ["observation_id", "predicate", "object"]
+            },
+            annotations: WRITE
           }
         ]
       end

@@ -103,4 +103,44 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "observations" do
       expect(store.expire_observation(9999)).to be false
     end
   end
+
+  describe "promotion support" do
+    it "#increment_corroboration adds to the sighting count" do
+      id = store.insert_observation(body: "x")
+      expect(store.observations.where(id: id).get(:corroboration_count)).to eq(1)
+      store.increment_corroboration(id, by: 2)
+      expect(store.observations.where(id: id).get(:corroboration_count)).to eq(3)
+    end
+
+    it "#mark_observation_promoted records the fact and timestamp, preserving the row" do
+      id = store.insert_observation(body: "x")
+      expect(store.mark_observation_promoted(id, fact_id: 42)).to be true
+      row = store.observations.where(id: id).first
+      expect(row[:promoted_fact_id]).to eq(42)
+      expect(row[:promoted_at]).not_to be_nil
+    end
+
+    describe "#promotion_candidates" do
+      it "returns only active, unpromoted observations at/above the corroboration threshold" do
+        corroborated = store.insert_observation(body: "corroborated", priority: 1)
+        store.increment_corroboration(corroborated, by: 1) # -> 2
+        store.insert_observation(body: "one-off", priority: 1) # count 1, excluded
+        promoted = store.insert_observation(body: "already promoted", priority: 1)
+        store.increment_corroboration(promoted, by: 5)
+        store.mark_observation_promoted(promoted, fact_id: 1)
+
+        ids = store.promotion_candidates(min_corroboration: 2).map { |r| r[:id] }
+        expect(ids).to eq([corroborated])
+      end
+
+      it "orders by corroboration_count descending" do
+        a = store.insert_observation(body: "a")
+        store.increment_corroboration(a, by: 1) # 2
+        b = store.insert_observation(body: "b")
+        store.increment_corroboration(b, by: 4) # 5
+
+        expect(store.promotion_candidates(min_corroboration: 2).map { |r| r[:id] }).to eq([b, a])
+      end
+    end
+  end
 end
