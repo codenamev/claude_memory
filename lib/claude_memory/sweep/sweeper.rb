@@ -11,6 +11,7 @@ module ClaudeMemory
         otel_metric_retention_days: 30,
         otel_event_retention_days: 14,
         otel_trace_retention_days: 7,
+        observation_info_ttl_days: 30,
         default_budget_seconds: 5
       }.freeze
 
@@ -51,6 +52,11 @@ module ClaudeMemory
         run_if_within_budget { @stats[:otel_traces_pruned] = maintenance.prune_old_otel_traces }
         run_if_within_budget { @stats[:vec_backfilled] = maintenance.backfill_vec_index }
         run_if_within_budget { @stats[:vec_cleaned] = maintenance.cleanup_vec_expired }
+        run_if_within_budget do
+          reflection = maintenance.reflect_observations
+          @stats[:observations_deduped] = reflection[:deduped]
+          @stats[:observations_expired] = reflection[:expired]
+        end
         run_if_within_budget { @stats[:wal_checkpointed] = maintenance.checkpoint_wal }
 
         @stats[:elapsed_seconds] = Time.now - @start_time
@@ -110,7 +116,7 @@ module ClaudeMemory
             content_retention_days: @config[:content_retention_days] / 2
           }
         else
-          @config.slice(:proposed_fact_ttl_days, :disputed_fact_ttl_days, :content_retention_days)
+          @config.slice(:proposed_fact_ttl_days, :disputed_fact_ttl_days, :content_retention_days, :observation_info_ttl_days)
         end
 
         Maintenance.new(@store, config: config)

@@ -20,7 +20,8 @@ module ClaudeMemory
         mcp_tool_call_retention_days: 90,
         otel_metric_retention_days: 30,
         otel_event_retention_days: 14,
-        otel_trace_retention_days: 7
+        otel_trace_retention_days: 7,
+        observation_info_ttl_days: 30
       }.freeze
 
       attr_reader :store
@@ -392,6 +393,19 @@ module ClaudeMemory
         end
 
         result
+      end
+
+      # Run the deterministic observation Reflector (dedupe near-identical
+      # observations + expire stale info-level ones). Free, no LLM —
+      # provenance-preserving (tombstone, never delete).
+      # Returns: Hash {deduped:, expired:}
+      def reflect_observations
+        return {deduped: 0, expired: 0} unless @store.db.table_exists?(:observations)
+
+        result = ClaudeMemory::Observe::Reflector.new(
+          @store, info_ttl_days: @config[:observation_info_ttl_days]
+        ).reflect!
+        {deduped: result.deduped, expired: result.expired}
       end
 
       # Run SQLite VACUUM to reclaim space.

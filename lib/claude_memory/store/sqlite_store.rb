@@ -750,6 +750,18 @@ module ClaudeMemory
         updated > 0
       end
 
+      # Retire a stale observation (status "expired") without a consolidation
+      # target. Append-only — the row is preserved for provenance, just
+      # excluded from active recall. Used by the Reflector's TTL pass.
+      #
+      # @param observation_id [Integer]
+      # @return [Boolean] true if a row was updated
+      def expire_observation(observation_id)
+        now = Time.now.utc.iso8601
+        updated = observations.where(id: observation_id).update(status: "expired", reflected_at: now)
+        updated > 0
+      end
+
       # --- Meta ---
 
       # Set a key-value pair in the meta table (upsert).
