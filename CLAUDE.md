@@ -383,6 +383,7 @@ ClaudeMemory integrates with Claude Code via hooks in `.claude/settings.json`:
 - **Sweep hook**: Triggers on PreCompact/SessionEnd events
   - Runs time-bounded maintenance on both databases
   - Cleans up vec0 entries for superseded/expired facts
+  - Runs the deterministic observation Reflector (`Observe::Reflector` via `Maintenance#reflect_observations`): dedupes near-identical observations + expires stale 🟢 info-level ones (TTL `observation_info_ttl_days`). Free/no-LLM, provenance-preserving (tombstone). Context-pressure-triggered — the analog of Mastra's token-threshold reflection.
 
 - **Nudge hook** (0.11.0+): Triggers on SessionEnd, fires after ingest+sweep
   - Calls `claude-memory hook nudge`

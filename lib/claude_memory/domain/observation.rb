@@ -50,6 +50,11 @@ module ClaudeMemory
         status == "consolidated"
       end
 
+      # @return [Boolean] true when the Reflector retired this on TTL
+      def expired?
+        status == "expired"
+      end
+
       # @return [Boolean] true for 🔴 — the only priority shown to the actor
       def important?
         priority == IMPORTANT

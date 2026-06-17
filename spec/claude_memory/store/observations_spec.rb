@@ -84,4 +84,23 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "observations" do
       expect(store.tombstone_observation(9999, into_id: 1)).to be false
     end
   end
+
+  describe "#expire_observation" do
+    it "marks the row expired (no consolidation target), preserving it" do
+      id = store.insert_observation(body: "stale info", priority: 3)
+
+      expect(store.expire_observation(id)).to be true
+
+      row = store.observations.where(id: id).first
+      expect(row[:status]).to eq("expired")
+      expect(row[:consolidated_into]).to be_nil
+      expect(row[:reflected_at]).not_to be_nil
+      expect(store.observations.where(id: id).count).to eq(1)
+      expect(store.recent_observations).to be_empty
+    end
+
+    it "returns false when the id does not exist" do
+      expect(store.expire_observation(9999)).to be false
+    end
+  end
 end
