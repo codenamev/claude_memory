@@ -33,13 +33,16 @@ module ClaudeMemory
         lines.join("\n")
       end
 
-      # @return [String] a single "- [🔴 ]body (time ago)" log line
+      # @return [String] a single "- [#id] [🔴 ]body (time ago)" log line. The
+      # id tag lets the reflection step reference an observation for
+      # promote/consolidate; it's omitted when the row carries no id.
       def format_line(obs)
         body = obs[:body].to_s.strip
+        id_tag = obs[:id] ? "[##{obs[:id]}] " : ""
         marker = (obs[:priority] == Domain::Observation::IMPORTANT) ? "#{IMPORTANT_MARKER} " : ""
         ago = Core::RelativeTime.format(obs[:observed_at])
         suffix = ago ? " (#{ago})" : ""
-        "- #{marker}#{body}#{suffix}"
+        "- #{id_tag}#{marker}#{body}#{suffix}"
       end
     end
   end

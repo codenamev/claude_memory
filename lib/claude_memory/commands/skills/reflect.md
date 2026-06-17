@@ -25,7 +25,15 @@ Work in three passes:
 Call `memory.observations` (use `important_only: true` first for the 🔴 entries, then a
 broader pass). Read the log as a narrative of what has happened in this project.
 
-### 2. Promote corroborated observations → facts
+### 2. Consolidate related observations
+
+Where several observations describe the **same thing in different words** (regex dedup only
+catches exact matches), merge them with `memory.consolidate_observations(from_ids: […],
+body: "<synthesis>")`. The synthesized observation inherits the **combined** corroboration of
+its sources — which often tips it over the promotion threshold — and the originals are
+tombstoned (preserved and linked, not deleted). Use the `#id` shown for each observation.
+
+### 3. Promote corroborated observations → facts
 
 The promotion bridge is gated: an observation must have been **corroborated** (sighted
 repeatedly — `corroboration_count` ≥ the threshold) before it can become a fact. This is
@@ -47,7 +55,7 @@ Skip observations that are:
 - already captured as facts (check `memory.recall` / `memory.decisions` first),
 - example/illustrative text rather than a claim about *this* project.
 
-### 3. Report
+### 4. Report
 
 Summarize what you promoted (observation → fact) and what you intentionally left as
 observations and why. Do not delete or rewrite observations — the deterministic Reflector

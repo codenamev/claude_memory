@@ -161,11 +161,15 @@ module ClaudeMemory
         lines = [
           "## Observation Reflection",
           "",
-          "These observations have recurred enough to be worth committing as facts",
-          "(corroboration gate passed). For each that represents a stable truth,",
-          "promote it with `memory.promote_observation(observation_id, predicate, object)`",
-          "— embed a reason in the object (\"… because …\", \"… so that …\"). Skip any that",
-          "are noise or already captured."
+          "**Promote:** these observations have recurred enough to be worth committing",
+          "as facts (corroboration gate passed). For each that represents a stable truth,",
+          "call `memory.promote_observation(observation_id, predicate, object)` — embed a",
+          "reason in the object (\"… because …\", \"… so that …\"). Skip noise / already-captured.",
+          "",
+          "**Consolidate:** if several observations in the log above (by `#id`) describe the",
+          "same thing in different words, merge them with",
+          "`memory.consolidate_observations(from_ids: […], body: \"<synthesis>\")`. Their",
+          "corroboration combines, which can tip the merged observation past the promotion gate."
         ]
 
         candidates.each do |obs|

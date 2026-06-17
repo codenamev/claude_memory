@@ -41,6 +41,15 @@ RSpec.describe ClaudeMemory::Observe::ObservationsRenderer do
       expect(out).to match(/- x \(.+\)/)
     end
 
+    it "tags each line with the observation id when present (for promote/consolidate reference)" do
+      out = described_class.render([obs(body: "x").merge(id: 42)])
+      expect(out).to include("- [#42] x")
+    end
+
+    it "omits the id tag when the row has no id" do
+      expect(described_class.render([obs(body: "x")])).to include("- x")
+    end
+
     it "honors a custom title and can omit the intro" do
       out = described_class.render([obs(body: "x")], title: "Project Observations", intro: false)
       expect(out).to start_with("## Project Observations")

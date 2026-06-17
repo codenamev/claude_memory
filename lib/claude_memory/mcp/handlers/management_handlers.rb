@@ -136,6 +136,37 @@ module ClaudeMemory
           }
         end
 
+        # Semantic reflection: merge several related observations into one
+        # synthesized observation (the Claude-as-reflector pass). Validates the
+        # synthesized body at the border via coerce_observation, then delegates
+        # the atomic merge to the store.
+        def consolidate_observations(args)
+          scope = args["scope"] || "project"
+          store = get_store_for_scope(scope)
+          return {error: "Database not available"} unless store
+
+          from_ids = Array(args["from_ids"]).map(&:to_i).reject(&:zero?).uniq
+          return {error: "from_ids must list at least 2 observation ids"} if from_ids.size < 2
+
+          synthesized = coerce_observation(args)
+          return {error: "body is required"} unless synthesized
+
+          project_path = (scope == "global") ? nil : Configuration.new.project_dir
+          result = store.consolidate_observations(
+            from_ids, body: synthesized[:body], kind: synthesized[:kind],
+            priority: synthesized[:priority], scope: scope, project_path: project_path
+          )
+          return {error: "Need at least 2 active #{scope} observations from that set to consolidate"} unless result
+
+          {
+            success: true,
+            scope: scope,
+            consolidated_into: result[:id],
+            merged: result[:merged],
+            corroboration_count: result[:corroboration_count]
+          }
+        end
+
         def promote(args)
           return {error: "Promote requires StoreManager"} unless @manager
 
