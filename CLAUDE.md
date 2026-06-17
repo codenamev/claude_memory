@@ -150,7 +150,7 @@ Transcripts → Ingest → Index (FTS5)
 The distillation pipeline operates at three levels of depth:
 
 - **Layer 1: NullDistiller** (automatic, regex, free) — Runs in the ingest pipeline on every hook event. Extracts entities, facts, and scope hints using pattern matching. P95 latency < 5ms.
-- **Layer 2: Context Hook Injection** (automatic, LLM, zero extra cost) — At SessionStart, undistilled content is injected into the session via `hookSpecificOutput.additionalContext` with extraction instructions. Claude Code itself acts as the distiller, extracting structured facts at no additional API cost.
+- **Layer 2: Context Hook Injection** (automatic, LLM, zero extra cost) — At SessionStart, undistilled content is injected into the session via `hookSpecificOutput.additionalContext` with extraction instructions. Claude Code itself acts as the distiller, extracting structured facts at no additional API cost. The same prompt also asks Claude to emit episodic **observations** (the Layer-2 Claude-as-observer) in the `observations` field of its `memory.store_extraction` call — coerced/validated at the handler border and persisted via the resolver alongside facts.
 - **Layer 3: `/distill-transcripts` Skill** (manual, on-demand) — Deep extraction triggered by the user. Processes undistilled content with depth-aware prompts (initial extraction, consolidation, contradiction resolution).
 
 New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipeline by tracking which content items have been deeply distilled.

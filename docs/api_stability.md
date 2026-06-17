@@ -134,7 +134,7 @@ All 23 tools registered via `MCP::ToolDefinitions.all`. Argument schemas, return
 | `memory.facts_by_context` | Context | Stable. |
 | `memory.promote` | Management | Stable. |
 | `memory.reject_fact` | Management | Stable since 0.10.0. |
-| `memory.store_extraction` | Management | Argument schema (`facts`, `entities`, `decisions`) stable. |
+| `memory.store_extraction` | Management | Argument schema (`facts`, `entities`, `decisions`) stable. The `observations` field (Layer-2 observer) is **experimental** while the observational layer is built out. |
 | `memory.undistilled` | Distillation | Stable since 0.10.0. |
 | `memory.mark_distilled` | Distillation | Stable since 0.10.0. |
 | `memory.status` | Monitoring | Stable. |

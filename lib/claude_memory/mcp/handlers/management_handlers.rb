@@ -13,6 +13,10 @@ module ClaudeMemory
           entities = (args["entities"] || []).map { |e| symbolize_keys(e) }
           facts = (args["facts"] || []).map { |f| symbolize_keys(f) }
           decisions = (args["decisions"] || []).map { |d| symbolize_keys(d) }
+          # Layer-2 episodic observations. Claude's output is semi-trusted, so
+          # each is coerced and validated at this boundary; invalid rows are
+          # dropped rather than aborting the batch.
+          observations = (args["observations"] || []).filter_map { |o| coerce_observation(o) }
 
           config = Configuration.new
           project_path = config.project_dir
@@ -26,7 +30,8 @@ module ClaudeMemory
             entities: entities,
             facts: facts,
             decisions: decisions,
-            signals: []
+            signals: [],
+            observations: observations
           )
 
           # Guard against the LLM distiller labeling descriptions of external
@@ -52,8 +57,25 @@ module ClaudeMemory
             entities_created: result[:entities_created],
             facts_created: result[:facts_created],
             facts_superseded: result[:facts_superseded],
-            conflicts_created: result[:conflicts_created]
+            conflicts_created: result[:conflicts_created],
+            observations_created: result[:observations_created]
           }
+        end
+
+        # Coerce one Claude-supplied observation into a clean candidate, or nil
+        # when it can't be a usable episodic row. Defaults live here so the
+        # rest of the pipeline never sees a blank body or an out-of-range
+        # priority. Returns a symbol-keyed hash for Resolver#persist_observations.
+        def coerce_observation(raw)
+          obs = symbolize_keys(raw)
+          body = obs[:body].to_s.strip
+          return nil if body.empty?
+
+          kind = Domain::Observation::KINDS.include?(obs[:kind]) ? obs[:kind] : "event"
+          priority = obs[:priority].to_i
+          priority = Domain::Observation::INFO unless (Domain::Observation::IMPORTANT..Domain::Observation::INFO).cover?(priority)
+
+          {body: body, kind: kind, priority: priority}
         end
 
         # Promotion bridge: turn a corroborated observation into a structured

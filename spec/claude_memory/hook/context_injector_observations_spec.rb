@@ -54,6 +54,20 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector, "observations (Block 1)" do
     expect(injector.emitted_observation_count).to eq(0)
   end
 
+  it "instructs Layer-2 to emit observations in the extraction prompt when undistilled content exists" do
+    text = "x" * 400
+    manager.project_store.upsert_content_item(
+      source: "transcript", session_id: "s1",
+      text_hash: Digest::SHA256.hexdigest(text), byte_len: text.bytesize, raw_text: text
+    )
+
+    context = injector.generate_context
+
+    expect(context).to include("## Pending Knowledge Extraction")
+    expect(context).to include("populate `observations`")
+    expect(context).to match(/what happened/i)
+  end
+
   it "surfaces an Observation Reflection section for corroborated, unpromoted observations" do
     id = manager.project_store.insert_observation(body: "use SQLite for storage", priority: 1)
     manager.project_store.increment_corroboration(id, by: 2) # count 3 >= threshold

@@ -76,11 +76,14 @@ module ClaudeMemory
           end
         end
 
+        # Only facts are transformed; every other field must pass through
+        # unchanged (an earlier version silently dropped observations).
         Distill::Extraction.new(
           entities: extraction.entities,
           facts: new_facts,
           decisions: extraction.decisions,
-          signals: extraction.signals
+          signals: extraction.signals,
+          observations: extraction.observations
         )
       end
 
