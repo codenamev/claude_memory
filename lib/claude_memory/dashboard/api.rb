@@ -456,6 +456,10 @@ module ClaudeMemory
         Efficacy::Reporter.report(events, timeframe: {since: since, session_id: session_id})
       end
 
+      def observations
+        Observations.new(@manager).report
+      end
+
       def timeline
         Timeline.new(@manager).days
       end

@@ -398,7 +398,7 @@ Hook commands read JSON payloads from stdin for robustness. Supports `--async` f
 
 Local web UI for inspecting memory state. Started via `claude-memory dashboard` (default port 3377). Reads from both global and project databases; no write side effects from page loads.
 
-The dashboard is a thin web layer over the same `Recall`/`Conflicts`/`Trust`/`Moments`/`Knowledge`/`Reuse`/`Health`/`Timeline` classes the MCP server uses. Each panel is backed by a dedicated module under `lib/claude_memory/dashboard/`; `Dashboard::API` holds HTTP-shape glue and per-endpoint formatting (delegating non-trivial logic to the panel classes).
+The dashboard is a thin web layer over the same `Recall`/`Conflicts`/`Trust`/`Moments`/`Knowledge`/`Reuse`/`Health`/`Timeline`/`Observations` classes the MCP server uses. Each panel is backed by a dedicated module under `lib/claude_memory/dashboard/`; `Dashboard::API` holds HTTP-shape glue and per-endpoint formatting (delegating non-trivial logic to the panel classes). The `Observations` panel (`/api/observations`, Advanced → Observations tab) surfaces the episodic layer: counts by status/kind/priority, corroboration + promotion readiness, a compression ratio (source content tokens ÷ observation tokens), and a recent timeline.
 
 Connections are released after each request — never holds a WAL writer lock open across page loads.
 

@@ -1234,6 +1234,7 @@
   </div>
   <div class="drawer-tabs">
     <div class="drawer-tab active" data-adv="knowledge">Knowledge</div>
+    <div class="drawer-tab" data-adv="observations">Observations</div>
     <div class="drawer-tab" data-adv="overview">Overview</div>
     <div class="drawer-tab" data-adv="facts">Facts</div>
     <div class="drawer-tab" data-adv="explore">Explore</div>
@@ -1251,6 +1252,13 @@
       <span style="color: var(--text-faint); font-size: 11px; margin-left: auto;" id="knowledge-totals"></span>
     </div>
     <div class="knowledge-body" id="knowledge-body"></div>
+  </div>
+
+  <div class="drawer-panel" id="adv-observations">
+    <div id="obs-summary" class="adv-card"></div>
+    <div class="adv-card" style="padding: 0;">
+      <div id="obs-recent"></div>
+    </div>
   </div>
 
   <div class="drawer-panel" id="adv-overview">
@@ -2180,7 +2188,32 @@ function switchAdvTab(name) {
 
 // ==================== Advanced drawer loaders ====================
 async function loadAdvanced() {
-  await Promise.all([loadKnowledge(), loadOverview(), loadFacts(), loadEfficacy(), loadConflicts(), loadActivityLog(), loadTelemetry()]);
+  await Promise.all([loadKnowledge(), loadObservations(), loadOverview(), loadFacts(), loadEfficacy(), loadConflicts(), loadActivityLog(), loadTelemetry()]);
+}
+
+async function loadObservations() {
+  const data = await api('observations');
+  const t = data.totals || {}, c = data.compression || {}, corr = data.corroboration || {};
+  const summary = document.getElementById('obs-summary');
+  if (summary) {
+    summary.innerHTML = `
+      <h3>Episodic observations <span style="color: var(--text-faint); font-weight: normal;">— what happened</span></h3>
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-dim); font-size: 13px;">
+        <span><span class="big">${(t.active || 0).toLocaleString()}</span> active</span>
+        <span>${t.consolidated || 0} consolidated · ${t.expired || 0} expired · ${t.promoted || 0} promoted</span>
+        <span>${corr.promotable || 0} ready to promote (max ×${corr.max || 0})</span>
+        <span>compression ${c.ratio ? c.ratio + '×' : '—'} <span style="color: var(--text-faint);">(${(c.source_tokens || 0).toLocaleString()} → ${(c.observation_tokens || 0).toLocaleString()} tok)</span></span>
+      </div>`;
+  }
+  const recentEl = document.getElementById('obs-recent');
+  const recent = data.recent || [];
+  if (recentEl) {
+    recentEl.innerHTML = recent.length ? recent.map(o => `
+      <div style="padding: 8px 12px; border-bottom: 1px solid var(--border);">
+        <span style="color: var(--text-faint); font-size: 11px;">#${o.id} · ${esc(o.kind)} · p${o.priority}${o.corroboration_count > 1 ? ' · ×' + o.corroboration_count : ''} · ${esc(o.observed_ago || '')}</span>
+        <div style="color: var(--text); font-size: 13px;">${o.priority === 1 ? '🔴 ' : ''}${esc(o.body || '')}</div>
+      </div>`).join('') : '<div style="padding: 12px; color: var(--text-faint);">No observations yet — they accrue from sessions as the Observer runs.</div>';
+  }
 }
 
 async function loadTelemetry() {
