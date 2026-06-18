@@ -178,6 +178,73 @@ Exit code is `0` when `ok: true`, `1` otherwise. `--no-exit` always returns `0`.
 3. Clean up: `claude-memory reject` the historical disputed/superseded rows (or accept them as historical record).
 4. Re-audit.
 
+### C011 — Orphaned observations
+
+**Severity:** warn
+
+**Scope:** both the project and global DBs (observations may be scoped either way).
+
+**Triggered when:** an observation has `source_content_item_id` set but no `content_items` row with that id exists.
+
+**Why it matters:** An observation's `source_content_item_id` is its provenance link back to the transcript chunk it was distilled from. A dangling pointer means the source row was pruned (or never existed), so the observation can no longer be explained — breaking the same provenance guarantee facts enjoy. Observations with a `nil` source (e.g. consolidated ones synthesized from several sources) are *not* flagged.
+
+**Remediation:**
+- Inspect with `memory.observations` (or the dashboard Observations tab).
+- The table is append-only — do **not** delete. If the provenance is genuinely unrecoverable, let the Reflector consolidate or expire the row on the next PreCompact/SessionEnd pass.
+
+### C012 — Observation promotion consistency
+
+**Severity:** error
+
+**Scope:** both DBs.
+
+**Triggered when:** any of the following promotion-state invariants is violated —
+- `promoted_at` is set but `promoted_fact_id` is `NULL`;
+- `promoted_fact_id` points at a fact that does not exist;
+- `promoted_fact_id` points at a fact that is **not** active (rejected/superseded);
+- `promoted_fact_id` is set but `promoted_at` is `NULL`.
+
+**Why it matters:** Promotion is meant to be atomic — `mark_observation_promoted` sets both `promoted_at` and `promoted_fact_id` pointing at a freshly-created, active fact. Half-set state means the write ran partially, or the target fact was later rejected/superseded, leaving the observation pointing at nothing usable. The promotion bridge keys off these columns, so an inconsistent row either re-promotes (duplicate facts) or is silently stuck.
+
+**Remediation:**
+1. `claude-memory explain <fact_id>` on the `promoted_fact_id` to see why the fact is missing/inactive.
+2. If the fact was intentionally rejected, re-open the observation for re-promotion via `memory.promote_observation`.
+3. If `mark_observation_promoted` half-ran, re-run promotion so both columns are set together.
+
+### C013 — Observation tombstone-chain validity
+
+**Severity:** error
+
+**Scope:** both DBs.
+
+**Triggered when:** any of the following tombstone invariants is violated —
+- `consolidated_into` points at a non-existent observation;
+- `consolidated_into` is a self-link (`consolidated_into == id`);
+- a row is `status='active'` yet carries a `consolidated_into` target;
+- a row is `status='consolidated'` yet has no `consolidated_into` keeper.
+
+**Why it matters:** Supersession is append-only: a merged-away observation gets `status='consolidated'` and `consolidated_into` pointing at the surviving keeper, preserving lineage instead of hard-deleting (unlike Mastra's lossy drop). A broken chain corrupts that lineage — recall could surface a tombstoned row, or a consolidated row could orphan its history. A self-link or active-but-tombstoned row is a Reflector bug, not user error.
+
+**Remediation:**
+- Inspect with `memory.observations`.
+- Re-running the deterministic Reflector (fires on PreCompact/SessionEnd) re-derives consolidation for dangling links.
+- A self-link or `active` + `consolidated_into` row signals a Reflector defect — file it rather than hand-editing the append-only table.
+
+### C014 — Observation status / corroboration sanity
+
+**Severity:** warn
+
+**Scope:** both DBs.
+
+**Triggered when:** an observation has a `status` outside `active`/`consolidated`/`expired`, or a `corroboration_count` less than 1.
+
+**Why it matters:** Every observation should carry a known lifecycle status and at least one sighting (a fresh insert counts as 1; the migration default is 1). An unknown status means a migration or an external writer bypassed `insert_observation`; a `corroboration_count < 1` means `increment_corroboration` math went negative. Both break downstream behavior — recall filters key off `status`, and the promotion gate keys off `corroboration_count`.
+
+**Remediation:**
+- Inspect with `memory.observations`.
+- For a bad `corroboration_count`, re-derive sighting counts via the Reflector's dedup pass.
+- For an unknown status, find the writer that bypassed `insert_observation` (the only sanctioned insert path).
+
 ## Adding a new check
 
 The audit is extensible by design.

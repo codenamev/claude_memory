@@ -20,6 +20,10 @@ module ClaudeMemory
         bare_conclusion_rate
         project_starvation
         auto_memory_unimported
+        orphaned_observations
+        observation_promotion_consistency
+        observation_tombstone_chain
+        observation_status_corroboration
       ].freeze
 
       Result = Data.define(:findings, :stats) do
