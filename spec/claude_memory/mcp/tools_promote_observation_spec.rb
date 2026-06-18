@@ -35,6 +35,17 @@ RSpec.describe ClaudeMemory::MCP::Tools, "memory.promote_observation" do
     expect(store.promotion_candidates(min_corroboration: 2)).to be_empty
   end
 
+  it "links the promoted fact back to its observation via memory.explain" do
+    id = corroborated_observation
+    result = tools.call("memory.promote_observation", {
+      "observation_id" => id, "predicate" => "decision",
+      "object" => "claude_memory uses SQLite because embedded and zero-config"
+    })
+
+    explain = tools.call("memory.explain", {"fact_id" => result[:fact_id], "scope" => "project"})
+    expect(explain[:promoted_from_observations].map { |o| o[:id] }).to include(id)
+  end
+
   it "refuses a one-off observation (anti-hallucination gate)" do
     id = store.insert_observation(body: "seen once", kind: "decision", priority: 1) # count 1
 

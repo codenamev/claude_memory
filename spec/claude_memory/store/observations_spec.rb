@@ -120,6 +120,23 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "observations" do
       expect(row[:promoted_at]).not_to be_nil
     end
 
+    describe "#observations_for_fact" do
+      it "returns observations promoted into the given fact (reverse of promoted_fact_id)" do
+        a = store.insert_observation(body: "use SQLite", kind: "decision", priority: 1)
+        b = store.insert_observation(body: "elsewhere", kind: "event", priority: 3)
+        store.mark_observation_promoted(a, fact_id: 7)
+        store.mark_observation_promoted(b, fact_id: 9)
+
+        rows = store.observations_for_fact(7)
+        expect(rows.map { |r| r[:id] }).to eq([a])
+        expect(rows.first).to include(:body, :kind, :corroboration_count, :observed_at)
+      end
+
+      it "returns [] when no observations promoted into the fact" do
+        expect(store.observations_for_fact(123)).to be_empty
+      end
+    end
+
     describe "#promotion_candidates" do
       it "returns only active, unpromoted observations at/above the corroboration threshold" do
         corroborated = store.insert_observation(body: "corroborated", priority: 1)
