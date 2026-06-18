@@ -27,7 +27,8 @@ module ClaudeMemory
       # @param project_path [String, nil] project path for scoped facts
       # @param scope [String] default scope for facts ("project" or "global")
       # @return [Hash] counts keyed by :entities_created, :facts_created,
-      #   :facts_superseded, :conflicts_created, :provenance_created
+      #   :facts_superseded, :conflicts_created, :provenance_created,
+      #   :observations_created, plus :fact_ids (see below)
       def apply(extraction, content_item_id: nil, occurred_at: nil, project_path: nil, scope: "project")
         occurred_at ||= Time.now.utc.iso8601
 
@@ -41,7 +42,8 @@ module ClaudeMemory
           # Ids of the facts each input touched (insert/reinforce/conflict),
           # positionally aligned with extraction.facts — so callers like the
           # promotion bridge don't have to re-query for what the resolver
-          # already knows.
+          # already knows. Entries are `nil` where the fact was discarded or
+          # lost a conflict, so consumers wanting only real ids must `.compact`.
           fact_ids: []
         }
 

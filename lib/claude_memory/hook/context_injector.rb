@@ -156,13 +156,19 @@ module ClaudeMemory
       # Automatic semantic reflection (Phase 4): surface observations that have
       # been corroborated past the promotion threshold so Claude can promote
       # them to facts inline, this session, at no extra API cost.
+      # Project store only: the reflection nudge renders bare `[obs #<id>]` and
+      # `memory.promote_observation`/`consolidate_observations` default to the
+      # project scope. Observation ids autoincrement *per-DB*, so mixing in
+      # global-store candidates would route a promote call to the wrong DB.
+      # Observations are written project-scoped on the ingest path today; if a
+      # global observation writer is ever added, scope-tag the nudge line
+      # (mirror @emitted_facts_by_scope) before broadening this.
       def fetch_promotion_candidates(limit)
-        stores = []
-        stores << @manager.project_store if @manager.project_store
-        stores << @manager.global_store if @manager.global_store
+        store = @manager.project_store
+        return [] unless store
 
-        stores
-          .flat_map { |s| s.promotion_candidates(min_corroboration: Domain::Observation::PROMOTION_THRESHOLD, limit: limit) }
+        store
+          .promotion_candidates(min_corroboration: Domain::Observation::PROMOTION_THRESHOLD, limit: limit)
           .sort_by { |o| -(o[:corroboration_count] || 0) }
           .first(limit)
       rescue => e

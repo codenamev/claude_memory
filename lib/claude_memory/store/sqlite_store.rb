@@ -802,24 +802,30 @@ module ClaudeMemory
       #   fewer than two of the ids are active in this scope
       def consolidate_observations(from_ids, body:, kind: "event", priority: 3, scope: "project",
         project_path: nil, source_content_item_id: nil, observed_at: nil)
-        sources = observations
-          .where(id: from_ids, status: "active", scope: scope)
-          .select(:id, :corroboration_count)
-          .all
-        return nil if sources.size < 2
-
-        now = Time.now.utc.iso8601
-        combined = sources.sum { |s| s[:corroboration_count] || 1 }
-
         with_retry("consolidate_observations") do
           @db.transaction do
+            # Read the source set *inside* the transaction so the rows we sum
+            # corroboration from are the same rows we tombstone — otherwise two
+            # reflectors (PreCompact + SessionEnd) could each read the same
+            # active sources and double-count or re-tombstone them.
+            sources = observations
+              .where(id: from_ids, status: "active", scope: scope)
+              .select(:id, :corroboration_count)
+              .all
+            next nil if sources.size < 2
+
+            now = Time.now.utc.iso8601
+            combined = sources.sum { |s| s[:corroboration_count] || 1 }
+
             new_id = observations.insert(
               body: body, kind: kind, priority: priority, scope: scope, project_path: project_path,
               source_content_item_id: source_content_item_id,
               token_count: (body.length / 4.0).ceil, corroboration_count: combined,
               status: "active", observed_at: observed_at || now, created_at: now
             )
-            observations.where(id: sources.map { |s| s[:id] })
+            # Re-assert `active` on the update so a source consolidated by a
+            # racing writer between read and write is not tombstoned twice.
+            observations.where(id: sources.map { |s| s[:id] }, status: "active")
               .update(status: "consolidated", consolidated_into: new_id, reflected_at: now)
             {id: new_id, merged: sources.size, corroboration_count: combined}
           end

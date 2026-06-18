@@ -160,4 +160,67 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "observations" do
       end
     end
   end
+
+  describe "#consolidate_observations" do
+    it "merges >=2 active sources, sums corroboration, and tombstones each into the new row" do
+      a = store.insert_observation(body: "uses sqlite for storage", priority: 1)
+      b = store.insert_observation(body: "the store is sqlite-backed", priority: 1)
+      store.increment_corroboration(a, by: 2) # -> 3
+      store.increment_corroboration(b, by: 1) # -> 2
+
+      result = store.consolidate_observations([a, b], body: "storage is SQLite-backed")
+
+      expect(result[:merged]).to eq(2)
+      expect(result[:corroboration_count]).to eq(5)
+
+      new_id = result[:id]
+      new_row = store.observations.where(id: new_id).first
+      expect(new_row[:status]).to eq("active")
+      expect(new_row[:corroboration_count]).to eq(5)
+
+      [a, b].each do |id|
+        row = store.observations.where(id: id).first
+        expect(row[:status]).to eq("consolidated")
+        expect(row[:consolidated_into]).to eq(new_id)
+        expect(row[:reflected_at]).not_to be_nil
+      end
+
+      # only the synthesized row remains in active recall
+      expect(store.recent_observations.map { |r| r[:id] }).to eq([new_id])
+    end
+
+    it "returns nil and writes nothing when fewer than two ids are active in scope" do
+      only = store.insert_observation(body: "lonely observation", priority: 2)
+      before = store.observations.count
+
+      expect(store.consolidate_observations([only], body: "merged")).to be_nil
+      expect(store.observations.count).to eq(before)
+      expect(store.observations.where(id: only).get(:status)).to eq("active")
+    end
+
+    it "needs two active sources in the requested scope (ignores other-scope ids)" do
+      p1 = store.insert_observation(body: "project one", scope: "project")
+      g1 = store.insert_observation(body: "global one", scope: "global")
+
+      expect(store.consolidate_observations([p1, g1], body: "merged", scope: "project")).to be_nil
+      expect(store.observations.where(id: p1).get(:status)).to eq("active")
+      expect(store.observations.where(id: g1).get(:status)).to eq("active")
+    end
+
+    it "re-reads the source set so a source already consolidated by a prior call is not re-tombstoned" do
+      a = store.insert_observation(body: "first source", priority: 1)
+      b = store.insert_observation(body: "second source", priority: 1)
+      c = store.insert_observation(body: "third source", priority: 1)
+
+      first = store.consolidate_observations([a, b], body: "a+b merged")
+      # `a` is now consolidated; a second call still naming the stale `a` sees
+      # only `c` active in the set, falls under the 2-source floor, and returns
+      # nil — `a` keeps its original consolidation target, not c's.
+      second = store.consolidate_observations([a, c], body: "a+c merged")
+
+      expect(second).to be_nil
+      expect(store.observations.where(id: a).get(:consolidated_into)).to eq(first[:id])
+      expect(store.observations.where(id: c).get(:status)).to eq("active")
+    end
+  end
 end
