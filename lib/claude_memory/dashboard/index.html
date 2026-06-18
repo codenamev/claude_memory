@@ -163,6 +163,39 @@
   .delta.flat { color: var(--text-dim); }
   .moments-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
 
+  /* Observations sidebar panel */
+  .obs-headline {
+    display: flex;
+    gap: 14px;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .obs-headline .n {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .obs-headline .obs-stat { display: flex; flex-direction: column; gap: 2px; }
+  .obs-headline .obs-stat-n { font-size: 18px; font-weight: 600; color: var(--text); line-height: 1; }
+  .obs-headline .obs-stat-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+  .obs-sub { font-size: 12px; color: var(--text-dim); margin: 8px 0; }
+  .obs-breakdowns { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .obs-breakdown-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin-bottom: 4px; }
+  .obs-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .obs-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .obs-badge .obs-badge-n { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+
   /* Knowledge-base sidebar panel */
   .kb-totals {
     display: flex;
@@ -1157,6 +1190,13 @@
       <div class="moments-sub" id="moments-sub"></div>
     </div>
 
+    <div class="panel" id="panel-observations">
+      <div class="panel-label">Episodic observations
+        <span class="panel-hint" title="The 'what happened' log that complements facts ('what is true'). Observations accrue as the Observer runs, and become facts once corroborated ≥2×.">ⓘ</span>
+      </div>
+      <div id="obs-panel-body"></div>
+    </div>
+
     <div class="panel" id="panel-review">
       <div class="panel-label">Needs review</div>
       <div class="review-rows" id="review-rows"></div>
@@ -1452,7 +1492,77 @@ async function api(path, params = {}) {
 
 // ==================== Load cycle ====================
 async function loadAll() {
-  await Promise.all([loadHealth(), loadTrust(), loadMoments(), loadKnowledgePanel(), loadReusePanel()]);
+  await Promise.all([loadHealth(), loadTrust(), loadMoments(), loadKnowledgePanel(), loadReusePanel(), loadObservationsPanel()]);
+}
+
+// Sidebar "Episodic observations" panel — headline numbers + breakdowns.
+// The richer recent timeline lives in the Advanced drawer (loadObservations).
+async function loadObservationsPanel() {
+  const data = await api('observations');
+  const t = data.totals || {}, c = data.compression || {}, corr = data.corroboration || {};
+  const body = document.getElementById('obs-panel-body');
+  if (!body) return;
+
+  const active = t.active || 0;
+  if (!active) {
+    body.innerHTML = `
+      <div class="feed-empty" style="padding: 24px 16px; text-align: left;">
+        <h3>No observations yet</h3>
+        <p>The episodic log — "what happened" — accrues as the Observer runs over your sessions. Once an observation is corroborated ≥2×, it becomes a fact.</p>
+      </div>`;
+    return;
+  }
+
+  const promotable = corr.promotable || 0;
+  body.innerHTML = `
+    <div class="obs-headline">
+      <div class="obs-stat">
+        <span class="n">${active.toLocaleString()}</span>
+        <span class="obs-stat-label">active</span>
+      </div>
+      <div class="obs-stat">
+        <span class="obs-stat-n">${promotable.toLocaleString()}</span>
+        <span class="obs-stat-label">ready to promote</span>
+      </div>
+      <div class="obs-stat">
+        <span class="obs-stat-n">${c.ratio ? c.ratio + '×' : '—'}</span>
+        <span class="obs-stat-label">compression</span>
+      </div>
+    </div>
+    <div class="obs-sub">${promotable
+      ? `${promotable.toLocaleString()} ready to promote — observations corroborated ≥2× become facts (max seen ×${corr.max || 0}).`
+      : `None ready yet — observations corroborated ≥2× become facts (max seen ×${corr.max || 0}).`}</div>
+    <div class="obs-breakdowns">
+      ${renderObsBreakdown('By priority', priorityBadges(data.by_priority || {}))}
+      ${renderObsBreakdown('By kind', kindBadges(data.by_kind || {}))}
+    </div>`;
+}
+
+const PRIORITY_MARKERS = {1: '🔴', 2: '🟡', 3: '🟢'};
+const PRIORITY_LABELS = {1: 'important', 2: 'maybe', 3: 'info'};
+
+function priorityBadges(byPriority) {
+  return [1, 2, 3]
+    .filter(p => byPriority[p] || byPriority[String(p)])
+    .map(p => {
+      const n = byPriority[p] || byPriority[String(p)] || 0;
+      return `<span class="obs-badge">${PRIORITY_MARKERS[p]} ${PRIORITY_LABELS[p]} <span class="obs-badge-n">${n}</span></span>`;
+    }).join('');
+}
+
+function kindBadges(byKind) {
+  return Object.entries(byKind)
+    .sort((a, b) => b[1] - a[1])
+    .map(([kind, n]) => `<span class="obs-badge">${esc(kind)} <span class="obs-badge-n">${n}</span></span>`)
+    .join('');
+}
+
+function renderObsBreakdown(label, badgesHtml) {
+  if (!badgesHtml) return '';
+  return `<div>
+    <div class="obs-breakdown-label">${label}</div>
+    <div class="obs-badges">${badgesHtml}</div>
+  </div>`;
 }
 
 async function loadKnowledgePanel() {
@@ -2194,6 +2304,7 @@ async function loadAdvanced() {
 async function loadObservations() {
   const data = await api('observations');
   const t = data.totals || {}, c = data.compression || {}, corr = data.corroboration || {};
+  const promotable = corr.promotable || 0;
   const summary = document.getElementById('obs-summary');
   if (summary) {
     summary.innerHTML = `
@@ -2201,8 +2312,12 @@ async function loadObservations() {
       <div style="display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-dim); font-size: 13px;">
         <span><span class="big">${(t.active || 0).toLocaleString()}</span> active</span>
         <span>${t.consolidated || 0} consolidated · ${t.expired || 0} expired · ${t.promoted || 0} promoted</span>
-        <span>${corr.promotable || 0} ready to promote (max ×${corr.max || 0})</span>
+        <span>${promotable} ready to promote (max ×${corr.max || 0}) — observations corroborated ≥2× become facts</span>
         <span>compression ${c.ratio ? c.ratio + '×' : '—'} <span style="color: var(--text-faint);">(${(c.source_tokens || 0).toLocaleString()} → ${(c.observation_tokens || 0).toLocaleString()} tok)</span></span>
+      </div>
+      <div class="obs-breakdowns" style="margin-top: 12px;">
+        ${renderObsBreakdown('By priority', priorityBadges(data.by_priority || {}))}
+        ${renderObsBreakdown('By kind', kindBadges(data.by_kind || {}))}
       </div>`;
   }
   const recentEl = document.getElementById('obs-recent');
@@ -2211,8 +2326,12 @@ async function loadObservations() {
     recentEl.innerHTML = recent.length ? recent.map(o => `
       <div style="padding: 8px 12px; border-bottom: 1px solid var(--border);">
         <span style="color: var(--text-faint); font-size: 11px;">#${o.id} · ${esc(o.kind)} · p${o.priority}${o.corroboration_count > 1 ? ' · ×' + o.corroboration_count : ''} · ${esc(o.observed_ago || '')}</span>
-        <div style="color: var(--text); font-size: 13px;">${o.priority === 1 ? '🔴 ' : ''}${esc(o.body || '')}</div>
-      </div>`).join('') : '<div style="padding: 12px; color: var(--text-faint);">No observations yet — they accrue from sessions as the Observer runs.</div>';
+        <div style="color: var(--text); font-size: 13px;">${PRIORITY_MARKERS[o.priority] ? PRIORITY_MARKERS[o.priority] + ' ' : ''}${esc(o.body || '')}</div>
+      </div>`).join('') : `
+      <div class="feed-empty" style="text-align: left;">
+        <h3>No observations yet</h3>
+        <p>The episodic log — "what happened" — accrues from your sessions as the Observer runs. Once an observation is corroborated ≥2×, it gets promoted into a fact.</p>
+      </div>`;
   }
 }
 
