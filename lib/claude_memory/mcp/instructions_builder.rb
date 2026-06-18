@@ -125,6 +125,7 @@ module ClaudeMemory
           - Before refactoring: call memory.decisions to understand why past choices were made
           - When asked about preferences: global facts store user environment and style preferences across all projects
           - When adding to the codebase: recall which files and patterns to follow (memory knows correct paths and relationships)
+          - When reviewing what happened or curating memory: call memory.observations to read the episodic log and surface corroborated patterns worth promoting to facts
         GUIDANCE
       end
 

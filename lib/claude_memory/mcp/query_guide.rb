@@ -87,6 +87,34 @@ module ClaudeMemory
         - Use after: performing LLM-based fact extraction on undistilled content
         - Cost: ~100 tokens per call
 
+        ### Tier 6: Episodic Observation Management
+
+        Observations are the episodic "what happened" log that complements facts
+        ("what is true"). They accrue automatically; these tools let you inspect
+        and curate them. The `/reflect` skill wraps the full survey→consolidate→
+        promote workflow if you want it guided.
+
+        **memory.observations** — Read the episodic observation log
+        - Use for: surveying recent narrative ("what happened"), spotting patterns
+          that recur enough to become facts, checking promotion readiness
+        - Returns: observations with status/kind/priority, corroboration_count,
+          and promoted_fact_id where promoted
+        - Cost: ~200-500 tokens per call
+
+        **memory.promote_observation** — Promote a corroborated observation to a fact
+        - Use when: an observation has been corroborated (seen ≥ 2 times) and
+          represents a stable truth worth committing as a structured fact
+        - Gate: refuses uncorroborated or already-promoted observations — this is
+          the anti-hallucination defense against one-off doc/example text
+        - Embed a reason in the object ("… because …", "… so that …")
+        - Cost: ~200 tokens per call
+
+        **memory.consolidate_observations** — Merge related observations into one
+        - Use when: several observations describe the same thing in different words
+        - Effect: corroboration counts combine (which can tip the merged row past
+          the promotion gate); sources are tombstoned (preserved, not deleted)
+        - Cost: ~200 tokens per call
+
         ## Recommended Workflow
 
         1. **Start broad**: `memory.recall` or shortcut tools (decisions/conventions/architecture)
