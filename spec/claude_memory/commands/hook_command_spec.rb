@@ -149,6 +149,20 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
         expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
       end
 
+      it "on PreCompact injects only the reflection nudge, not the full snapshot" do
+        store = ClaudeMemory::Store::SQLiteStore.new(db_path)
+        id = store.insert_observation(body: "use SQLite for storage", priority: 1)
+        store.increment_corroboration(id, by: 2) # corroborated -> promotion candidate
+        store.close
+
+        stdin.string = JSON.generate({"hook_event_name" => "PreCompact"})
+        command.call(["context", "--db", db_path])
+
+        context = JSON.parse(stdout.string).dig("hookSpecificOutput", "additionalContext").to_s
+        expect(context).to include("## Observation Reflection")
+        expect(context).not_to include("## Decisions")
+      end
+
       it "outputs JSON with hookSpecificOutput when facts exist" do
         # Create a fact first
         store = ClaudeMemory::Store::SQLiteStore.new(db_path)

@@ -90,6 +90,19 @@ module ClaudeMemory
         sections.join("\n")
       end
 
+      # Reflection-only context for PreCompact (context pressure) — just the
+      # promote/consolidate instructions for corroborated/related observations.
+      # PreCompact is the analog of Mastra's token-threshold reflection trigger;
+      # at compaction we nudge the Claude-as-reflector pass rather than
+      # re-inject the full snapshot (which would add tokens as the window fills).
+      # @return [String, nil]
+      def reflection_context
+        candidates = fetch_promotion_candidates(MAX_PROMOTION_CANDIDATES)
+        return nil if candidates.empty?
+
+        format_observation_reflection(candidates)
+      end
+
       private
 
       def fresh_session?
