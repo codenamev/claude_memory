@@ -65,7 +65,7 @@ module ClaudeMemory
         return zero_vector if tokens.empty?
 
         # Build term frequency map
-        tf_map = tokens.each_with_object(Hash.new(0)) { |token, h| h[token] += 1 }
+        tf_map = tokens.tally
 
         # Normalize term frequencies
         max_tf = tf_map.values.max.to_f

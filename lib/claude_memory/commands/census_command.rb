@@ -138,7 +138,7 @@ module ClaudeMemory
 
         predicates = db[:facts].select(:predicate, :status).group_and_count(:predicate, :status).all
           .each_with_object(Hash.new { |h, k| h[k] = Hash.new(0) }) do |row, acc|
-            acc[row[:predicate].to_s][row[:status].to_s] += row[:count].to_i
+          acc[row[:predicate].to_s][row[:status].to_s] += row[:count].to_i
         end
 
         entity_types = db[:entities].group_and_count(:type).all.each_with_object(Hash.new(0)) do |row, acc|

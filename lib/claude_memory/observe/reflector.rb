@@ -25,7 +25,7 @@ module ClaudeMemory
       DEFAULT_INFO_TTL_DAYS = 30
 
       # @return [Struct] counts from one reflection pass
-      Result = Struct.new(:deduped, :expired, keyword_init: true) do
+      Result = Struct.new(:deduped, :expired) do
         def total
           deduped + expired
         end

@@ -39,6 +39,8 @@ RSpec.describe "Error Handling Patterns Eval", :eval do
   end
 
   def stub_claude_response_with_memory
+    # standard:disable Lint/InterpolationCheck -- the #{...} here is literal text
+    # inside a generated Ruby *code sample*, not a string to interpolate.
     stub_success_response(
       "Following the project's error handling patterns:\n\n" \
       "```ruby\n" \
@@ -58,9 +60,11 @@ RSpec.describe "Error Handling Patterns Eval", :eval do
       "- Uses explicit error checking",
       session_id: "stub-session-error-memory"
     )
+    # standard:enable Lint/InterpolationCheck
   end
 
   def stub_claude_response_without_memory
+    # standard:disable Lint/InterpolationCheck -- literal #{...} in a code sample
     stub_success_response(
       "Here's a typical Ruby error handling approach:\n\n" \
       "```ruby\n" \
@@ -78,6 +82,7 @@ RSpec.describe "Error Handling Patterns Eval", :eval do
       "This uses standard Ruby exception handling with rescue blocks.",
       session_id: "stub-session-error-baseline"
     )
+    # standard:enable Lint/InterpolationCheck
   end
 
   describe "with memory populated" do

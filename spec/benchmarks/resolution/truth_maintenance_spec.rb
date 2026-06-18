@@ -3,7 +3,7 @@
 require_relative "../benchmark_helper"
 
 module BenchmarkHelpers
-  Extraction = Struct.new(:entities, :facts, keyword_init: true)
+  Extraction = Struct.new(:entities, :facts)
 end
 
 RSpec.describe "Truth Maintenance", :benchmark do
