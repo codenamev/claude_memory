@@ -114,7 +114,7 @@ Renaming or repurposing a code is a major-version change.
 
 ## 3. Public MCP tool surface
 
-All 23 tools registered via `MCP::ToolDefinitions.all`. Argument schemas, return shapes (both `content` and `structuredContent`), and tool-annotation hints (`readOnlyHint`, `idempotentHint`, `destructiveHint`) are **stable** for the listed tools.
+All 28 tools registered via `MCP::ToolDefinitions.all` — 25 stable + 3 experimental (the observational-layer tools below). Argument schemas, return shapes (both `content` and `structuredContent`), and tool-annotation hints (`readOnlyHint`, `idempotentHint`, `destructiveHint`) are **stable** for the listed stable tools.
 
 ### Stable MCP tools
 
@@ -152,9 +152,9 @@ These are registered in `MCP::ToolDefinitions.all` but **not yet covered by the 
 
 | Tool | Group | Status |
 |---|---|---|
-| `memory.observations` | Observational layer | Experimental (unreleased). Read-only listing of episodic observations. |
-| `memory.promote_observation` | Observational layer | Experimental (unreleased). Promotes a corroborated observation into a fact; refuses uncorroborated ones (anti-hallucination gate). Args/shape may change. |
-| `memory.consolidate_observations` | Observational layer | Experimental (unreleased). Merges related observations into one synthesized row (corroboration combines, sources tombstoned). Args/shape may change. |
+| `memory.observations` | Observational layer | Experimental (0.13.0+). Read-only listing of episodic observations by status/kind/priority with corroboration counts. Return shape may change. |
+| `memory.promote_observation` | Observational layer | Experimental (0.13.0+). Promotes a corroborated observation (≥2 sightings) into a fact; refuses uncorroborated or already-promoted ones (anti-hallucination gate). Args/shape may change. |
+| `memory.consolidate_observations` | Observational layer | Experimental (0.13.0+). Merges related observations into one synthesized row (corroboration combines, sources tombstoned via `consolidated_into`). Args/shape may change. |
 
 ### Stability of tool responses
 
@@ -265,7 +265,7 @@ If you need a feature from one of the internal classes, **open an issue** so we 
 
 ### Schema migrations
 
-Schema is at v20 (unreleased; v18 shipped in 0.12.0) with 20 migrations under `db/migrations/`. Migrations remain forward-compatible per the round-trip-spec convention (`feedback_round_trip_migration_specs.md`): each release's specs verify that DBs from the prior 3 schema boundaries can be migrated into the current schema without data loss.
+Schema is at v20 (v18 shipped in 0.12.0; v19–v20 add the observational `observations` table in 0.13.0) with 20 migrations under `db/migrations/`. Migrations remain forward-compatible per the round-trip-spec convention (`feedback_round_trip_migration_specs.md`): each release's specs verify that DBs from the prior 3 schema boundaries can be migrated into the current schema without data loss.
 
 **What's stable:**
 

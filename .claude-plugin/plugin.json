@@ -1,7 +1,7 @@
 {
   "name": "claude-memory",
   "version": "0.12.1",
-  "description": "Long-term memory for Claude Code. Recalls architecture, conventions, and decisions across sessions — so Claude explains your codebase without file traversal, follows your patterns, and never re-asks what it already learned.",
+  "description": "Long-term memory for Claude Code. Recalls architecture, conventions, and decisions across sessions, plus an episodic observation log of what happened — so Claude explains your codebase without file traversal, follows your patterns, learns from corrections, and never re-asks what it already learned.",
   "author": {
     "name": "Valentino Stoll",
     "email": "v@codenamev.com"

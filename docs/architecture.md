@@ -14,20 +14,22 @@ ClaudeMemory is architected using Domain-Driven Design (DDD) principles with cle
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
 │                   Core Domain Layer                          │
-│  Domain Models: Fact, Entity, Provenance, Conflict          │
+│  Domain Models: Fact, Entity, Provenance, Conflict,         │
+│                 Observation (episodic)                       │
 │  Value Objects: SessionId, TranscriptPath, FactId           │
 │  Null Objects: NullFact, NullExplanation                    │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 Business Logic Layer                         │
-│  Recall → Resolve → Distill → Ingest → Publish             │
-│  Sweep → Embeddings → MCP → Hook                           │
+│  Recall → Resolve (semantic) → Distill → Ingest → Publish  │
+│  Observe → Reflect (episodic) → Sweep → Embeddings →       │
+│  MCP → Hook                                                  │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 Infrastructure Layer                         │
-│  Store (SQLite v17 + WAL) → FileSystem → Index (FTS5+Vector)│
+│  Store (SQLite v20 + WAL) → FileSystem → Index (FTS5+Vector)│
 │  Templates                                                   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -129,10 +131,19 @@ end
 - `DualQueryTemplate`: Query template handling for dual-database queries
 
 #### Resolve (`resolve/`)
-- Truth maintenance and conflict resolution
+- Truth maintenance and conflict resolution (the **semantic** "what is true" layer)
 - **Transaction safety**: Multi-step operations wrapped in DB transactions
 - PredicatePolicy: Controls single vs. multi-value predicates
 - Handles supersession and conflict detection
+- Also persists observations from the extraction inside the same transaction (see Observe & Reflect)
+
+#### Observe & Reflect (`observe/`)
+- The **episodic** "what happened" layer, complementing the semantic fact store
+- **Observer**: `NullDistiller` emits high-precision Layer-1 observations (regex); Claude-as-observer enriches them via the SessionStart context hook (Layer-2, no extra API cost)
+- **Reflector** (`Observe::Reflector`): deterministic dedup + TTL-expiry of info-level observations runs on `PreCompact`/`SessionEnd`; semantic consolidation (Claude-as-reflector) rides the next turn's context hook
+- **Append-only/tombstoning**: superseded observations are linked via `consolidated_into`, never deleted — preserving provenance
+- **Promotion bridge**: observations are promoted to facts only after corroboration (≥2 sightings) — an anti-hallucination gate
+- `ObservationsRenderer` formats the injected log; `Domain::Observation` is the immutable value object
 
 #### Distill (`distill/`)
 - Extracts facts and entities from transcripts
@@ -164,7 +175,7 @@ end
 
 #### MCP (`mcp/`)
 - Model Context Protocol server
-- Exposes 19 tools including: recall, explain, promote, status, decisions, conventions, architecture, semantic search, check_setup, and more
+- Exposes 28 tools including: recall, explain, promote, status, decisions, conventions, architecture, semantic search, check_setup, the observational-layer tools (observations, promote_observation, consolidate_observations), and more
 - `ResponseFormatter`: Consistent MCP response formatting
 - `SetupStatusAnalyzer`: Initialization and version status analysis
 
@@ -212,6 +223,7 @@ end
   - `Reuse`: most-used facts within window
   - `Health`: db / hooks / vec checks with actionable fix strings
   - `Timeline`: 30-day daily rollup
+  - `Observations` (0.13.0+): episodic-layer panel — counts by status/kind/priority, corroboration + promotion readiness, source→observation compression ratio, recent timeline (first-class main-sidebar panel + Advanced tab)
   - `FactPresenter`, `ScopedFactResolver`: shared rendering / scope-aware ID resolution
 - Connections released after every request — no held WAL writer locks across page loads
 - See [docs/dashboard.md](dashboard.md) for the user-facing guide

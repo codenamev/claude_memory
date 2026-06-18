@@ -116,6 +116,29 @@ sqlite-vec coverage. Each surfaces an actionable fix string (e.g.,
 "Run `claude-memory init` to install the standard hook set"). Status
 escalates to the worst individual check (error > warning > healthy).
 
+### Observations (episodic layer, 0.13.0+)
+
+The episodic counterpart to the fact-based panels. Facts answer "what is
+true"; **observations** are an append-only log of "what happened" in your
+sessions. Surfaced both as a first-class sidebar panel (headline numbers)
+and an Advanced → Observations tab (full detail):
+
+- **Counts by status / kind / priority** — active vs. consolidated vs.
+  expired; decision / preference / event; 🔴 important / 🟡 maybe / 🟢 info.
+- **Corroboration + promotion readiness** — how many observations have been
+  seen enough times (≥2, the corroboration gate) to be promotable to facts,
+  and the highest corroboration count seen. Promotion is the
+  anti-hallucination gate: a one-off mention never becomes a fact.
+- **Compression ratio** — source content tokens ÷ observation tokens, the
+  Mastra-style measure of how much the episodic log condenses raw sessions.
+- **Recent timeline** — the latest observations, newest first, with their
+  priority markers.
+
+Promote a corroborated observation to a fact with `memory.promote_observation`
+(or `claude-memory observations promote`), merge related ones with
+`memory.consolidate_observations`, or run the `/reflect` skill for a guided
+survey → consolidate → promote pass.
+
 ### Activity drill-down
 
 Clicking any moment opens a modal with the parsed payload, prettified JSON,
@@ -190,3 +213,8 @@ WAL writer lock open across page loads.
   flags as stale.
 - `claude-memory dedupe-conflicts` / `reclassify-references` — one-shot
   cleanups for what the Conflicts and Knowledge → References panels surface.
+- `claude-memory observations [list|promote|consolidate]` *(0.13.0+)* — the
+  CLI mirror of the Observations panel: list/inspect the episodic log
+  (`--kind`, `--status`, `--scope`, `--json`), promote a corroborated
+  observation to a fact, or consolidate related ones. `claude-memory stats
+  --observations` prints the counts summary.

@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-06-18
+
+Theme: **Episodic memory — a second kind of memory.** ClaudeMemory gains an append-only *observation* layer ("what happened") that complements the semantic fact store ("what is true"), modeled on [Mastra's Observational Memory](docs/influence/mastra-observational-memory.md). Observations accrue automatically, are deduplicated/consolidated by reflection, and are promoted to facts only after corroboration — making repeated sighting an anti-hallucination gate built into the memory model. Schema advances to v20 (additive; no breaking changes to existing facts/queries).
+
+### Added
+
+**Episodic Observation Layer**
+
+- **`observations` table** (schema v19–v20) — append-only episodic rows complementing facts. Columns include `body`, `kind`, `priority` (1=🔴/2=🟡/3=🟢), `scope`, `source_content_item_id` (provenance), `consolidated_into` (tombstone lineage — superseded observations are preserved, never deleted), `corroboration_count`, `promoted_at`/`promoted_fact_id`, `status`.
+- **Observer** — Layer-1 `NullDistiller` (regex) plus Layer-2 Claude-as-observer (SessionStart context hook, zero extra API cost) emit observations alongside facts; persisted by the `Resolver` inside the existing extraction transaction.
+- **Reflector** (`Observe::Reflector`) — deterministic dedup + TTL-expiry of info-level observations runs shell-side on `PreCompact`/`SessionEnd`; semantic consolidation (Claude-as-reflector) rides the next turn's `PreCompact` `additionalContext`. No separate API spend.
+- **Two-block SessionStart injection** — Block 1 is the stable observation log (🔴-marked); Block 2 is the undistilled "pending knowledge" tail. Wrapped in `<claude-memory-context>` so the injected log isn't re-ingested as new observations.
+- **Observation→fact promotion bridge** — facts are created from observations only after corroboration (≥2 sightings, `Domain::Observation::PROMOTION_THRESHOLD`); refuses uncorroborated or already-promoted rows.
+- **MCP tools** (28 total): `memory.observations` (read the episodic log), `memory.promote_observation` (corroboration-gated promotion), `memory.consolidate_observations` (semantic merge; corroboration combines, sources tombstoned).
+- **`/reflect` skill** — guided survey → consolidate → promote → report pass over the observation log.
+- **`claude-memory observations`** command — list/inspect the log (counts by status/kind/priority, promotion readiness, compression), plus `promote` and `consolidate` subcommands; `claude-memory stats --observations` summarizes counts.
+- **Dashboard Observations panel** (first-class, main sidebar + Advanced tab) — counts by kind/priority, corroboration + promotion readiness, source→observation compression ratio, recent timeline.
+- **`claude-memory audit` observation health checks** — orphaned observations, promotion consistency, and tombstone-chain validity, documented in `docs/audit_runbook.md`.
+
+### Changed
+
+- **Dependencies updated** to current within constraints — `sequel` 5.105, `standard` 1.55, `rubocop` 1.87, `json`, `psych`, `parallel` 2.x, among others. No runtime-gem major bumps required.
+
+### Fixed
+
+- **`consolidate_observations` read-modify-write race** — the source read and corroboration sum now run inside the transaction, with `status='active'` re-asserted on the tombstone update, so concurrent `PreCompact`/`SessionEnd` reflectors can't double-count or double-tombstone.
+- **`go` language false positive** — the distiller no longer extracts the English word "go" as the Go language (case-sensitive match + `golang` normalization).
+
 ## [0.12.1] - 2026-06-05
 
 Theme: **Upgrade-experience patches surfaced by the 0.12.0 soak.** Four small but high-impact fixes — all uncovered by one user upgrading a single project — closing visibility gaps in the doctor and the plugin manifest. No schema changes, no breaking changes.

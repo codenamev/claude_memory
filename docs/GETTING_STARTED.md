@@ -119,6 +119,44 @@ claude-memory promote <fact_id>
 "Remember that I prefer descriptive commit messages - make that a global preference"
 ```
 
+## Two Kinds of Memory: Facts and Observations
+
+ClaudeMemory remembers two complementary things:
+
+- **Facts** answer *"what is true"* — durable, structured truths about your
+  project (`uses_database: sqlite`, conventions, decisions). This is the
+  semantic layer the sections above describe.
+- **Observations** answer *"what happened"* — an append-only narrative log of
+  the moments in your sessions ("decided to add a corroboration gate so
+  fleeting mentions don't harden into facts"). This is the **episodic** layer
+  (0.13.0+).
+
+| | Facts | Observations |
+|---|---|---|
+| Captures | Durable truths | Events / narrative |
+| Changes | Explicitly (supersession, rejection) | Automatically (dedup, consolidation, expiry) |
+| Promotion | — | Promoted to a fact after corroboration (≥2 sightings) |
+
+**Why this matters:** the distiller used to commit a fact the first time it
+saw a claim — so a database named once in a comparison could become a false
+`uses_database`. Observations make repeated sighting the gate: an observation
+graduates to a fact only after it recurs. That's an anti-hallucination defense
+built into the memory model.
+
+Observations are managed for you — deduplicated and consolidated automatically
+on `PreCompact`/`SessionEnd` at no extra API cost. To see or curate them:
+
+```bash
+# Inspect the episodic log (counts, promotion readiness, compression, recent)
+claude-memory observations
+
+# Promote a corroborated observation to a fact
+claude-memory observations promote <id> --predicate uses_database --object sqlite
+```
+
+The dashboard's **Observations** panel shows the same at a glance, and the
+`/reflect` skill runs a guided survey → consolidate → promote pass.
+
 ## Setting Up Your First Project
 
 ### Scenario 1: Fresh Install (New Project)

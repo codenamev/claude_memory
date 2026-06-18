@@ -12,8 +12,12 @@ It automatically:
 - ✅ Remembers project-specific and global knowledge
 - ✅ Provides instant recall without manual prompting
 - ✅ Maintains truth (handles conflicts, supersession)
+- ✅ Tracks *what happened*, not just *what's true* — an episodic observation log alongside the facts (0.13.0+)
+- ✅ Promotes an observation to a fact only after it recurs — a corroboration gate against one-off noise
 
 **No API keys. No configuration. Just works.**
+
+ClaudeMemory now has **two complementary halves**: a *semantic* fact store ("what is true" — your stack, conventions, decisions) and an *episodic* observation layer ("what happened" — the narrative of your sessions). Observations are deduplicated and consolidated automatically, and only graduate to facts once corroborated — so fleeting mentions never harden into false memory. See [Episodic Memory](#episodic-memory-observations).
 
 ## Quick Start
 
@@ -137,6 +141,7 @@ File-searchable questions ("what version is this?") and one-shot code generation
 - **Progressive Disclosure**: Lightweight queries before full details
 - **Semantic Shortcuts**: Quick access to decisions, conventions, architecture
 - **Truth Maintenance**: Automatic conflict resolution
+- **Episodic Memory** (0.13.0+): An append-only observation log of *what happened* alongside the semantic fact store. Auto-consolidated via deterministic + LLM reflection on `PreCompact`/`SessionEnd`; corroborated observations are promoted to facts (anti-hallucination gate). See **[Episodic Memory →](#episodic-memory-observations)**.
 - **Claude-Powered**: Uses Claude's intelligence to extract facts (no API key needed)
 - **Token Efficient**: 10x reduction in memory queries with progressive disclosure
 - **Database Maintenance**: Compact, export, and backup commands
@@ -151,6 +156,36 @@ File-searchable questions ("what version is this?") and one-shot code generation
   ```
 
   Only metrics and event names are captured by default — verbatim prompts and bodies stay off until you explicitly opt in via `claude-memory otel --capture-prompts`. The receiver binds to `127.0.0.1` only.
+
+## Episodic Memory (Observations)
+
+Facts answer **"what is true"** (your stack, conventions, decisions). Observations answer **"what happened"** — a narrative log of the moments in your sessions. ClaudeMemory now keeps both, modeled on [Mastra's Observational Memory](docs/influence/mastra-observational-memory.md).
+
+| | Facts (semantic) | Observations (episodic) |
+|---|---|---|
+| Capture | Durable truths — `uses_database: sqlite` | Narrative events — "decided to add a corroboration gate to avoid reject-churn" |
+| Change | Explicitly, via supersession/rejection | Automatically — deduped, consolidated, low-priority ones expire |
+| Promotion | — | Promoted to a fact only after corroboration (≥2 sightings) |
+
+**Why it's a leap forward:** the distiller used to commit a fact the first time it saw a claim — so a database mentioned once in a comparison could harden into a false `uses_database`. The observation layer makes repeated sighting the gate: an observation becomes a fact only after it recurs. That's an **anti-hallucination defense built into the memory model**, not a cleanup afterthought.
+
+**How it runs (no extra API cost):**
+- **Observer** — a regex Layer-1 pass plus Claude-as-observer in the SessionStart context hook emit observations as sessions happen.
+- **Reflector** — deterministic dedup + TTL-expiry runs on `PreCompact`/`SessionEnd`; semantic consolidation rides the next turn's context hook (Claude-as-reflector). Superseded observations are *tombstoned*, never deleted, preserving provenance.
+- **Promotion bridge** — corroborated observations graduate to facts on the corroboration gate.
+
+**See it / use it:** the dashboard's **Observations** panel (counts by kind/priority, corroboration + promotion readiness, source→observation compression ratio, recent timeline); the `claude-memory observations` CLI; the `memory.observations` / `memory.promote_observation` / `memory.consolidate_observations` MCP tools; and the `/reflect` skill for a guided survey→consolidate→promote pass.
+
+## What's New in 0.13.0
+
+**Episodic Observation Layer** — ClaudeMemory gains a second kind of memory (see [Episodic Memory](#episodic-memory-observations) above):
+
+- New `observations` table (schema v19–v20), append-only with `consolidated_into` tombstone lineage and `corroboration_count` / `promoted_at` / `promoted_fact_id` promotion tracking.
+- Two-block SessionStart injection: a stable observation log (🔴-marked) + the undistilled "pending knowledge" tail.
+- Automatic reflection on `PreCompact` (context-pressure, Mastra's token-threshold analog) and `SessionEnd` — deterministic GC shell-side in Ruby, semantic consolidation via the context hook (no extra API spend).
+- Corroboration-gated observation→fact promotion — repeated sightings required before commitment, an anti-hallucination gate against reject-churn from one-off doc/example text.
+- New surfaces: dashboard **Observations** panel, `claude-memory observations` command (+ `claude-memory stats --observations`), `claude-memory audit` observation health checks, three `memory.*observation*` MCP tools, and the `/reflect` skill.
+- Dependencies refreshed to current (sequel, standard, rubocop, and others).
 
 ## What's New in 0.11.0
 

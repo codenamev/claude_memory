@@ -233,7 +233,7 @@ New MCP tools `memory.undistilled` and `memory.mark_distilled` support the pipel
   - Modes: shared (repo), local (uncommitted), home (user directory)
 
 - **`MCP`**: Model Context Protocol server and tools (`mcp/`)
-  - Exposes memory tools to Claude Code (23 tools total)
+  - Exposes memory tools to Claude Code (28 tools total)
   - `Telemetry`: Records tool invocations to `mcp_tool_calls` table for usage stats
   - Dual content/structuredContent responses with compact mode
 
@@ -355,7 +355,7 @@ Also update `SECTION_MAP` if the predicate should appear in a specific snapshot 
 
 The gem includes an MCP server (`claude-memory serve-mcp`) that exposes memory operations as tools. Configuration should be in `.mcp.json` at project root.
 
-Available MCP tools (23 total):
+Available MCP tools (28 total):
 - **Query & Recall**: `memory.recall`, `memory.recall_index`, `memory.recall_details`, `memory.recall_semantic`, `memory.search_concepts`
 - **Provenance**: `memory.explain`, `memory.fact_graph`
 - **Shortcuts**: `memory.decisions`, `memory.conventions`, `memory.architecture`
