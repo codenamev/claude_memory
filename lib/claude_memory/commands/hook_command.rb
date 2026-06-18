@@ -205,7 +205,13 @@ module ClaudeMemory
 
         t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         injector = ClaudeMemory::Hook::ContextInjector.new(manager, source: source)
-        context_text = injector.generate_context
+        # On PreCompact (context pressure) inject only the reflection nudge, not
+        # the full snapshot; everywhere else inject the full SessionStart context.
+        context_text = if payload["hook_event_name"] == "PreCompact"
+          injector.reflection_context
+        else
+          injector.generate_context
+        end
         duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round
 
         if context_text

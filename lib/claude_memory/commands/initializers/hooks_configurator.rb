@@ -126,7 +126,9 @@ module ClaudeMemory
                   {"type" => "command", "command" => ingest_cmd, "timeout" => 30,
                    "statusMessage" => "Saving memory..."},
                   {"type" => "command", "command" => sweep_cmd, "timeout" => 30,
-                   "statusMessage" => "Sweeping memory..."}
+                   "statusMessage" => "Sweeping memory..."},
+                  {"type" => "command", "command" => context_cmd, "timeout" => 5,
+                   "statusMessage" => "Reflecting on memory..."}
                 ]
               }],
               "SessionEnd" => [{

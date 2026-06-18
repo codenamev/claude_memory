@@ -86,6 +86,24 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector, "observations (Block 1)" do
     expect(injector.generate_context.to_s).not_to include("## Observation Reflection")
   end
 
+  describe "#reflection_context (PreCompact)" do
+    it "returns only the reflection section, not the full snapshot, when candidates exist" do
+      id = manager.project_store.insert_observation(body: "use SQLite for storage", priority: 1)
+      manager.project_store.increment_corroboration(id, by: 2)
+
+      reflection = injector.reflection_context
+
+      expect(reflection).to include("## Observation Reflection")
+      expect(reflection).to include("memory.consolidate_observations")
+      expect(reflection).not_to include("## Decisions") # not the full context snapshot
+    end
+
+    it "returns nil when nothing is corroborated yet" do
+      manager.project_store.insert_observation(body: "seen once", priority: 1)
+      expect(injector.reflection_context).to be_nil
+    end
+  end
+
   it "excludes consolidated (tombstoned) observations" do
     keep = manager.project_store.insert_observation(body: "active note", priority: 1)
     gone = manager.project_store.insert_observation(body: "merged away", priority: 1)

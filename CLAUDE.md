@@ -375,10 +375,11 @@ ClaudeMemory integrates with Claude Code via hooks in `.claude/settings.json`:
   - Calls `claude-memory hook ingest` with stdin JSON
   - Reads transcript delta and updates both global and project databases
 
-- **Context hook**: Triggers on SessionStart
+- **Context hook**: Triggers on SessionStart (and PreCompact — see below)
   - Calls `claude-memory hook context`
   - Injects recent facts via `hookSpecificOutput.additionalContext`
   - Two-block layout (observational layer): Block 1 = the episodic observation log (`Observe::ObservationsRenderer`, 🔴-marked), Block 2 = the undistilled "Pending Knowledge Extraction" tail. `ContextInjector#emitted_observation_count` feeds the `hook_context` telemetry.
+  - On **PreCompact** the same `claude-memory hook context` injects only the reflection nudge (`ContextInjector#reflection_context` — the promote/consolidate instructions for corroborated/related observations), not the full snapshot, since PreCompact is context-pressure (Mastra's token-threshold analog). `HooksConfigurator` wires it into the PreCompact hook set alongside ingest + sweep.
 
 - **Sweep hook**: Triggers on PreCompact/SessionEnd events
   - Runs time-bounded maintenance on both databases
