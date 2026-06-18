@@ -843,6 +843,18 @@ module ClaudeMemory
           .all
       end
 
+      # Observations that were promoted into the given fact — the reverse of
+      # promoted_fact_id, for fact→observation provenance.
+      #
+      # @param fact_id [Integer]
+      # @return [Array<Hash>]
+      def observations_for_fact(fact_id)
+        observations
+          .where(promoted_fact_id: fact_id)
+          .select(:id, :body, :kind, :corroboration_count, :observed_at)
+          .all
+      end
+
       # --- Meta ---
 
       # Set a key-value pair in the meta table (upsert).

@@ -32,6 +32,20 @@ RSpec.describe ClaudeMemory::MCP::Tools, "memory.observations" do
     expect(first).to have_key(:observed_ago)
   end
 
+  it "exposes the stored lineage (status, corroboration, promotion, consolidation)" do
+    id = store.observations.order(:id).first[:id]
+    store.increment_corroboration(id, by: 2)
+    store.mark_observation_promoted(id, fact_id: 55)
+
+    row = tools.call("memory.observations", {"scope" => "project"})[:observations]
+      .find { |o| o[:id] == id }
+
+    expect(row[:status]).to eq("active")
+    expect(row[:corroboration_count]).to eq(3)
+    expect(row[:promoted_fact_id]).to eq(55)
+    expect(row).to have_key(:consolidated_into)
+  end
+
   it "filters to important-only when requested" do
     result = tools.call("memory.observations", {"important_only" => true})
 

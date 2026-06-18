@@ -49,7 +49,15 @@ module ClaudeMemory
           explanation = @recall.explain(args["fact_id"], scope: scope)
           return {error: "Fact not found in #{scope} database"} if explanation.is_a?(Core::NullExplanation)
 
-          ResponseFormatter.format_explanation(explanation, scope)
+          result = ResponseFormatter.format_explanation(explanation, scope)
+
+          # Episodic provenance: if this fact was promoted from observations,
+          # show the lineage back to them (reverse of observations.promoted_fact_id).
+          store = get_store_for_scope(scope)
+          promoted_from = store ? store.observations_for_fact(args["fact_id"]) : []
+          result[:promoted_from_observations] = promoted_from if result.is_a?(Hash) && promoted_from.any?
+
+          result
         end
 
         def recall_semantic(args)
@@ -135,6 +143,10 @@ module ClaudeMemory
                 priority: obs.priority,
                 body: obs.body,
                 scope: obs.scope,
+                status: obs.status,
+                corroboration_count: obs.corroboration_count,
+                promoted_fact_id: obs.promoted_fact_id,
+                consolidated_into: obs.consolidated_into,
                 source_content_item_id: obs.source_content_item_id,
                 observed_at: obs.observed_at,
                 observed_ago: Core::RelativeTime.format(obs.observed_at)
