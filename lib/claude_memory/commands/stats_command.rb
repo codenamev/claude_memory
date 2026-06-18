@@ -13,7 +13,7 @@ module ClaudeMemory
       SCOPE_PROJECT = "project"
 
       def call(args)
-        opts = parse_options(args, {scope: SCOPE_ALL, tools: false, tokens: false, stale: false, since_days: nil, stale_days: nil}) do |o|
+        opts = parse_options(args, {scope: SCOPE_ALL, tools: false, tokens: false, stale: false, observations: false, since_days: nil, stale_days: nil}) do |o|
           OptionParser.new do |parser|
             parser.banner = "Usage: claude-memory stats [options]"
             parser.on("--scope SCOPE", ["all", "global", "project"],
@@ -21,6 +21,7 @@ module ClaudeMemory
             parser.on("--tools", "Show MCP tool-call usage stats") { o[:tools] = true }
             parser.on("--tokens", "Show SessionStart context-injection token budget") { o[:tokens] = true }
             parser.on("--stale", "Show facts not recalled in CLAUDE_MEMORY_STALE_DAYS (default 14)") { o[:stale] = true }
+            parser.on("--observations", "Show episodic observation counts (status, kind, promotable)") { o[:observations] = true }
             parser.on("--since DAYS", Integer, "Limit --tools/--tokens to last N days") { |v| o[:since_days] = v }
             parser.on("--stale-days N", Integer, "Override staleness threshold for --stale") { |v| o[:stale_days] = v }
           end
@@ -29,6 +30,10 @@ module ClaudeMemory
 
         if opts[:tools]
           return print_mcp_tool_call_stats(opts[:since_days])
+        end
+
+        if opts[:observations]
+          return print_observation_stats
         end
 
         if opts[:tokens]
@@ -83,6 +88,60 @@ module ClaudeMemory
               stdout.puts "  ##{row[:id]} [#{row[:predicate]}] #{row[:object_literal]&.slice(0, 80)} (last: #{last})"
             end
             stdout.puts ""
+          end
+        end
+
+        manager.close
+        0
+      end
+
+      def print_observation_stats
+        manager = ClaudeMemory::Store::StoreManager.new
+        stores = %w[project global]
+          .filter_map { |scope| manager.store_if_exists(scope) }
+          .select { |store| store.db.table_exists?(:observations) }
+
+        stdout.puts "Observation Statistics (episodic layer)"
+        stdout.puts "=" * 50
+
+        threshold = ClaudeMemory::Domain::Observation::PROMOTION_THRESHOLD
+
+        total = stores.sum { |s| s.observations.count }
+        if total.zero?
+          stdout.puts "No observations recorded yet."
+          manager.close
+          return 0
+        end
+
+        active = stores.sum { |s| s.observations.where(status: "active").count }
+        consolidated = stores.sum { |s| s.observations.where(status: "consolidated").count }
+        expired = stores.sum { |s| s.observations.where(status: "expired").count }
+        promoted = stores.sum { |s| s.observations.exclude(promoted_at: nil).count }
+        promotable = stores.sum do |s|
+          s.observations.where(status: "active", promoted_at: nil)
+            .where { corroboration_count >= threshold }.count
+        end
+
+        stdout.puts "Active: #{active}"
+        stdout.puts "Consolidated: #{consolidated}"
+        stdout.puts "Expired: #{expired}"
+        stdout.puts "Promoted: #{promoted}"
+        stdout.puts "Promotable (>= #{threshold} sightings): #{promotable}"
+        stdout.puts
+
+        kinds = Hash.new(0)
+        stores.each do |store|
+          store.observations.where(status: "active").group_and_count(:kind).each do |row|
+            kinds[row[:kind]] += row[:count]
+          end
+        end
+
+        stdout.puts "By kind (active):"
+        if kinds.empty?
+          stdout.puts "  (none)"
+        else
+          kinds.sort_by { |_k, v| -v }.each do |kind, count|
+            stdout.puts "  #{count.to_s.rjust(4)} - #{kind}"
           end
         end
 

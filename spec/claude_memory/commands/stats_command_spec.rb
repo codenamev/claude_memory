@@ -151,6 +151,51 @@ RSpec.describe ClaudeMemory::Commands::StatsCommand do
     end
   end
 
+  describe "--observations" do
+    def seed_observation(body:, kind: "decision", priority: 1, corroboration: 1, scope: "project")
+      store_path = (scope == "project") ? project_db_path : global_db_path
+      store = ClaudeMemory::Store::SQLiteStore.new(store_path)
+      cid = store.upsert_content_item(
+        source: "test",
+        text_hash: Digest::SHA256.hexdigest(body + rand.to_s),
+        byte_len: body.bytesize,
+        raw_text: body
+      )
+      id = store.insert_observation(
+        body: body, kind: kind, priority: priority, scope: scope,
+        source_content_item_id: cid
+      )
+      store.increment_corroboration(id, by: corroboration - 1) if corroboration > 1
+      store.close
+      id
+    end
+
+    it "reports 'no observations' when nothing recorded" do
+      ClaudeMemory::Store::SQLiteStore.new(project_db_path).close
+
+      exit_code = command.call(["--observations"])
+
+      expect(exit_code).to eq(0)
+      expect(stdout.string).to include("No observations recorded yet.")
+    end
+
+    it "reports counts by status, kind, and promotable" do
+      seed_observation(body: "use SQLite", kind: "decision", priority: 1, corroboration: 2)
+      seed_observation(body: "user prefers tabs", kind: "preference", priority: 2, corroboration: 1)
+
+      exit_code = command.call(["--observations"])
+
+      expect(exit_code).to eq(0)
+      out = stdout.string
+      expect(out).to include("Observation Statistics (episodic layer)")
+      expect(out).to include("Active: 2")
+      expect(out).to include("Promotable (>= 2 sightings): 1")
+      expect(out).to include("By kind (active):")
+      expect(out).to include("decision")
+      expect(out).to include("preference")
+    end
+  end
+
   describe "--stale" do
     def seed_stale_fact(scope:, days_ago:)
       store_path = (scope == "project") ? project_db_path : global_db_path
