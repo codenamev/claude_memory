@@ -9,6 +9,51 @@
 
 ---
 
+## Observational Layer — Pre-Merge Review (2026-06-18)
+
+**Review Date:** 2026-06-18
+**Previous Review:** 2026-04-28 (51 days ago)
+**Scope:** the observational-layer branch (`claude/observational-layer-design-7662r9`, 22 commits ahead of `origin/main`, ~57 files). Two parallel expert-lens reviews — core/data layer (migrations 019/020, `Domain::Observation`, `SQLiteStore` observation methods, `Resolver`) and pipeline layer (`NullDistiller` extraction, renderer, `Reflector`, `ContextInjector`, MCP handlers, dashboard panel).
+
+**Verdict:** No hard merge-blockers. The append-only/tombstone discipline is consistent, `Domain::Observation` is a clean immutable value object, border validation (`coerce_observation`) is textbook, and test coverage on this surface is above the repo average. The items below are latent correctness edge-cases + cleanups; none break the system as shipped (the layer is experimental and observations are project-scoped only today).
+
+### High — address or consciously accept before merge
+
+- **H1 · `consolidate_observations` read-modify-write race** — `lib/claude_memory/store/sqlite_store.rb:805-826` (Evans/Bernhardt). The source `SELECT` and `combined = sources.sum{…}` run *outside* the `@db.transaction` block, and the tombstone `UPDATE` (822) doesn't re-assert `status: "active"`. Two reflectors firing close together (PreCompact + SessionEnd) could double-count corroboration or re-tombstone an already-consolidated source. SQLite's single-writer lock narrows the window but doesn't close the gap. **Fix:** move the read inside the transaction and re-filter `status: "active"` on the update. Mechanical, ~1h incl. spec.
+- **P1 · `noise_body?` over-broad — drops legit prose** — `lib/claude_memory/distill/null_distiller.rb:53,169` (Grimm/Bernhardt). `NOISE_BODY_SIGNATURE` matches `::`, `{}`, `=>` anywhere, so `"decided to adopt ClaudeMemory::Observation as the model"` is silently dropped — common in Ruby prose. Confirmed at runtime. **This is a precision-tuning *design* change to extraction behavior, not a mechanical fix** — per the project's data-driven-design convention it should be surveyed against real corpus data before retuning, not changed blind. Candidate: narrow to strong structural markers (`def `/`class `/`module `, JSON `","`/`":\s*"`, `$(`, `&&`, `||`), drop bare `::`/`{}`/`=>`, add a false-negative spec corpus.
+- **P2 · cross-scope promote nudge — latent wrong-DB landmine** — `lib/claude_memory/hook/context_injector.rb:159-194` + `lib/claude_memory/mcp/handlers/management_handlers.rb:88` (Evans/Beck). `fetch_promotion_candidates` flat-maps project+global stores; the reflection block emits `[obs #<id>]` (a *per-DB* autoincrement id) with no scope; `promote_observation`/`consolidate_observations` default `scope: "project"`. A global-store candidate would route the promote call to the wrong DB. **Dead today** (nothing writes observations to the global DB), but a genuine landmine if global observations ever appear. **Fix:** restrict reflection candidates to the project store + document, or scope-tag the nudge line (mirror `emitted_facts_by_scope`). ~1-2h.
+- **M1 · `consolidate_observations` has zero test coverage** — the most complex method in `sqlite_store.rb` is the only observation method with no specs (the `< 2 → nil` guard, summed-corroboration-tips-threshold, multi-row tombstone are all load-bearing and untested). Add specs alongside the H1 fix. ~1h.
+
+### Medium
+
+- **M2/P7 · token-estimate `/4.0` heuristic duplicated 3×** — `sqlite_store.rb:714,819` + `dashboard/observations.rb:98` (Metz DRY). The compression-ratio correctness depends on both halves using the same divisor. Extract `Core::TokenEstimate.from_chars`/`.from_bytes`. ~1h.
+- **M3/P10 · `recent_observations` `min_priority` name inverted** — `sqlite_store.rb:731` (Beck revealing-names). Filters `priority <= min_priority`, but priority is inverted (1=important), so a higher "minimum" returns *more* rows. Rename `max_priority_value`/`importance_floor`. ~30m + callers.
+- **M4 · `Resolver#apply` `@return` rdoc stale** — `resolver.rb:29` omits the `:observations_created` and `:fact_ids` keys this PR adds. ~10m.
+- **M5 · `fact_ids` array silently contains `nil`s** — `resolver.rb:45,61` (Grimm meaningful-returns). Comment promises positional alignment with `extraction.facts`, but `:discard` contributes `nil`; the sole consumer already `.compact.first`s. Pick one contract and document it (or compact at source). ~20m.
+- **P3 · `clean_observation_body` is 6 chained gsubs, brittle** — `null_distiller.rb:178` (Bernhardt). Pure text logic buried as a private method; extract to a tested `Observe::BodyCleaner` with an input→output spec table. ~2h.
+- **P4 · `extract_decisions`/`extract_observations` double-scan `DECISION_PATTERNS`** — `null_distiller.rb:105,138` (Metz DRY). Two full regex passes per chunk on the P95<5ms hot path; titles and bodies also diverge, complicating later corroboration. ~2-3h.
+- **P5 · `consolidate_observations` reuses `coerce_observation(args)` on the whole tool-args hash** — `management_handlers.rb:151` (Grimm border). Couples the consolidation tool's param names to the observation schema and pulls in `kind`/`priority` defaults the caller may not intend. Pass a narrowed hash. ~1h.
+- **P6 · dashboard N+1 across stores** — `dashboard/observations.rb:48-99` (Evans, bounded). 8-12 small aggregate queries per load; acceptable at store-count 2 but the `.where(status: "active")` predicate repeats ~6×. One `group_and_count(:status)` per store. ~2h.
+
+### Low (fast-follow cleanups)
+
+- **L1** `persist_observations` reaches into raw hashes (`obs[:body]`…) — coerce through `Domain::Observation` at the border; defaults are triplicated. `resolver.rb:81`. ~1-2h.
+- **L2** `respond_to?(:observations)` guard is dead defensiveness — `Extraction` always defines it. `resolver.rb:82`. ~5m.
+- **L3/P8** status strings (`"active"`/`"consolidated"`/`"expired"`) and `2`/`3` literals scattered — add `STATUSES`/reuse `PROMOTION_THRESHOLD`/`INFO` from `Domain::Observation`. ~30m.
+- **L4** `increment_corroboration` returns void while sibling mutators return `updated > 0` — make symmetric. `sqlite_store.rb:772`. ~10m.
+- **L5** migration index DDL uses raw `CREATE INDEX` rather than Sequel's `index` DSL — idiomatic-only. ~30m, optional.
+- **L6** `consolidate_observations` doesn't thread `session_id` (synthesized rows get NULL) — document the intent or thread it. ~5m.
+
+### What's done well
+
+Append-only/tombstone discipline honored end-to-end with "row preserved, not deleted" specs; `Domain::Observation` immutable/frozen/self-validating with intention-revealing predicates; `corroborated?(threshold)` kept a total function (threshold injected, not hard-coded); resolver change genuinely additive (observations persist *inside* the extraction transaction, "no observations → fact behavior unchanged" tested); pure Sequel datasets throughout (no raw SQL except index DDL); promotion-gate tests pin the anti-hallucination invariant; `coerce_observation` border validation with `filter_map` drops invalids without aborting the batch; the Go-language case-sensitivity fix is clean and well-specced.
+
+### Recommended pre-merge action
+
+Fix the mechanical items — **H1** (read-inside-transaction), **P2** (defuse cross-scope), **M1** (the missing consolidation spec), **M4/M5** (document this PR's own new `apply` surface). Flag **P1** (regex retune) for a data-driven decision — do not change blind. Everything else is tracked here as fast-follow.
+
+---
+
 ## Post-0.11 Investigation: Hallucination Rate Metric Calibration (2026-04-30)
 
 When #48 (hallucination-rate metric) was first run against this project's real DB, it surfaced numbers that *looked* alarming:
