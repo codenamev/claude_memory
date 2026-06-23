@@ -73,7 +73,12 @@ module ClaudeMemory
 
         if fresh_session?
           undistilled = fetch_undistilled(MAX_UNDISTILLED)
-          sections << format_distillation_prompt(undistilled) if undistilled.any?
+          if undistilled.any?
+            sections << format_distillation_prompt(undistilled)
+            # The episodic-capture ask is its own prominent section (#72), not a
+            # buried paragraph inside the deep-distill prompt.
+            sections << format_observation_capture_prompt
+          end
 
           promotion = fetch_promotion_candidates(MAX_PROMOTION_CANDIDATES)
           sections << format_observation_reflection(promotion) if promotion.any?
@@ -247,15 +252,7 @@ module ClaudeMemory
           "in the object (e.g., \"… because …\", \"… so that …\", \"caused by …\",",
           "\"breaks when …\"). A fact with a reason is recoverable once stale; a",
           "bare conclusion is dead weight. Prefer one fact-with-reason over two",
-          "facts-without.",
-          "",
-          "**Also log what happened (episodic layer):** in the same",
-          "`memory.store_extraction` call, populate `observations` — one per",
-          "discrete event (a decision made, a preference stated, a notable action",
-          "or outcome). Each: a concise `body` of what happened, a `kind`",
-          "(decision/preference/event/…), and a reason for decisions/preferences.",
-          "Observations record \"what happened\"; facts record \"what is true\". They",
-          "accumulate, and a corroborated observation can later graduate into a fact."
+          "facts-without."
         ]
 
         items.each do |item|
@@ -267,6 +264,34 @@ module ClaudeMemory
         end
 
         lines.join("\n")
+      end
+
+      # First-class, standalone ask for the episodic layer (#72). Authoring
+      # observations was previously a paragraph buried inside the optional
+      # deep-distill flow above, and that flow fires almost never — so the
+      # episodic log was 100% Layer-1 scrapes. This decouples it: a prominent,
+      # lightweight instruction to log "what happened" directly, the same way
+      # the fact context rides the session. Effectiveness is measurable via the
+      # `mcp_extraction` content-item source (Layer-2) vs `claude_code` (Layer-1).
+      def format_observation_capture_prompt
+        <<~PROMPT.strip
+          ## Log What Happened (episodic memory)
+
+          Record the recent narrative as **observations** — "what happened",
+          complementing the facts above ("what is true"). For each discrete
+          event in the recent work above (a decision made, a preference stated,
+          a notable fix or outcome), call `memory.store_extraction` with an
+          `observations` array — one entry per event:
+
+          - `body`: one concise sentence of what happened (embed a reason for
+            decisions/preferences — "… because …", "… so that …")
+          - `kind`: `decision`, `preference`, or `event`
+          - `priority`: 1 important, 2 maybe, 3 info
+
+          Keep it to genuine events worth remembering — skip routine steps and
+          code output. Observations accumulate and a corroborated one graduates
+          into a fact. Send them with the facts in the same call, or on their own.
+        PROMPT
       end
 
       def format_section(title, items)

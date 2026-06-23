@@ -54,7 +54,7 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector, "observations (Block 1)" do
     expect(injector.emitted_observation_count).to eq(0)
   end
 
-  it "instructs Layer-2 to emit observations in the extraction prompt when undistilled content exists" do
+  it "injects a prominent, standalone observation-capture prompt when undistilled content exists (#72)" do
     text = "x" * 400
     manager.project_store.upsert_content_item(
       source: "transcript", session_id: "s1",
@@ -63,9 +63,24 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector, "observations (Block 1)" do
 
     context = injector.generate_context
 
+    # the fact deep-distill prompt and the episodic-capture prompt are now
+    # separate sections — the latter is no longer a buried paragraph.
     expect(context).to include("## Pending Knowledge Extraction")
-    expect(context).to include("populate `observations`")
+    expect(context).to include("## Log What Happened (episodic memory)")
+    expect(context).to include("`observations` array")
     expect(context).to match(/what happened/i)
+  end
+
+  it "keeps the episodic-capture ask out of the fact deep-distill prompt" do
+    text = "x" * 400
+    manager.project_store.upsert_content_item(
+      source: "transcript", session_id: "s1",
+      text_hash: Digest::SHA256.hexdigest(text), byte_len: text.bytesize, raw_text: text
+    )
+
+    injector.generate_context
+    distill_only = injector.send(:format_distillation_prompt, injector.send(:fetch_undistilled, 5))
+    expect(distill_only).not_to include("observations")
   end
 
   it "surfaces an Observation Reflection section for corroborated, unpromoted observations" do

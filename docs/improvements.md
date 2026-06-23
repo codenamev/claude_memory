@@ -524,6 +524,8 @@ Source: 2026-06-18 live observation while building the 0.13.0 release gem.
 
 Source: 2026-06-23 observational-layer audit.
 
+**🟡 Structural fix shipped 2026-06-23** (option a). Decoupled the observation-capture ask from the buried, rarely-fired deep-distill paragraph into its own prominent SessionStart section (`ContextInjector#format_observation_capture_prompt` — "## Log What Happened"). This maximizes the chance Claude authors observations, but persistence still rides a `store_extraction` tool call, so **effectiveness is not yet proven** — whether Layer-2 now actually fires is measurable via the `mcp_extraction` content-item source and needs real-session validation (and ultimately the #75 eval). Not closing this until that signal turns positive.
+
 **Problem.** The design's quality observations were always meant to come from **Layer-2** (Claude-as-observer): the SessionStart prompt (`ContextInjector#format_distillation_prompt`) asks Claude to populate the `observations` field of its `memory.store_extraction` call. **The vehicle is dormant.** Evidence (sharpened 2026-06-23 with `mcp_tool_calls.called_at` + `activity_events`):
 - `store_extraction` was invoked **4 times ever — all on 2026-04-17 to 2026-04-30**, i.e. *six-plus weeks before the observational layer (and the `observations` parameter) shipped on 2026-06-16/18*. Those calls **could not** have carried observations; the field didn't exist yet.
 - **Since the layer shipped, `store_extraction` has fired ZERO times.** Layer-2 has never run, not once, in the feature's entire life. (Corroborating: `store_extraction` creates a synthetic `source: "mcp_extraction"` content_item; **0 of the 113 observations trace to `mcp_extraction`** — all to `claude_code` ingest.)
