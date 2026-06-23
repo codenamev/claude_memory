@@ -11,8 +11,12 @@ module ClaudeMemory
     # timer (Claude Code has no cron hook) and without extra API cost.
     #
     # Two passes, both provenance-preserving (tombstone, never hard-delete):
-    #   - dedupe: collapse near-identical active observations (same scope,
-    #     normalized body) into the newest, linking losers via consolidated_into.
+    #   - dedupe: collapse near-duplicate active observations (same scope) into
+    #     the newest, linking losers via consolidated_into. Similarity is decided
+    #     by an injected matcher (default: lexical token-overlap, #73) so the
+    #     promotion gate can actually accumulate corroboration — exact-string
+    #     matching never folded varied wording, leaving every observation at
+    #     corroboration 1 (the 2026-06-23 audit finding).
     #   - expire_stale_info: retire info-level (🟢 / priority 3) observations
     #     older than the TTL to bound context size. Important (🔴) and maybe
     #     (🟡) are never expired — only the lowest-signal tier ages out.
@@ -31,9 +35,10 @@ module ClaudeMemory
         end
       end
 
-      def initialize(store, info_ttl_days: DEFAULT_INFO_TTL_DAYS)
+      def initialize(store, info_ttl_days: DEFAULT_INFO_TTL_DAYS, matcher: TokenOverlapMatcher.new)
         @store = store
         @info_ttl_days = info_ttl_days
+        @matcher = matcher
       end
 
       # @return [Result] number of observations deduped and expired
@@ -51,21 +56,36 @@ module ClaudeMemory
 
       def dedupe
         active = @store.observations.where(status: "active").order(:id).all
+        active.group_by { |o| o[:scope] }.sum { |_scope, rows| dedupe_scope(rows) }
+      end
+
+      # Greedy clustering within one scope: the newest observation in a cluster
+      # is the keeper; older near-duplicates fold into it. O(n²) matcher calls,
+      # but n is bounded (#74 cut the inflow; expire_stale_info bounds the tail).
+      def dedupe_scope(rows)
+        return 0 if rows.size < 2
+
+        ordered = rows.sort_by { |r| [r[:observed_at].to_s, r[:id]] }.reverse
+        folded = {}
         merged = 0
 
-        active.group_by { |o| [o[:scope], normalize(o[:body])] }.each_value do |rows|
-          next if rows.size < 2
+        ordered.each do |keeper|
+          next if folded[keeper[:id]]
 
-          keeper = rows.max_by { |r| [r[:observed_at].to_s, r[:id]] }
-          rows.each do |loser|
-            next if loser[:id] == keeper[:id]
-            # Fold the loser's sightings into the keeper before tombstoning so
-            # corroboration survives consolidation and can cross the promotion
+          ordered.each do |other|
+            next if other[:id] == keeper[:id] || folded[other[:id]]
+            next unless @matcher.similar?(keeper[:body], other[:body])
+
+            # Fold the duplicate's sightings into the keeper before tombstoning
+            # so corroboration survives consolidation and can cross the promotion
             # threshold. A duplicate IS a repeated sighting.
-            @store.increment_corroboration(keeper[:id], by: loser[:corroboration_count] || 1)
-            @store.tombstone_observation(loser[:id], into_id: keeper[:id])
+            @store.increment_corroboration(keeper[:id], by: other[:corroboration_count] || 1)
+            @store.tombstone_observation(other[:id], into_id: keeper[:id])
+            folded[other[:id]] = true
             merged += 1
           end
+
+          folded[keeper[:id]] = true
         end
 
         merged
@@ -81,10 +101,6 @@ module ClaudeMemory
 
         ids.each { |id| @store.expire_observation(id) }
         ids.size
-      end
-
-      def normalize(body)
-        body.to_s.downcase.gsub(/\s+/, " ").strip
       end
     end
   end

@@ -48,6 +48,24 @@ RSpec.describe ClaudeMemory::Observe::Reflector do
       expect(described_class.new(store).reflect!.deduped).to eq(0)
       expect(store.recent_observations(limit: 50).size).to eq(3)
     end
+
+    it "folds near-duplicates that are not byte-identical (#73 — exact match never did)" do
+      store.insert_observation(body: "PreCompact hook set", priority: 1, observed_at: days_ago(10))
+      newer = store.insert_observation(body: "PreCompact hook set — the design analog", priority: 1, observed_at: days_ago(1))
+
+      result = described_class.new(store).reflect!
+
+      expect(result.deduped).to eq(1)
+      expect(store.recent_observations.map { |o| o[:id] }).to eq([newer])
+    end
+
+    it "uses an injected matcher (similarity is pluggable)" do
+      store.insert_observation(body: "completely different one", priority: 1, observed_at: days_ago(2))
+      store.insert_observation(body: "totally unrelated two", priority: 1, observed_at: days_ago(1))
+      always_similar = Class.new { def similar?(_a, _b) = true }.new
+
+      expect(described_class.new(store, matcher: always_similar).reflect!.deduped).to eq(1)
+    end
   end
 
   describe "#reflect! expire_stale_info" do

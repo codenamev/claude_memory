@@ -534,6 +534,8 @@ Source: 2026-06-23 observational-layer audit.
 
 ### 73. Observation dedup/corroboration is normalized-**exact**, so the promotion loop can never fire ⭐
 
+**✅ Shipped 2026-06-23.** Replaced exact-string grouping with greedy clustering over an injected similarity matcher (`Reflector#dedupe_scope`). Default matcher is `Observe::TokenOverlapMatcher` — lexical Jaccard token-overlap (deterministic, free, no embedding dependency), threshold 0.5. Folds the common case (one event re-observed with slightly different wording → corroboration now accumulates and can cross the promotion gate) while keeping unrelated statements apart (Jaccard ~0). **Deliberate limitation, data-driven:** measured that tfidf cosine (0.32) can't separate pure synonym paraphrases from unrelated pairs (0.13) on short bodies, so neither the default lexical matcher nor tfidf folds "use SQLite" vs "chose SQLite" — that needs real embeddings, which can be injected via the `matcher:` seam (any object responding to `similar?(a, b)`) when fastembed is configured.
+
 Source: 2026-06-23 observational-layer audit.
 
 **Problem.** `Observe::Reflector#dedupe` folds observations by `group_by { [scope, normalize(body)] }` where `normalize` is just `downcase` + whitespace-collapse + strip. Two observations corroborate **only if their bodies are byte-identical after lowercasing**. Real captures of "the same thing" are never byte-identical — e.g. the four stored variants "PreCompact hook set.", "PreCompact hook set — the design's Mastra-token-threshold analog.", "PreCompact set alongside ingest + sweep." describe one event but never fold. Result, confirmed in the data: **every observation has `corroboration_count = 1`; 0 consolidated; 0 promoted.** The corroboration gate — the layer's headline anti-hallucination feature — is **dead by construction** on any varied text. It can only fire if the *exact same string* recurs, which regex fragments from different transcript chunks essentially never do.
@@ -543,6 +545,8 @@ Source: 2026-06-23 observational-layer audit.
 **Cross-links.** Without this, #72's quality observations still wouldn't promote.
 
 ### 74. Layer-1 Observer ingests code/doc/transcript fragments; `noise_body?` lets ~⅓ through
+
+**✅ Shipped 2026-06-23** (commit `d81a684`). Strengthened `NOISE_BODY_SIGNATURE` (code/JSON `key: "value"`, method calls, spaced table pipes, box-drawing glyphs, `(vector)` labels, JSONL fields) and added a prose-start requirement. Verified against the audit corpus: all five real noise samples now rejected, clean prose kept. **Residual (not a regression):** *truncated-prose* fragments with no code signature (e.g. "encompasses how to use fr…") can still slip — that's the greedy `.+` capture, and ultimately the Layer-2 question (#72), not the noise filter.
 
 Source: 2026-06-23 observational-layer audit.
 
