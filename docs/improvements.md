@@ -504,6 +504,72 @@ Source: `docs/influence/mastra-observational-memory.md` — architecture study o
 
 ---
 
+### 71. Exclude the project DB from the published gem (gem is 28MB, ~96MB of it the dogfooding DB)
+
+Source: 2026-06-18 live observation while building the 0.13.0 release gem.
+
+**Problem.** `claude_memory.gemspec` builds its file list from `git ls-files` and rejects `bin/ Gemfile .gitignore .rspec spec/ .github/ .standard.yml` — but **not** `.claude/memory.sqlite3`, which is tracked (per the "always commit the project DB" convention). So the published gem *ships the repo's own dogfooding memory database*: the working-tree DB is ~96MB, compressing to a **28MB gem** (v0.6.0 was 280KB; the gem has been silently growing — 0.9.1 was 19MB — as the DB accumulates). Gem users get nothing from it (they init their own empty DB on install), it bloats every download, and it's trending toward RubyGems' 100MB ceiling.
+
+**Fix.** Add `.claude/` (or at least `.claude/memory.sqlite3` + WAL/SHM siblings) to the gemspec reject filter. Verify with `gem build` that the gem drops to <1MB and that nothing in the gem actually requires the file at runtime (it shouldn't — runtime opens the *user's* DB path via `Configuration`). Add a spec asserting `Gem::Specification.load(...).files` excludes `.claude/memory.sqlite3` so it can't regress.
+
+**Why High.** Low effort, high impact: ~28MB → <1MB published gem, and it removes a slow-growing landmine before it actually exceeds the RubyGems size limit and blocks a release. Not introduced by 0.13.0 — pre-existing and compounding.
+
+**Note on the convention.** This does *not* conflict with "always commit `.claude/memory.sqlite3`" — that's about repo reproducibility for collaborators. Shipping it *in the gem* is a separate, unintended consequence of the `git ls-files` manifest.
+
+---
+
+> **Observational-layer audit (2026-06-23).** A critical examination of every observation in this project's DB found the episodic layer is, in practice, producing ~no useful observations and is injecting noise into sessions. Four root causes (#72–#75), each backed by the live data below. Snapshot at audit time: **113 active observations, 0 consolidated, 0 expired, 0 promoted, every `corroboration_count = 1`**; only `decision`/`preference` kinds; every row traces to a `claude_code` transcript on the `observational-layer-*` branches. The count grew 99 → 105 → 113 *during* the audit session — the dogfooding loop is live and compounding. These supersede the optimistic framing of #68; the mechanism is sound, the inputs and the matching are not.
+
+### 72. Layer-2 (Claude-as-observer) produces **zero** observations — the quality source is silent ⭐
+
+Source: 2026-06-23 observational-layer audit.
+
+**Problem.** The design's quality observations were always meant to come from **Layer-2** (Claude-as-observer): the SessionStart prompt (`ContextInjector#format_distillation_prompt`) asks Claude to populate the `observations` field of its `memory.store_extraction` call. In practice it never has. Evidence: `store_extraction` creates a *synthetic* content_item with `source: "mcp_extraction"` (`ManagementHandlers#create_synthetic_content_item`), so any Layer-2 observation would trace to a `mcp_extraction` source. **All 113 observations trace to `source = claude_code` (raw transcripts); 0 to `mcp_extraction`** — despite `mcp_tool_calls` telemetry showing `memory.store_extraction` was invoked **4 times**. So Claude called the tool but never once filled in `observations`. The entire episodic log is Layer-1 regex output.
+
+**Why this is the highest-leverage finding.** Layer-1 (regex over raw transcript) *cannot* produce episodic narrative — it produces text fragments (see #74). The design explicitly delegated quality to Layer-2. If Layer-2 is silent, the layer can never be more than a fragment-scraper. Likely cause: the `observations` instruction is buried at the bottom of a long extraction prompt and is "optional-feeling"; Claude prioritizes facts and skips it (compare the documented headless-recall gap, `project_headless_retrieval_gap.md`).
+
+**Fix.** (a) Verify whether normal/headless sessions reliably reach the `store_extraction` path at all; (b) make the observations instruction non-optional and earlier in the prompt, or split it into its own focused step; (c) consider having the deterministic ingest emit a *signal* that an observation is wanted and let Layer-2 author the body. Add telemetry distinguishing Layer-1 vs Layer-2 observation provenance so this is measurable going forward.
+
+**Cross-links.** Blocks the value premise of #68; related to #74 (Layer-1 can't substitute).
+
+### 73. Observation dedup/corroboration is normalized-**exact**, so the promotion loop can never fire ⭐
+
+Source: 2026-06-23 observational-layer audit.
+
+**Problem.** `Observe::Reflector#dedupe` folds observations by `group_by { [scope, normalize(body)] }` where `normalize` is just `downcase` + whitespace-collapse + strip. Two observations corroborate **only if their bodies are byte-identical after lowercasing**. Real captures of "the same thing" are never byte-identical — e.g. the four stored variants "PreCompact hook set.", "PreCompact hook set — the design's Mastra-token-threshold analog.", "PreCompact set alongside ingest + sweep." describe one event but never fold. Result, confirmed in the data: **every observation has `corroboration_count = 1`; 0 consolidated; 0 promoted.** The corroboration gate — the layer's headline anti-hallucination feature — is **dead by construction** on any varied text. It can only fire if the *exact same string* recurs, which regex fragments from different transcript chunks essentially never do.
+
+**Fix.** Corroboration/dedup must be **semantic**, not exact: reuse the existing embedding stack (`Embeddings` + sqlite-vec) to fold observations above a similarity threshold, or fold on a normalized *subject+kind* key rather than the full body. Until then, the promotion gate provides no value and the "graduate after 2 sightings" story is unsupported. Add a spec that two paraphrases of one event corroborate.
+
+**Cross-links.** Without this, #72's quality observations still wouldn't promote.
+
+### 74. Layer-1 Observer ingests code/doc/transcript fragments; `noise_body?` lets ~⅓ through
+
+Source: 2026-06-23 observational-layer audit.
+
+**Problem.** The Layer-1 Observer runs `decided to (.+)` / `we always|never (.+)` over **raw transcript text**, which on this repo (and any repo whose sessions discuss code) is saturated with trigger phrases inside source, specs, docs, and tool output. The `noise_body?` filter (`NOISE_BODY_SIGNATURE = /\bdef\s|\bclass\s|\bmodule\s|=>|::|","|":\s*"|[{}]|\$\(|&&|\|\|/`) is tuned for code-*syntax* and misses prose/table/transcript fragments. Measured against the live 113: the filter catches **39**, but **38 obvious-noise rows slip through** (≈44% look like noise by a conservative heuristic; manual review puts it higher). Concrete slipped examples actually sitting in the injected log:
+- `[89] decided to use SQLite", kind: "decision", priority: 1) expect(id).to be_a(Integer)…` — a **spec fixture line**.
+- `[104] decided to gate promotion on corroboration" | | Changes | Explicitly…` — a **CHANGELOG table row** (`| |` ≠ `||`, so it dodges the filter).
+- `[48]–[55] / first-person `we always|never`)…` — fragments of the **distiller's own source-code comment**.
+- `[99] · (vector) 78 ├─ How frozen_string_literal…` — **benchmark tree output**.
+
+These are priority-1 `decision` rows, so they *are* injected into Block 1 of SessionStart (observed live in this session's own context) — spending context budget on garbage and risking misdirection (e.g. `[46] decided to use Postgres.`, a fixture string, implying a stack the project doesn't use).
+
+**Fix.** Make Layer-1 high-precision-or-silent: reject bodies that look like code/markdown/transcript (leading `-`/`#`/`|`, table pipes, `key: "value"` shapes, tree glyphs `├─└─`, `(vector)`, backtick-dense spans, JSONL artifacts) — invert the default from high-recall to high-precision, since the recall here is ~all noise. Pair with the `ContentSanitizer`/Observer border. (This is the P1 item from the 2026-06-18 quality review, now empirically confirmed and worse than estimated.)
+
+**Cross-links.** Even fully fixed, Layer-1 is a stopgap until #72; together they decide whether the log is signal or noise.
+
+### 75. The episodic layer has no fair test — this repo is a pathological self-pollution case
+
+Source: 2026-06-23 observational-layer audit.
+
+**Problem.** Every observation traces to this project's *own* `claude_code` design transcripts, whose specs literally contain `insert_observation(body: "decided to use SQLite")` and whose docs are full of "decided to…" prose. claude_memory dogfooding on its own repo is the **worst possible self-test** for the Observer — it maximizes trigger-text density and self-ingestion. So the audit above measures *self-pollution*, not the design's ceiling; a normal Rails/Django app would look very different. We currently have **no measurement of the layer's value on a representative project**, and the optimistic compression/promotion story in #68 was never validated.
+
+**Fix.** Stand up the deferred **LongMemEval-style episodic suite** (#67/#68 medium item) and/or capture a real non-claude_memory project trace as a fixture, and report observation precision (signal vs noise), corroboration/promotion rates, and compression on *that*. Treat "episodic layer adds value" as **unproven** in public materials until this exists (the 0.13.0 blog draft already hedges accordingly). Until then, the self-pollution makes the dashboard Observations panel actively misleading on this repo.
+
+**Cross-links.** Gates any future episodic value claim; depends on #72–#74 being fixed first to be worth measuring.
+
+---
+
 ## Medium Priority
 
 ### ~~18. Shell Completion for CLI~~ ✅ Implemented 2026-03-20
