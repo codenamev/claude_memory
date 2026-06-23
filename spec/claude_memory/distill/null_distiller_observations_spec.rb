@@ -84,4 +84,43 @@ RSpec.describe ClaudeMemory::Distill::NullDistiller, "observations (Layer-1 Obse
     expect(bodies).to eq(bodies.uniq)
     expect(obs.size).to be <= 10
   end
+
+  # 2026-06-23 audit (improvements #74): the high-recall Layer-1 observer was
+  # scraping code/docs/transcript fragments past noise_body? and injecting them
+  # into SessionStart. These pin the high-precision behavior.
+  describe "high-precision noise rejection (#74)" do
+    it "rejects a spec-fixture line captured after a decision phrase" do
+      noisy = 'We decided to use SQLite", kind: "decision", priority: 1) expect(id).to be_a'
+      expect(distiller.distill(noisy).observations).to be_empty
+    end
+
+    it "rejects a doc/CHANGELOG table-row capture (spaced pipes)" do
+      noisy = "We decided to gate promotion on corroboration | Changes | Explicitly"
+      expect(distiller.distill(noisy).observations).to be_empty
+    end
+
+    it "rejects benchmark tree/vector output captures" do
+      noisy = "We decided to use the (vector) 78 ├─ frozen_string_literal approach"
+      expect(distiller.distill(noisy).observations).to be_empty
+    end
+
+    it "rejects a method-call capture" do
+      expect(distiller.distill("We decided to call insert_observation(body: x)").observations).to be_empty
+    end
+
+    it "rejects a fragment that does not begin as a prose sentence" do
+      # a convention capture that starts with table/markup junk (leading pipe)
+      expect(distiller.distill("Convention: | malformed table cell |").observations).to be_empty
+    end
+
+    it "still keeps a clean prose decision with a reason" do
+      obs = distiller.distill("We decided to use SQLite because it is embedded.").observations
+      expect(obs.map { |o| o[:body] }).to include(a_string_matching(/use SQLite because it is embedded/))
+    end
+
+    it "still keeps a clean prose convention" do
+      obs = distiller.distill("Convention: prefer small focused pull requests.").observations
+      expect(obs.map { |o| o[:body] }).to include(a_string_matching(/small focused pull requests/))
+    end
+  end
 end

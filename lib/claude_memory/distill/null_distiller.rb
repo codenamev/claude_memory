@@ -49,8 +49,24 @@ module ClaudeMemory
         /\bwe\s+(?:should\s+)?(?:always|never)\s+(.+)/i
       ].freeze
 
-      # Bodies that look like code / JSON / shell rather than a statement.
-      NOISE_BODY_SIGNATURE = /\bdef\s|\bclass\s|\bmodule\s|=>|::|","|":\s*"|[{}]|\$\(|&&|\|\|/
+      # Bodies that look like code / JSON / shell / markup / transcript rather
+      # than a prose statement. High-precision gate: the Layer-1 observer scrapes
+      # raw transcript spans, which on a code-heavy project are dominated by
+      # source, specs, docs, and tool output — none of which are observations.
+      # (2026-06-23 audit, improvements #74: the prior signature let 38/117
+      # obvious-noise rows through — spec fixtures like `kind: "decision"`,
+      # CHANGELOG table rows, benchmark tree output, the distiller's own source
+      # comments — and they were being injected into SessionStart.)
+      NOISE_BODY_SIGNATURE = Regexp.union(
+        /\bdef\s|\bclass\s|\bmodule\s/,                      # Ruby definitions
+        /=>|::|","|":\s*"|[{}]|\$\(|&&|\|\|/,                # code / JSON / shell punctuation
+        /\w+:\s*["\[{\d]/,                                   # code/JSON key: "value" / key: 1 / key: [
+        /\w\(/,                                              # method/function call: expect(, insert_observation(
+        /\s\|\s/,                                            # spaced table pipe (doc / CHANGELOG rows)
+        /[\u{2500}-\u{257f}]/,                               # box-drawing glyphs (tree / benchmark output)
+        /\(vector\)|\(text\)/,                               # benchmark mode labels
+        /parentUuid|isSidechain|toolUseID|hookName|"type":/  # raw JSONL transcript fields
+      )
 
       def distill(text, content_item_id: nil)
         entities = extract_entities(text)
@@ -166,7 +182,13 @@ module ClaudeMemory
         (s[/\A.{0,240}?[.!?](?=\s|\z)/m] || s[0, 240]).to_s.strip
       end
 
+      # A usable observation reads as a prose sentence. Reject anything that
+      # doesn't begin like one (leading /, |, ·, or box-drawing glyphs from a
+      # code comment or tool output) or that carries a code/markup/transcript
+      # signature.
       def noise_body?(body)
+        return true unless body.match?(/\A[A-Za-z]/)
+
         body.match?(NOISE_BODY_SIGNATURE)
       end
 
