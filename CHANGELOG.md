@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-06-23
+
+Theme: **The observational layer, audited and repaired.** A critical examination of every observation in a real (dogfooding) project DB found the episodic layer was producing ~no useful observations and injecting noise into sessions — three evidence-backed defects, now fixed (the data is in `docs/improvements.md` #72–#75). No schema changes, no breaking changes.
+
+### Fixed
+
+- **High-precision Layer-1 observation filter (#74).** The high-recall Observer was scraping code, doc, and transcript fragments past `noise_body?` and injecting them into SessionStart (measured: 38 of 117 obvious-noise rows slipped through — spec fixtures, CHANGELOG table rows, benchmark tree output, even the distiller's own source comments). Strengthened the gate to reject code/JSON `key: "value"`, method calls, table pipes, box-drawing glyphs, `(vector)` labels, and raw JSONL fields, and to require a body to begin like a prose sentence. Verified against the real noise corpus: every sampled fragment now rejected, clean prose decisions/conventions kept.
+- **Corroboration can finally accumulate (#73).** Dedup matched on exact normalized strings, so varied wording of the same event never folded — every observation stayed at `corroboration_count = 1` and the promotion gate could never fire. Replaced exact grouping with greedy clustering over an injected similarity matcher; the default `Observe::TokenOverlapMatcher` (lexical Jaccard, deterministic, free) folds near-duplicates so corroboration climbs toward promotion. Pure synonym paraphrases still need real embeddings (measured: tfidf can't separate them from unrelated text on short bodies) — injectable via the `matcher:` seam.
+- **Observation capture elevated to a first-class SessionStart ask (#72).** Authoring observations was a paragraph buried in the optional deep-distill prompt, which fires almost never (`store_extraction` had zero calls in the layer's lifetime; Layer-1 auto-ingest carried ~100:1 of the load). Decoupled it into its own prominent `## Log What Happened` section. Whether the LLM-authored (Layer-2) path now fires is measurable via the `mcp_extraction` content-item source.
+
 ## [0.13.0] - 2026-06-18
 
 Theme: **Episodic memory — a second kind of memory.** ClaudeMemory gains an append-only *observation* layer ("what happened") that complements the semantic fact store ("what is true"), modeled on [Mastra's Observational Memory](docs/influence/mastra-observational-memory.md). Observations accrue automatically, are deduplicated/consolidated by reflection, and are promoted to facts only after corroboration — making repeated sighting an anti-hallucination gate built into the memory model. Schema advances to v20 (additive; no breaking changes to existing facts/queries).
