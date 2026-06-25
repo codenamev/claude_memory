@@ -100,4 +100,18 @@ RSpec.describe ClaudeMemory::Index::LexicalFTS do
       expect(results).not_to be_empty
     end
   end
+
+  describe "corrupt rank-index handling (issue #7, Finding 2)" do
+    it "translates a malformed-on-rank failure into a CorruptRankIndexError with a compact hint" do
+      expect {
+        fts.send(:with_rank_index) { raise "database disk image is malformed" }
+      }.to raise_error(described_class::CorruptRankIndexError, /claude-memory compact/)
+    end
+
+    it "lets unrelated errors propagate unchanged" do
+      expect {
+        fts.send(:with_rank_index) { raise ArgumentError, "nope" }
+      }.to raise_error(ArgumentError, "nope")
+    end
+  end
 end

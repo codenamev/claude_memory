@@ -3,6 +3,15 @@
 module ClaudeMemory
   module Index
     class LexicalFTS
+      # Raised when the FTS5 BM25 ranking path fails as "malformed" while the
+      # rest of the DB is fine — a corrupt contentless FTS5 index that
+      # PRAGMA integrity_check misses (issue #7, Finding 2). Recoverable with
+      # `claude-memory compact` (which runs #rebuild!).
+      class CorruptRankIndexError < StandardError; end
+
+      RANK_CORRUPTION_HINT = "FTS5 rank index is corrupt — recall is broken even though " \
+        "the database otherwise looks healthy. Run `claude-memory compact` to rebuild it."
+
       def initialize(store)
         @store = store
         @db = store.db
@@ -35,17 +44,19 @@ module ClaudeMemory
         end
 
         escaped_query = escape_fts_query(query)
-        if contentless?
-          @db.fetch(
-            "SELECT rowid AS content_item_id FROM content_fts WHERE text MATCH ? ORDER BY rank LIMIT ?",
-            escaped_query, limit
-          ).map { |row| row[:content_item_id] }
-        else
-          @db[:content_fts]
-            .where(Sequel.lit("text MATCH ?", escaped_query))
-            .order(:rank)
-            .limit(limit)
-            .select_map(:content_item_id)
+        with_rank_index do
+          if contentless?
+            @db.fetch(
+              "SELECT rowid AS content_item_id FROM content_fts WHERE text MATCH ? ORDER BY rank LIMIT ?",
+              escaped_query, limit
+            ).map { |row| row[:content_item_id] }
+          else
+            @db[:content_fts]
+              .where(Sequel.lit("text MATCH ?", escaped_query))
+              .order(:rank)
+              .limit(limit)
+              .select_map(:content_item_id)
+          end
         end
       end
 
@@ -59,18 +70,20 @@ module ClaudeMemory
         return [] if query.strip == "*"
 
         escaped_query = escape_fts_query(query)
-        if contentless?
-          @db.fetch(
-            "SELECT rowid AS content_item_id, rank FROM content_fts WHERE text MATCH ? ORDER BY rank LIMIT ?",
-            escaped_query, limit
-          ).all
-        else
-          @db[:content_fts]
-            .where(Sequel.lit("text MATCH ?", escaped_query))
-            .order(:rank)
-            .limit(limit)
-            .select(Sequel.lit("content_item_id, rank"))
-            .all
+        with_rank_index do
+          if contentless?
+            @db.fetch(
+              "SELECT rowid AS content_item_id, rank FROM content_fts WHERE text MATCH ? ORDER BY rank LIMIT ?",
+              escaped_query, limit
+            ).all
+          else
+            @db[:content_fts]
+              .where(Sequel.lit("text MATCH ?", escaped_query))
+              .order(:rank)
+              .limit(limit)
+              .select(Sequel.lit("content_item_id, rank"))
+              .all
+          end
         end
       end
 
@@ -116,6 +129,17 @@ module ClaudeMemory
       end
 
       private
+
+      # Run a `MATCH ... ORDER BY rank` query, translating the narrow
+      # "malformed"-on-rank failure into an actionable error instead of an
+      # unhandled Extralite stacktrace (issue #7, Finding 2). Any other error
+      # propagates unchanged.
+      def with_rank_index
+        yield
+      rescue => e
+        raise unless e.message.to_s.include?("malformed")
+        raise CorruptRankIndexError, RANK_CORRUPTION_HINT
+      end
 
       def contentless?
         @contentless
