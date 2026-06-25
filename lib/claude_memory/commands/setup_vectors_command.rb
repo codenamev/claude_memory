@@ -14,8 +14,8 @@ module ClaudeMemory
     #   1. Verify the chosen provider is loadable. For fastembed, surface
     #      a clear install command if the gem isn't on $LOAD_PATH.
     #   2. Persist CLAUDE_MEMORY_EMBEDDING_PROVIDER (and optional model)
-    #      into the project's .claude/settings.json env block, the same
-    #      mechanism Claude Code uses for OTel env (see OTel::SettingsWriter).
+    #      into the project's .claude/settings.local.json env block (per-machine,
+    #      gitignored — the provider is a developer choice, not a repo default).
     #   3. Re-embed existing facts under the new provider (unless --no-reindex).
     #   4. Report the final state — provider, dimensions, stored alignment.
     class SetupVectorsCommand < BaseCommand
@@ -110,8 +110,14 @@ module ClaudeMemory
         false
       end
 
+      # Write to settings.local.json (per-machine, gitignored), NOT the tracked
+      # settings.json: the embedding provider is a developer choice. Committing
+      # it would force the optional fastembed dependency on collaborators and —
+      # because Claude Code injects settings env into every subprocess — leak a
+      # non-default provider into the test suite, flipping provider-dependent
+      # specs (issue #7 follow-up, 2026-06-25).
       def settings_path
-        File.join(claude_dir, "settings.json")
+        File.join(claude_dir, "settings.local.json")
       end
 
       def claude_dir

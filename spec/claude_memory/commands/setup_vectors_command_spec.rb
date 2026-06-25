@@ -8,7 +8,9 @@ require "stringio"
 RSpec.describe ClaudeMemory::Commands::SetupVectorsCommand do
   let(:tmpdir) { Dir.mktmpdir("setup_vectors_spec") }
   let(:claude_dir) { File.join(tmpdir, ".claude") }
-  let(:settings_path) { File.join(claude_dir, "settings.json") }
+  # setup-vectors writes per-machine config to settings.local.json, not the
+  # tracked settings.json (issue #7 follow-up).
+  let(:settings_path) { File.join(claude_dir, "settings.local.json") }
   let(:stdout) { StringIO.new }
   let(:stderr) { StringIO.new }
   let(:command) { described_class.new(stdout: stdout, stderr: stderr) }
