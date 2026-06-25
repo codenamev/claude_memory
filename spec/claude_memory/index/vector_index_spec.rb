@@ -310,4 +310,36 @@ RSpec.describe ClaudeMemory::Index::VectorIndex do
       expect(unavailable_index.count).to eq(0)
     end
   end
+
+  describe "#table_dimensions and #recreate! (issue #7, Finding 1)" do
+    def seed_fact(object = "rails")
+      entity_id = store.find_or_create_entity(type: "repo", name: "test-#{object}")
+      store.insert_fact(subject_entity_id: entity_id, predicate: "uses_framework", object_literal: object)
+    end
+
+    it "reports nil before the table exists, then the created width" do
+      skip "sqlite-vec not available" unless vec_index.available?
+
+      expect(vec_index.table_dimensions).to be_nil
+      vec_index.insert_embedding(seed_fact, normalized_vector(384))
+      expect(vec_index.table_dimensions).to eq(384)
+    end
+
+    it "rebuilds facts_vec at a new width so a different-dim model can be adopted" do
+      skip "sqlite-vec not available" unless vec_index.available?
+
+      fact_id = seed_fact
+      vec_index.insert_embedding(fact_id, normalized_vector(384))
+      expect(vec_index.table_dimensions).to eq(384)
+
+      expect(vec_index.recreate!(768)).to be true
+      expect(vec_index.table_dimensions).to eq(768)
+      expect(vec_index.count).to eq(0) # rebuilt empty
+
+      # a 768-dim insert now succeeds where the 384 table would have raised
+      # "Expected 384 dimensions but received 768"
+      expect(vec_index.insert_embedding(fact_id, normalized_vector(768))).to be true
+      expect(vec_index.count).to eq(1)
+    end
+  end
 end

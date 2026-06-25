@@ -77,12 +77,30 @@ module ClaudeMemory
         run_indexing(store, facts, generator, tracker, operation_id, checkpoint, opts)
       end
 
+      # Reconcile the vec0 table's width with the resolved provider before
+      # indexing (issue #7, Finding 1). The vec0 width is immutable once the
+      # table is created and was only recorded in meta *after* a successful run,
+      # so an old tfidf/fresh DB silently created a 384 table and the first
+      # non-384 insert hard-failed. We detect the table's actual width directly
+      # (not via the meta, which may be unset) and rebuild when it differs.
       def handle_dimension_mismatch(store, generator, label)
-        check = Embeddings::DimensionCheck.call(store, generator)
-        return unless check.status == :mismatch
+        target = generator.dimensions
+        # Record the resolved dimension up front so a fresh table is created at
+        # the right width on first insert, not left at the 384 default.
+        store.set_meta("embedding_dimensions", target.to_s)
+        store.set_meta("embedding_provider", generator.name)
 
-        stdout.puts "#{label.capitalize}: Embedding dimensions changed (#{check.stored} → #{check.current}), clearing stale embeddings..."
-        clear_stale_embeddings(store)
+        vec_index = store.vector_index
+        return unless vec_index.available?
+
+        actual = vec_index.table_dimensions
+        return if actual == target # table already at the right width
+
+        if actual # genuine change: existing facts must re-embed at the new width
+          stdout.puts "#{label.capitalize}: Embedding dimensions changed (#{actual} → #{target}), rebuilding vector table..."
+          clear_stale_embeddings(store)
+        end
+        vec_index.recreate!(target)
       end
 
       def find_facts_to_index(store, tracker, label, opts)

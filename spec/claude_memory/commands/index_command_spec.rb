@@ -223,4 +223,34 @@ RSpec.describe ClaudeMemory::Commands::IndexCommand do
       global_store.close
     end
   end
+
+  describe "#handle_dimension_mismatch (issue #7, Finding 1)" do
+    let(:store) { ClaudeMemory::Store::SQLiteStore.new(project_db_path) }
+    let(:generator_768) { instance_double(ClaudeMemory::Embeddings::Generator, dimensions: 768, name: "fake-768") }
+
+    after { store.close }
+
+    it "rebuilds a stale-width vec0 table when the provider dimension differs" do
+      skip "sqlite-vec not available" unless store.vector_index.available?
+
+      # an existing 384-wide table — the old tfidf default, meta unset
+      store.vector_index.insert_embedding(store.facts.first[:id], Array.new(384) { 0.01 })
+      expect(store.vector_index.table_dimensions).to eq(384)
+
+      command.send(:handle_dimension_mismatch, store, generator_768, "project")
+
+      expect(store.vector_index.table_dimensions).to eq(768)
+      expect(store.get_meta("embedding_dimensions")).to eq("768")
+      expect(store.get_meta("embedding_provider")).to eq("fake-768")
+    end
+
+    it "records the dimension up front on a fresh DB so the table is built at the right width" do
+      skip "sqlite-vec not available" unless store.vector_index.available?
+
+      command.send(:handle_dimension_mismatch, store, generator_768, "project")
+
+      expect(store.get_meta("embedding_dimensions")).to eq("768")
+      expect(store.vector_index.table_dimensions).to eq(768)
+    end
+  end
 end

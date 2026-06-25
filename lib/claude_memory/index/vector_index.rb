@@ -134,6 +134,33 @@ module ClaudeMemory
         true
       end
 
+      # Drop and rebuild facts_vec at `dimensions`. A vec0 column width is
+      # immutable once the table is created, so adopting a model of a different
+      # dimension (or any model on a DB whose table was created at the 384
+      # default) requires a full rebuild — clearing rows isn't enough (issue #7,
+      # Finding 1). Requires the sqlite-vec extension loaded so the vec0
+      # destructor runs on DROP.
+      # @param dimensions [Integer] new embedding width
+      def recreate!(dimensions)
+        return false unless available?
+
+        @dimensions = dimensions
+        @db.run("DROP TABLE IF EXISTS facts_vec")
+        @vec_table_ensured = false
+        ensure_vec_table!
+        true
+      end
+
+      # The width facts_vec was actually created with, parsed from its DDL — or
+      # nil when the table doesn't exist yet. Detects a stale-width table even
+      # when the embedding_dimensions meta was never written (old tfidf DBs),
+      # which is exactly the case that silently left a 384 table in place.
+      # @return [Integer, nil]
+      def table_dimensions
+        ddl = @db[:sqlite_master].where(type: "table", name: "facts_vec").get(:sql)
+        ddl && ddl[/embedding\s+float\[(\d+)\]/, 1]&.to_i
+      end
+
       # Number of entries in the vec0 virtual table
       def count
         return 0 unless available?
