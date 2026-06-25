@@ -14,16 +14,19 @@ module ClaudeMemory
     # and writes JSON responses to output.
     class Server
       PROTOCOL_VERSION = "2024-11-05"
+      ORPHAN_CHECK_INTERVAL_SECONDS = 30
 
       # @param store_or_manager [Store::SQLiteStore, Store::StoreManager] database backend
       # @param input [IO] input stream for JSON-RPC requests (default: $stdin)
       # @param output [IO] output stream for JSON-RPC responses (default: $stdout)
-      def initialize(store_or_manager, input: $stdin, output: $stdout)
+      # @param parent_pid [Integer] pid to watch for orphaning (default: caller's parent)
+      def initialize(store_or_manager, input: $stdin, output: $stdout, parent_pid: Process.ppid)
         @store_or_manager = store_or_manager
         @tools = Tools.new(store_or_manager)
         @telemetry = Telemetry.new(store_or_manager)
         @input = input
         @output = output
+        @parent_pid = parent_pid
         @running = false
       end
 
@@ -31,12 +34,24 @@ module ClaudeMemory
       # @return [void]
       def run
         @running = true
+        watchdog = start_orphan_watchdog
         while @running
           line = @input.gets
           break unless line
 
           handle_message(line.strip)
         end
+      ensure
+        watchdog&.kill
+      end
+
+      # True once our original parent has exited and we've been reparented
+      # (to PID 1 / a subreaper). Claude Code spawns one stdio MCP server per
+      # session; a hard kill of the client can leave the server blocked on
+      # `gets` forever, holding a SQLite connection — the orphan leak in issue
+      # #7, Finding 3. The watchdog uses this to terminate.
+      def orphaned?
+        @parent_pid > 1 && Process.ppid != @parent_pid
       end
 
       # Signal the read loop to exit after the current message.
@@ -46,6 +61,23 @@ module ClaudeMemory
       end
 
       private
+
+      # Background watch that terminates the process when the parent dies, since
+      # the read loop is otherwise blocked indefinitely on `gets`. Returns the
+      # Thread, or nil when there's no meaningful parent to watch (e.g. a test
+      # harness or a manually-launched server). Uses `exit!` because the orphaned
+      # parent is gone — there's nothing reading our output to flush to, and the
+      # OS releases the SQLite connection on process exit.
+      def start_orphan_watchdog
+        return if @parent_pid <= 1
+
+        Thread.new do
+          loop do
+            sleep ORPHAN_CHECK_INTERVAL_SECONDS
+            exit!(0) if orphaned?
+          end
+        end
+      end
 
       # @return [void]
       def handle_message(line)

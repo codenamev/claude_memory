@@ -216,4 +216,23 @@ RSpec.describe ClaudeMemory::MCP::Server do
       expect(responses[1]["error"]).to be_nil
     end
   end
+
+  describe "#orphaned? (issue #7, Finding 3 — serve-mcp leak)" do
+    it "is false while the original parent is still alive" do
+      live = described_class.new(store, input: input, output: output, parent_pid: Process.ppid)
+      expect(live.orphaned?).to be false
+    end
+
+    it "is true once reparented away from the recorded parent" do
+      # a recorded parent pid that is not our current ppid simulates the parent
+      # having died and us being reparented (to PID 1 / a subreaper)
+      stale = described_class.new(store, input: input, output: output, parent_pid: Process.ppid + 1_000_000)
+      expect(stale.orphaned?).to be true
+    end
+
+    it "never reports orphaned when there is no meaningful parent (pid <= 1)" do
+      rootless = described_class.new(store, input: input, output: output, parent_pid: 1)
+      expect(rootless.orphaned?).to be false
+    end
+  end
 end
