@@ -14,6 +14,14 @@ mise.toml
 .rspec_status
 .claude/settings*.json
 
+# Project memory DB — per-developer dogfooding state, not a repo artifact.
+# The curated, reproducible memory lives in the tracked snapshot
+# .claude/rules/claude_memory.generated.md; the raw DB re-pollutes every
+# session, isn't shipped in the gem (gemspec excludes .claude/), and its LFS
+# blobs don't survive on the remote. Tracking it only caused dirty-tree
+# friction at release time. (Reverses the earlier "always commit it" rule.)
+.claude/memory.sqlite3
+
 # SQLite WAL/SHM — ephemeral runtime files, recreated on every DB open
 *.sqlite3-shm
 *.sqlite3-wal
