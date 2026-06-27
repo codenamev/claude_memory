@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-06-27
+
+Theme: **Robustness from a real bug report (issue #7) + a 28MB→606K gem.** Closes [#7](https://github.com/codenamev/claude_memory/issues/7) — three independent failure modes around embeddings, FTS, and process lifecycle — plus two backlog items surfaced alongside it. No schema changes, no breaking changes.
+
+### Fixed
+
+- **Adopting a non-384-dim embedding model no longer hard-fails on an existing DB (#7 Finding 1).** The `facts_vec` vec0 table's width is immutable once created, and `embedding_dimensions` was only recorded *after* a successful index — so a tfidf/fresh DB silently created a 384 table and the first 768-dim insert raised `Expected 384 ... received 768`. `VectorIndex#recreate!` now drops + rebuilds `facts_vec` at the resolved width, and `IndexCommand#handle_dimension_mismatch` reads the table's actual width from its DDL and rebuilds up front (covering the unset-meta case, not just a recorded mismatch).
+- **Corrupt FTS5 rank index is now detected and self-heals (#7 Finding 2 + #69).** Concurrent writers can leave `content_fts` so that plain `MATCH` works but `ORDER BY rank` raises "database disk image is malformed" — silently breaking recall while `PRAGMA integrity_check` passes. `doctor` now probes the rank path per DB (`Checks::FtsRankCheck`); the sweep (`PreCompact`/`SessionEnd`) auto-rebuilds on detection (`Sweep::Maintenance#repair_fts_rank`) so recall self-repairs without a manual `compact`; and `LexicalFTS#search` raises a `CorruptRankIndexError` with a compact hint instead of an unhandled stacktrace.
+- **`serve-mcp` can no longer orphan (#7 Finding 3).** A hard kill of the client could leave the stdio MCP server blocked forever on `gets` (no stdin EOF), holding a SQLite connection — observed as serve-mcp processes lingering for days. A parent-death watchdog (`Server#orphaned?` + a 30s thread) exits the process once it's reparented away from its original parent.
+- **The embedding provider no longer leaks into the test suite.** `setup-vectors` wrote `CLAUDE_MEMORY_EMBEDDING_PROVIDER` into the tracked `settings.json`, which Claude Code injects into every subprocess env — flipping provider-dependent specs. It now writes to `settings.local.json` (per-machine), and the suite clears `CLAUDE_MEMORY_EMBEDDING_*` for hermetic runs.
+
+### Changed
+
+- **The published gem dropped from ~28MB to 606K (#71).** The gemspec's `git ls-files` manifest shipped the repo's own ~96MB dogfooding `.claude/memory.sqlite3` (and was trending toward RubyGems' 100MB ceiling). `.claude/` is now excluded from the manifest; users init their own DB, and the plugin manifest + commands/skills/output-styles (sourced at the top level) are unaffected. Regression-guarded by a manifest spec.
+
 ## [0.13.1] - 2026-06-23
 
 Theme: **The observational layer, audited and repaired.** A critical examination of every observation in a real (dogfooding) project DB found the episodic layer was producing ~no useful observations and injecting noise into sessions — three evidence-backed defects, now fixed (the data is in `docs/improvements.md` #72–#75). No schema changes, no breaking changes.
