@@ -43,6 +43,12 @@ RSpec.describe ClaudeMemory::Sweep::Sweeper do
       expect(stats).to include(:proposed_facts_expired, :disputed_facts_expired, :elapsed_seconds)
     end
 
+    it "runs the FTS rank self-heal step (#69) and reports it in stats" do
+      stats = sweeper.run!
+      expect(stats).to have_key(:fts_rank_repaired)
+      expect(stats[:fts_rank_repaired]).to be false # healthy DB needs no rebuild
+    end
+
     it "honors budget" do
       stats = sweeper.run!(budget_seconds: 10)
       expect(stats[:budget_honored]).to be true

@@ -385,4 +385,28 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
       expect(custom.expire_proposed_facts).to eq(1)
     end
   end
+
+  describe "#repair_fts_rank (improvement #69 — FTS self-heal)" do
+    def index_content(text)
+      id = store.upsert_content_item(
+        source: "claude_code", session_id: "s",
+        text_hash: Digest::SHA256.hexdigest(text), byte_len: text.bytesize, raw_text: text
+      )
+      ClaudeMemory::Index::LexicalFTS.new(store).index_content_item(id, text)
+    end
+
+    it "returns false (no rebuild) when the rank path is healthy" do
+      index_content("the project uses sqlite")
+      expect(maintenance.repair_fts_rank).to be false
+    end
+
+    it "rebuilds the FTS index and returns true when the rank path is corrupt" do
+      index_content("the project uses sqlite")
+      allow_any_instance_of(ClaudeMemory::Index::LexicalFTS).to receive(:search)
+        .and_raise(ClaudeMemory::Index::LexicalFTS::CorruptRankIndexError, "corrupt")
+      expect_any_instance_of(ClaudeMemory::Index::LexicalFTS).to receive(:rebuild!)
+
+      expect(maintenance.repair_fts_rank).to be true
+    end
+  end
 end

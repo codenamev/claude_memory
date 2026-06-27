@@ -57,6 +57,7 @@ module ClaudeMemory
           @stats[:observations_deduped] = reflection[:deduped]
           @stats[:observations_expired] = reflection[:expired]
         end
+        run_if_within_budget { @stats[:fts_rank_repaired] = maintenance.repair_fts_rank }
         run_if_within_budget { @stats[:wal_checkpointed] = maintenance.checkpoint_wal }
 
         @stats[:elapsed_seconds] = Time.now - @start_time

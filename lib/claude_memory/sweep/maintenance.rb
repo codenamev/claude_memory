@@ -408,6 +408,28 @@ module ClaudeMemory
         {deduped: result.deduped, expired: result.expired}
       end
 
+      # Self-heal the FTS5 rank index (improvement #69). Concurrent writers
+      # (the ingest hook vs the MCP server) can leave content_fts in a state
+      # where plain MATCH works but `ORDER BY rank` raises "malformed" —
+      # silently breaking recall while integrity_check passes. Sweep runs on
+      # PreCompact/SessionEnd, so probing the rank path here and rebuilding on
+      # failure lets recall self-repair within the session that broke it, with
+      # no manual `claude-memory compact`. (Detection is also surfaced by the
+      # doctor FtsRankCheck; this is the automatic repair.) A rebuild on a very
+      # large index runs to completion — corruption is rare and the rebuild is
+      # the only fix; the per-step budget gate keeps it from *starting* late.
+      # Returns: true if a rebuild was performed, false otherwise.
+      def repair_fts_rank
+        fts = ClaudeMemory::Index::LexicalFTS.new(@store)
+        fts.search("a", limit: 1)
+        false
+      rescue ClaudeMemory::Index::LexicalFTS::CorruptRankIndexError
+        fts.rebuild!
+        true
+      rescue
+        false
+      end
+
       # Run SQLite VACUUM to reclaim space.
       # Returns: true
       def vacuum
