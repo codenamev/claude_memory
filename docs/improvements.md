@@ -506,6 +506,8 @@ Source: `docs/influence/mastra-observational-memory.md` — architecture study o
 
 ### 71. Exclude the project DB from the published gem (gem is 28MB, ~96MB of it the dogfooding DB)
 
+**✅ Shipped 2026-06-27.** Added `.claude/` to the gemspec reject filter; the published gem dropped from **28MB → 606K**. The plugin manifest (`.claude-plugin/`) and top-level `commands/`/`skills/`/`output-styles/` are preserved (the plugin sources them there, not from `.claude/`); runtime `.claude/output_styles` references resolve against the *user's* project dir. Regression-guarded by `spec/claude_memory/gemspec_manifest_spec.rb`.
+
 Source: 2026-06-18 live observation while building the 0.13.0 release gem.
 
 **Problem.** `claude_memory.gemspec` builds its file list from `git ls-files` and rejects `bin/ Gemfile .gitignore .rspec spec/ .github/ .standard.yml` — but **not** `.claude/memory.sqlite3`, which is tracked (per the "always commit the project DB" convention). So the published gem *ships the repo's own dogfooding memory database*: the working-tree DB is ~96MB, compressing to a **28MB gem** (v0.6.0 was 280KB; the gem has been silently growing — 0.9.1 was 19MB — as the DB accumulates). Gem users get nothing from it (they init their own empty DB on install), it bloats every download, and it's trending toward RubyGems' 100MB ceiling.

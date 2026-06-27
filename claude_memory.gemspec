@@ -24,7 +24,11 @@ Gem::Specification.new do |spec|
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).reject do |f|
       (f == gemspec) ||
-        f.start_with?(*%w[bin/ Gemfile .gitignore .rspec spec/ .github/ .standard.yml])
+        # `.claude/` is the repo's own dogfooding state — the tracked project
+        # memory DB is ~96MB and was bloating the gem to ~28MB (improvement
+        # #71). Gem users init their own DB via Configuration; they never need
+        # ours. Exclude the whole dir from the published manifest.
+        f.start_with?(*%w[bin/ Gemfile .gitignore .rspec spec/ .github/ .standard.yml .claude/])
     end
   end
   spec.bindir = "exe"
