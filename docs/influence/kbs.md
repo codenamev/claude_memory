@@ -2,6 +2,7 @@
 
 *Analysis Date: 2026-03-02*
 *Re-studied: 2026-03-30 — no changes since v0.2.1*
+*Re-studied: 2026-06-30 — still v0.2.1 (commit c04561d); no new releases, no new commits, empty `[Unreleased]` CHANGELOG. Findings below unchanged.*
 *Repository: https://github.com/MadBomber/kbs*
 *Version: v0.2.1 (commit c04561d)*
 

@@ -7,6 +7,44 @@
 
 ---
 
+## Re-studied: 2026-06-30 — v13.9.1 (commit 3a2ba29)
+
+**CHANGED? Yes — major.** ~60 releases and three major versions since the v10.6.3 baseline (v11.0.0 → v12.0.0 → v13.0.0 → v13.9.1). The project's center of gravity shifted from a single Bun worker + SQLite + Chroma into a far heavier multi-runtime system. Two dominant themes since baseline: (1) a large opt-in **Server Beta** stack (Postgres + Redis + BullMQ + REST `/v1` API), and (2) a ground-up **PostHog cloud telemetry** buildout. Both reinforce our existing rejections rather than offering new adoptable surface. The genuinely adoptable signal is concentrated in observer-output quality and per-prompt context injection.
+
+### What changed (by major version)
+
+- **v11.0.0 (2026-04-05)** — *Semantic Context Injection*: every `UserPromptSubmit` now queries the vector store for the top-N most relevant past observations and injects them, replacing recency-based "last N" with relevance-based retrieval (survives `/clear`, skips <20-char prompts, degrades gracefully when the vector store is down). *Strict Observer Response Contract* (breaking): the observer can no longer return prose skips like "Skipping — no substantive tool executions"; `buildObservationPrompt` now requires `<observation>` XML blocks or an empty response, and a `ResponseProcessor` warns on non-XML. Also: tier routing (Haiku for simple tool-only queues, ~52% cost cut), multi-machine observation sync over SSH, orphaned-message drain.
+- **v12.0.0 (2026-04-07)** — *File-Read Decision Gate*: a `PreToolUse` hook detects when a file already has prior observations, injects the observation timeline, and **blocks the redundant `Read`/`Edit`** via `permissionDecision: deny` with a rich payload (file-size threshold + observation dedup). Smart-explore expanded to 24 tree-sitter languages. Platform-source isolation (`platform_source` column) namespaces Claude vs Codex sessions. 40+ cross-platform bug fixes.
+- **v13.0.0 (2026-05-08)** — *Server Beta* opt-in runtime: Postgres-backed storage, BullMQ+Redis queue, `/v1` REST API, API-key auth, outbox pattern, Docker/E2E harness. **Relicensed AGPL-3.0 → Apache-2.0** (our prior doc flagged AGPL as a concern — that concern is now resolved on their side, though we remain MIT).
+- **v13.5.x–13.8.0** — almost entirely PostHog telemetry (per-session rollups, redacted error tracking, historical backfill, geolocation, cost-per-observation KPIs) plus worker-lifecycle hardening (self-replacing worker, single spawn-gate lockfile, CLI capability probing).
+- **v13.9.0 (2026-06-29)** — `claude-mem/sdk` (cmem-sdk): an **in-process** capture→compress→search pipeline with **no HTTP worker and no Redis**. Notable because it walks back toward the in-process model we already use — quiet validation of our no-background-process stance. `server-beta` runtime renamed to `server`.
+- **v13.9.1 (2026-06-29)** — observer drops invalid prose and pauses on quota; platform-source-scoped recovery.
+
+### NEW adoptable items
+
+#### High Priority
+
+1. **Per-prompt semantic context injection (UserPromptSubmit hook)** — *value:* directly addresses our known `project_headless_retrieval_gap` (in headless `claude -p`, Claude never calls MCP recall tools, so memory's contribution rests entirely on the one-shot SessionStart injection). A `UserPromptSubmit` hook that injects the top-N semantically relevant facts on *each* prompt would extend memory's reach to mid-session and headless turns without an MCP round-trip. *Evidence:* v11.0.0 changelog "Semantic Context Injection (#1568)"; handler in `src/cli/handlers/session-init.ts`. *Effort:* ~1–2 days — we already have `recall_semantic` (fastembed) and a context-injection path; this is a new hook event reusing existing retrieval, gated on prompt length and deduped against the SessionStart block. *Trade-off:* token cost per prompt — must cap N small and skip trivial prompts as they do.
+
+2. **Observer output-fidelity classifier (`idle` / `prose` / `xml` taxonomy + visible preview)** — *value:* hardens our new observational layer's extraction border. Today our `store_extraction` validates/coerces, but a malformed Claude-as-observer turn can silently yield zero observations with no signal. claude-mem's `classifyObserverOutput` splits non-XML output into `idle` (benign empty — drop quietly) vs `prose` (conversational — drop but log a single-line preview), so a stuck-at-zero pipeline is *visible* rather than silent. *Evidence:* `src/sdk/output-classifier.ts:40-50` (`classifyObserverOutput`), `previewOutput` at `:20-28`. *Effort:* ~0.5 day — a pure function mirroring our existing `BareConclusionDetector`/`ReferenceMaterialDetector` style, plus a debug-level preview log when an extraction turn produced no rows. *Trade-off:* none; it's a diagnostics-only gate.
+
+#### Medium Priority
+
+3. **Quota-pause detection that preserves claimed work** — `isQuotaLimitedObserverOutput` (`src/sdk/output-classifier.ts:57-75`) distinguishes "Claude usage limit reached" prose from ordinary observer prose, so a quota pause does *not* get confused with a no-op skip. Less critical for us (we use the in-session Claude Code budget, no separate API), but the principle — *don't treat an interruption as "nothing to record"* — applies to our SessionStart distillation when the session is truncated. *Effort:* ~0.5 day if we choose to flag truncated-extraction turns distinctly.
+
+### Features to avoid (reinforced)
+
+- **Server Beta (Postgres + Redis + BullMQ + REST `/v1`)** — exactly the external-infrastructure complexity our CLAUDE.md and prior studies reject. Their own v13.9.0 cmem-sdk (no worker, no Redis) signals the in-process model is the saner default.
+- **PostHog cloud telemetry** — the bulk of 13.5–13.8 is cloud analytics with consent gates, scrubbers, and a "~$7,700/mo → ~$10/mo" billing concern. Out of scope for a local-first, privacy-by-default gem; we keep telemetry in-DB (`mcp_tool_calls`, `activity_events`).
+- **File-Read Decision Gate / Smart-Explore (24 languages, tree-sitter)** — still code-navigation domain, not fact memory. The `PreToolUse`-deny-with-injection *mechanism* is clever but we have no equivalent use case.
+- **Multi-machine SSH sync, tier routing, multiple AI providers** — out of scope; we have no background agent making provider calls.
+
+### Bottom line
+
+claude-mem grew massively (3 majors, Postgres/Redis/REST, cloud telemetry) but most of that growth is infrastructure we deliberately avoid — and their own v13.9.0 in-process SDK quietly validates our no-worker design. The two patterns worth lifting are small and retrieval/quality-focused: **per-prompt semantic injection** (closes our headless-retrieval gap) and an **observer output classifier** (makes silent zero-extraction visible in our observation layer).
+
+---
+
 ## Executive Summary
 
 ### Project Purpose

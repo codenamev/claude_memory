@@ -4,6 +4,8 @@
 *Repository: https://github.com/technicalpickles/cq*
 *Focus: Tool usefulness (not internals)*
 
+> **Re-studied: 2026-06-30 — cq v0.2.0 (commit 343c092, released 2026-06-30).** The 2026-04-28 baseline below predates a versioned release (cq's first tagged release is v0.2.0). Since then cq added: subagent transcript indexing (`is_sidechain`/`agent_id`/`agent_type`/`workflow_id`, recurses into `<uuid>/subagents/*.jsonl`), a Claude Code plugin (`claude-plugin/` + marketplace) that teaches Claude to write `cq sql` audit queries, `--count-by` aggregation, `--fields` JSON-column extraction, `--offset` pagination, a `projects` subcommand, multi-source discovery (`--source`/cenv), and a batch of CLI-UX hardening (parameterized SQL, stdout/stderr split, empty-result suggestions, truncation hints). **The single highest-value finding for ClaudeMemory is the subagent-transcript gap — see the dated section at the bottom.** Original analysis preserved unchanged below.
+
 ---
 
 ## Executive Summary
@@ -185,3 +187,53 @@ ClaudeMemory already captures some of this in its own SQLite databases:
 - [ ] Install cq locally
 - [ ] Run `cq sql` audit on `mcp__memory__*` activation rate over the last 30d
 - [ ] If the audit surfaces a real gap, file it and decide whether the fix lives in skill descriptions, MCP server instructions, or elsewhere
+
+---
+
+## Re-study: 2026-06-30 — cq v0.2.0 (commit 343c092)
+
+**Baseline:** 2026-04-28 (pre-release working tree). **Current:** v0.2.0, released 2026-06-30. **Changed:** yes — substantial. The architecture verdict from April still holds (observability vs curation; complementary, not competing; don't adopt DuckDB/cross-project-default/raw-SQL-as-curation). What follows is only what is *new* and adoptable.
+
+### High Priority ⭐
+
+#### R1. Verify ClaudeMemory ingests subagent transcripts — likely a real coverage gap
+
+This is the headline finding. cq now recurses into `<project>/<session-uuid>/subagents/*.jsonl` and tags every row with `is_sidechain`, `agent_id`, `agent_type`, `workflow_id` (claude_provider.rs:245, README "Views" section). Their skill-activation use case explicitly attributes many misses to subagents: *"subagents (which may not have the skill list in their context) accounted for many of the misses."*
+
+- **Why it matters for us:** `Ingest::Ingester#ingest` (lib/claude_memory/ingest/ingester.rb:35) consumes exactly one `transcript_path` handed in by the hook payload. It never enumerates a `subagents/` directory. So any knowledge produced *inside* a subagent run only reaches memory if Claude Code fires a Stop/SessionEnd/TaskCompleted hook carrying that subagent's transcript path. If it doesn't (cq's evidence suggests subagent activity is a non-trivial slice), **ClaudeMemory is blind to a whole class of sessions** — which is the same "is the plugin firing when it should?" question the lead is chasing, one layer down.
+- **Evidence:** cq commits `capture subagent agentType from meta.json` (d865669), `recurse into subagents/ when scanning, exclude journal.jsonl` (4407e66), `recursive max_dir_mtime so Auto-sync detects deep subagent files` (9bd2f94); cq's own use-cases.md attribution.
+- **Action (not a code change yet — a measurement):** run `cq sql` to count how many of *our own* `claude_memory` project sessions had subagent activity, and cross-check against which transcript paths the `content_items` table actually ingested. If there's a delta, decide whether the ingest hook payload already carries subagent paths or whether we need a `subagents/`-aware glob in the ingest path.
+- **Effort:** measurement ~1h; fix (if needed) ~half-day (subagent-aware discovery + a `is_sidechain`/`agent_type` column on `content_items` for provenance).
+- **Recommendation:** **INVESTIGATE FIRST.** Don't build blind — this is exactly the "survey real multi-project data before a schema change" discipline this project follows.
+
+#### R2. `--count-by` + `--fields`: the audit ergonomics our `docs/audit-queries.md` plan wanted
+
+cq added `--count-by <field>` (group-and-count over any column, incl. JSON input fields) and `--fields a,b` (project JSON input keys into columns) across tools/messages/sessions (commits 2e62b06, 2aa4f3f). This is the cheap version of the skill-activation audit — `cq tools Skill --count-by skill` reproduces "The Audit" use case without writing SQL.
+
+- **Why it matters:** our April doc floated a speculative `claude-memory sql` subcommand (deferred). cq shows the lighter-weight win is *aggregation flags on existing list commands*, not a raw-SQL passthrough. If we ever surface tool/recall telemetry on the CLI, copy `--count-by` (group `mcp_tool_calls` by `tool_name`) rather than exposing SQL.
+- **Effort:** low if/when we add it; for now it's a design note.
+- **Recommendation:** **CONSIDER** — fold into any future `claude-memory stats --tools` enhancement; reject the raw-`sql` subcommand idea in favor of this.
+
+### Medium Priority
+
+#### R3. cq now ships a Claude Code plugin whose skill *teaches Claude to write the audit queries*
+
+`claude-plugin/skills/cq/SKILL.md` + marketplace packaging (commit 3893ff8). The skill hands Claude the full schema + query cookbook so Claude reaches for cq automatically on "is my git-commit skill firing?"-shaped questions. Their README has a candid "When it doesn't fire" section (competing skills, description tuning) — the same triggering problem ClaudeMemory's `memory_guide` prompt and skill descriptions face.
+
+- **Relevance:** we already have the analog (`memory_guide` MCP prompt, the memory-first-workflow skill). The adoptable nuance is cq's *honesty about non-activation* baked into the plugin README, and their `--examples` schema dump "designed to be consumed by AI agents building their own queries." Our `docs/audit-queries.md` (if/when written) should be phrased as agent-consumable query templates, not just human docs.
+- **Recommendation:** **CONSIDER** — low effort, aligns with our `feedback_honest_evidence_public_materials` norm.
+
+#### R4. CLI-UX hardening worth mirroring
+
+Two concrete, low-cost patterns: (a) **parameterized queries** replacing string interpolation (commit 0e3eebe) — a security fix that retroactively validates our April "read-only enforcement / footgun" worry about any SQL surface; (b) **stdout/stderr separation** (progress/errors to stderr, data to stdout — commit 500d755) so output is pipeable. ClaudeMemory's CLI commands should keep telemetry/progress noise off stdout for the same reason. Also: empty-result contextual suggestions and `--limit` truncation hints (d46ebf6, bcc1303) — small UX wins if we touch the recall/stats commands.
+
+- **Recommendation:** **DEFER** — pick up opportunistically; the stdout/stderr discipline is the one worth auditing now since hooks parse our stdout as JSON.
+
+### Features to avoid (unchanged + new)
+
+- All April "avoid" items still stand (DuckDB primary store, cross-project default, re-index-on-every-command).
+- **New:** cq's multi-source/cenv discovery (`--source`, `$CENV_BASE`) solves cq's "query across remote container envs" problem. ClaudeMemory's `CLAUDE_CONFIG_DIR` override already covers our isolation need; don't generalize it into a multi-source union — our project/global scope split is the deliberate boundary.
+
+### Bottom line
+
+cq matured from a pre-release tool into a v0.2.0 plugin-shipping product; the one thing that should change *our* roadmap is the subagent-transcript coverage question (R1) — measure whether ClaudeMemory's hook-driven ingest is silently skipping subagent sessions before doing anything else.

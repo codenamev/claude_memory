@@ -6,6 +6,40 @@
 *Version: 0.34.0 (commit 1c7aba9)*
 *Re-studied: 2026-03-30 — v0.35.0. One release since last study (2026-03-16). Key addition: privacy-first usage stats tracking (`stats/` package) recording every search/trace to NDJSON file (`.grepai/stats.json`), computing output tokens vs grep-equivalent tokens with savings percentages and optional USD cost savings. Fire-and-forget recording via goroutine with 100ms timeout, file-locking for cross-process safety. Shell completion also added (we already have this via #18). `.grepaiignore` support not relevant.*
 
+*Re-studied: 2026-06-30 — still v0.35.0 (NO new release since last study; latest release 2026-03-16). The default branch (`main`) has advanced by exactly one commit past the last study: #188 "configurable file-level deduplication" (2026-03-27), which actually predates the 2026-03-30 study but wasn't called out then. `pushedAt` is 2026-06-22 but those pushes were to PR branches — `main` HEAD has not moved since 2026-03-27 and the `[Unreleased]` CHANGELOG section is empty. Repo has effectively gone quiet. Only newly-relevant pattern: **file-level dedup of search results** (see Re-study Findings below). Nothing else adoptable; RPG graph / Bubble Tea TUI / external embeddings remain in the avoid list.*
+
+---
+
+## Re-study Findings (2026-06-30)
+
+### Only change since baseline: file-level result deduplication (#188)
+
+**What grepai did** (`search/dedup.go`, `search/search.go:35-60`): when multiple chunks from the *same file* match a query, the result list gets crowded by near-duplicate hits from one file, reducing diversity of the top-N. The fix:
+1. Over-fetch: when dedup is enabled, scale the internal fetch limit from 2× to **4×** the requested `limit`.
+2. Apply boost scoring, then `DeduplicateByFile` — keep only the highest-scoring chunk per `FilePath` (single pass, `seen` map; results arrive pre-sorted so first-seen wins).
+3. Truncate to `limit`.
+4. Gated behind `search.dedup.enabled` config (default true).
+
+```go
+func DeduplicateByFile(results []store.SearchResult) []store.SearchResult {
+    seen := make(map[string]bool, len(results))
+    deduped := make([]store.SearchResult, 0, len(results))
+    for _, r := range results {
+        if seen[r.Chunk.FilePath] { continue }
+        seen[r.Chunk.FilePath] = true
+        deduped = append(deduped, r)
+    }
+    return deduped
+}
+```
+
+**Relevance to ClaudeMemory** — genuinely applicable, and timely. Our analog: a recall query can return several facts that all trace to the *same source content_item* (same transcript chunk) or share the same `subject`, crowding out diverse knowledge from the top-N. This matters most for the **SessionStart top-5 context injection**, which (per the headless-retrieval-gap note) is memory's *entire* contribution in headless `claude -p` mode where Claude never calls recall tools. A top-5 dominated by five facts from one chunk is far weaker than five facts spanning five sources. The grepai recipe maps cleanly: over-fetch (e.g. 4×5=20), dedup by `source_content_item_id` (or `subject`), then truncate to 5.
+
+- **Value**: Higher source/subject diversity in the top-N — directly strengthens the highest-leverage, fully-automatic injection path.
+- **Evidence**: `search/dedup.go`, `search/search.go:35-60` (over-fetch 2×→4×, boost, dedup, truncate, config-gated).
+- **Effort**: ~0.5 day. Pure function + over-fetch tweak in the recall/context-injection path; mirrors a pattern (`DeduplicateByFile`) we can copy almost verbatim into Ruby.
+- **Recommendation**: **CONSIDER** — best diversity-per-effort win available from this repo; aligns with our pure-Ruby/SQLite constraints (no new deps). NOT yet in improvements.md.
+
 ---
 
 ## Executive Summary
