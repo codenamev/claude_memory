@@ -36,11 +36,7 @@ module ClaudeMemory
       def similar?(body_a, body_b)
         a = significant_tokens(body_a)
         b = significant_tokens(body_b)
-        return false if a.empty? || b.empty?
-
-        intersection = (a & b).size.to_f
-        union = (a | b).size
-        (intersection / union) >= @threshold
+        Core::Jaccard.score(a, b) >= @threshold
       end
 
       private

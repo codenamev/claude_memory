@@ -461,19 +461,11 @@ module ClaudeMemory
           .to_set
       end
 
-      def restore_jaccard(a, b)
-        return 0.0 if a.empty? && b.empty?
-        intersection = (a & b).size
-        union = (a | b).size
-        return 0.0 if union.zero?
-        intersection.to_f / union
-      end
-
       def find_overlapping_siblings(candidate, siblings, candidate_tokens)
         siblings.select do |other|
           next false if other[:id] == candidate[:id]
           other_tokens = restore_tokenize(other[:object_literal])
-          restore_jaccard(candidate_tokens, other_tokens) >= RESTORE_JACCARD_THRESHOLD
+          Core::Jaccard.score(candidate_tokens, other_tokens) >= RESTORE_JACCARD_THRESHOLD
         end
       end
 
