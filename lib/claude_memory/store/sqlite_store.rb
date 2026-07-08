@@ -725,13 +725,14 @@ module ClaudeMemory
       #
       # @param scope [String, nil] filter by "project"/"global"; nil for any
       # @param limit [Integer] maximum rows to return
-      # @param min_priority [Integer, nil] only rows with priority <= this
-      #   (1 returns only 🔴; nil returns all)
+      # @param max_priority [Integer, nil] only rows with priority <= this value.
+      #   Priority is inverted (1 = 🔴 important … 3 = 🟢 info), so a *higher*
+      #   max_priority returns *more* rows: 1 returns only 🔴, nil returns all.
       # @return [Array<Hash>]
-      def recent_observations(scope: nil, limit: 20, min_priority: nil)
+      def recent_observations(scope: nil, limit: 20, max_priority: nil)
         ds = observations.where(status: "active")
         ds = ds.where(scope: scope) if scope
-        ds = ds.where { priority <= min_priority } if min_priority
+        ds = ds.where { priority <= max_priority } if max_priority
         ds.order(Sequel.desc(:observed_at), Sequel.desc(:id)).limit(limit).all
       end
 

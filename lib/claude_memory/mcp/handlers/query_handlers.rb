@@ -126,12 +126,12 @@ module ClaudeMemory
 
           scope = args["scope"] || "project"
           limit = extract_limit(args, default: 20)
-          min_priority = (args["important_only"] == true) ? Domain::Observation::IMPORTANT : nil
+          max_priority = (args["important_only"] == true) ? Domain::Observation::IMPORTANT : nil
 
           store = get_store_for_scope(scope)
           return {error: "Database not available"} unless store
 
-          rows = store.recent_observations(scope: scope, limit: limit, min_priority: min_priority)
+          rows = store.recent_observations(scope: scope, limit: limit, max_priority: max_priority)
 
           {
             observation_count: rows.size,
