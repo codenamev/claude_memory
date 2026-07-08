@@ -768,10 +768,12 @@ module ClaudeMemory
       #
       # @param observation_id [Integer] keeper observation
       # @param by [Integer] how much to add (the loser's corroboration_count)
-      # @return [void]
+      # @return [Boolean] true if a row was updated (symmetric with the sibling
+      #   mutators tombstone_observation/expire_observation/mark_observation_promoted)
       def increment_corroboration(observation_id, by: 1)
-        observations.where(id: observation_id)
+        updated = observations.where(id: observation_id)
           .update(corroboration_count: Sequel[:corroboration_count] + by)
+        updated > 0
       end
 
       # Mark an observation as promoted to a structured fact. Append-only: the
