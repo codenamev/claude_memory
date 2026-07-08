@@ -180,8 +180,8 @@ module ClaudeMemory
 
         sorted = tokens.sort
         {
-          p50: percentile(sorted, 0.50),
-          p95: percentile(sorted, 0.95),
+          p50: Core::Percentile.of(sorted, 0.50),
+          p95: Core::Percentile.of(sorted, 0.95),
           avg: (sorted.sum.to_f / sorted.size).round,
           sample_size: sorted.size,
           window_days: UTILIZATION_DAYS
@@ -194,14 +194,6 @@ module ClaudeMemory
 
       def token_budget_zero
         {p50: 0, p95: 0, avg: 0, sample_size: 0, window_days: UTILIZATION_DAYS}
-      end
-
-      def percentile(sorted, pct)
-        return 0 if sorted.empty?
-        idx = (sorted.size * pct).ceil - 1
-        idx = 0 if idx < 0
-        idx = sorted.size - 1 if idx >= sorted.size
-        sorted[idx]
       end
 
       private

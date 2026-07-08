@@ -473,8 +473,8 @@ module ClaudeMemory
         sorted = tokens.sort
         total = sorted.size
         stdout.puts "Sessions: #{format_number(total)}"
-        stdout.puts "p50: #{format_number(percentile(sorted, 0.50))} tokens"
-        stdout.puts "p95: #{format_number(percentile(sorted, 0.95))} tokens"
+        stdout.puts "p50: #{format_number(Core::Percentile.of(sorted, 0.50))} tokens"
+        stdout.puts "p95: #{format_number(Core::Percentile.of(sorted, 0.95))} tokens"
         stdout.puts "Avg: #{format_number((sorted.sum.to_f / total).round)} tokens"
         stdout.puts "Min: #{format_number(sorted.first)} tokens"
         stdout.puts "Max: #{format_number(sorted.last)} tokens"
@@ -514,20 +514,12 @@ module ClaudeMemory
           calls = row[:count]
           durations = dataset.where(tool_name: tool).select_map(:duration_ms).sort
           avg = (durations.sum.to_f / calls).round(1)
-          p95 = percentile(durations, 0.95)
+          p95 = Core::Percentile.of(durations, 0.95)
           tool_errors = dataset.where(tool_name: tool).exclude(error_class: nil).count
           tool_err_rate = (tool_errors * 100.0 / calls).round(1)
 
           stdout.puts "  #{tool.to_s.ljust(28)} #{calls.to_s.rjust(7)}  #{avg.to_s.rjust(8)}  #{p95.to_s.rjust(8)}  #{tool_err_rate.to_s.rjust(6)}"
         end
-      end
-
-      def percentile(sorted, pct)
-        return 0 if sorted.empty?
-        idx = (sorted.size * pct).ceil - 1
-        idx = 0 if idx < 0
-        idx = sorted.size - 1 if idx >= sorted.size
-        sorted[idx]
       end
     end
   end
