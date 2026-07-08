@@ -163,11 +163,17 @@
 
 ## 8. Priority Refactoring Recommendations
 
+> **Progress — /quality-update 2026-07-08:** All 5 Quick Wins and all 3 High
+> Priority items landed as atomic `[Quality]` commits (full suite green,
+> 2350 examples). `SQLiteStore` is back to 600 LOC. Remaining: Medium/Low items
+> below. Completed: Q1 ✅, Q7 ✅, Q8 ✅, Q3 ✅, Q10 ✅, `min_priority` rename ✅,
+> `increment_corroboration` symmetry ✅, `used_fact_pairs` limit ✅.
+
 ### High Priority (This Week)
 
-1. **Q1 — Extract `Store::OtelWrites` + `Store::ObservationWrites`** from `SQLiteStore` (module inclusion, zero test churn). Reverses the 901-LOC god-object regression. ~2–3h.
-2. **Q7 — Batch the `Dashboard::Moments` N+1** (~100 queries/page → ~3). ~45m.
-3. **Q8 — Extract the `Reflector` pure dedup planner** so clustering is DB-free testable. ~1.5h.
+1. ~~**Q1 — Extract `Store::OtelWrites` + `Store::ObservationWrites`** from `SQLiteStore`~~ ✅ Done (`a89f294`, 901→600 LOC).
+2. ~~**Q7 — Batch the `Dashboard::Moments` N+1** (~100 queries/page → ~3)~~ ✅ Done (`c66f363`).
+3. ~~**Q8 — Extract the `Reflector` pure dedup planner** so clustering is DB-free testable~~ ✅ Done (`1586806`, new `Observe::DedupPlanner`).
 
 ### Medium Priority (Next Sprint)
 
@@ -182,13 +188,13 @@
 
 - `OTel::Status` spec (~45m); `Core::TokenEstimate` extraction (~1h); `VectorIndex` txn wrap (~20m); `Trust#used_fact_pairs` `.limit` (~10m); `hook/handler.rb` payload validation symmetry (~20m); `StatsCommand#with_readonly_db` helper (~30m); `Observe::Promotion` shared service (~1h); Sweeper mutable-state cleanup (~20m); ingester mtime-sleep removal (~1h).
 
-### Quick Wins (Today)
+### Quick Wins (Today) — all ✅ done 2026-07-08
 
-- **Q3 — `Core::Percentile.of`** (byte-identical dup, ~20m).
-- **Q10 — inject clock into `Reflector`** (~15m).
-- **Rename `recent_observations` `min_priority`** → `importance_floor` (~30m).
-- **`increment_corroboration` return symmetry** (~10m).
-- **`Trust#used_fact_pairs .limit(10_000)`** (~10m).
+- ~~**Q3 — `Core::Percentile.of`** (byte-identical dup)~~ ✅ (`652fcaa`).
+- ~~**Q10 — inject clock into `Reflector`**~~ ✅ (`84b1909`).
+- ~~**Rename `recent_observations` `min_priority`**~~ ✅ renamed to `max_priority` (`35af007`).
+- ~~**`increment_corroboration` return symmetry**~~ ✅ (`9a2c64c`).
+- ~~**`Trust#used_fact_pairs .limit(10_000)`**~~ ✅ (`c1aea81`).
 
 ## 9. Conclusion
 
