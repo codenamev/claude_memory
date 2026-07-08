@@ -35,10 +35,11 @@ module ClaudeMemory
         end
       end
 
-      def initialize(store, info_ttl_days: DEFAULT_INFO_TTL_DAYS, matcher: TokenOverlapMatcher.new)
+      def initialize(store, info_ttl_days: DEFAULT_INFO_TTL_DAYS, matcher: TokenOverlapMatcher.new, clock: Time)
         @store = store
         @info_ttl_days = info_ttl_days
         @matcher = matcher
+        @clock = clock
       end
 
       # @return [Result] number of observations deduped and expired
@@ -92,7 +93,7 @@ module ClaudeMemory
       end
 
       def expire_stale_info
-        cutoff = (Time.now - @info_ttl_days * 86400).utc.iso8601
+        cutoff = (@clock.now - @info_ttl_days * 86400).utc.iso8601
         ids = @store.observations
           .where(status: "active", priority: Domain::Observation::INFO)
           .where { observed_at < cutoff }

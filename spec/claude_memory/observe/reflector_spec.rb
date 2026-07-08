@@ -89,6 +89,23 @@ RSpec.describe ClaudeMemory::Observe::Reflector do
       store.insert_observation(body: "recent chatter", priority: 3, observed_at: days_ago(1))
       expect(described_class.new(store, info_ttl_days: 30).reflect!.expired).to eq(0)
     end
+
+    it "uses the injected clock for the TTL cutoff" do
+      obs = store.insert_observation(body: "chatter", priority: 3, observed_at: days_ago(10))
+
+      # With a clock 40 days in the future, a 10-day-old observation is now
+      # 50 days stale and expires under the 30-day TTL — proving the cutoff
+      # derives from the injected clock rather than the wall clock.
+      future = Class.new do
+        def self.now
+          Time.now + (40 * 86400)
+        end
+      end
+
+      result = described_class.new(store, info_ttl_days: 30, clock: future).reflect!
+      expect(result.expired).to eq(1)
+      expect(store.observations.where(id: obs).get(:status)).to eq("expired")
+    end
   end
 
   it "preserves every row (append-only — nothing is deleted)" do
