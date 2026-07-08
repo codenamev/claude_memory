@@ -102,18 +102,25 @@ module ClaudeMemory
 
       # Rebuild the entire FTS index from content_items.
       # Always rebuilds as contentless to save space.
+      #
+      # The whole rebuild (drop + recreate + reinsert) runs in a single
+      # transaction so it is atomic — a failure mid-rebuild rolls back and
+      # leaves the old index intact rather than pointing recall at a dropped or
+      # partially-populated table — and collapses the per-row commits into one.
       def rebuild!
-        @db.run("DROP TABLE IF EXISTS content_fts")
-        @fts_table_ensured = false
-        @contentless = nil
+        @db.transaction do
+          @db.run("DROP TABLE IF EXISTS content_fts")
+          @fts_table_ensured = false
+          @contentless = nil
 
-        create_contentless_table!
+          create_contentless_table!
 
-        @db[:content_items].select(:id, :raw_text).order(:id).paged_each(rows_per_fetch: 500) do |row|
-          @db.fetch(
-            "INSERT INTO content_fts(rowid, text) VALUES (?, ?)",
-            row[:id], row[:raw_text]
-          ).insert
+          @db[:content_items].select(:id, :raw_text).order(:id).paged_each(rows_per_fetch: 500) do |row|
+            @db.fetch(
+              "INSERT INTO content_fts(rowid, text) VALUES (?, ?)",
+              row[:id], row[:raw_text]
+            ).insert
+          end
         end
       end
 
