@@ -1,5 +1,238 @@
 # Code Quality Review - Ruby Best Practices
 
+## Full-Codebase Review (2026-07-01)
+
+**Review Date:** 2026-07-01
+**Previous Review:** 2026-04-28 (full) + 2026-06-18 (observational-layer pre-merge)
+**Codebase Growth:** 19,025 → **24,650 LOC** (+5,625, +30% in ~9 weeks; 142 commits). New subsystems: `observe/` + `otel/` (957 LOC combined).
+**Method:** five parallel expert-lens passes (Metz, Evans, Beck, Grimm, Bernhardt) over the largest/highest-churn files + the new observational and OTel subsystems. Findings below were verified against source.
+
+### Executive Summary
+
+**The direction is positive and the prior review's headline concerns are largely resolved.** The escalated `Dashboard::API` god-object (peaked at 807 LOC) was successfully decomposed to **622 LOC** of clean one-line delegators; bare rescues dropped **19 → 6** (all 6 defensible); the observational layer landed with genuine test-first discipline (the 2026-06-18 **H1** consolidate-race and **M1** coverage gap are *both fixed*, pinned by behavior specs); and the new `otel/` code is a model of functional-core design (pure envelope, injected clock, `multi_insert` inside a retryable transaction, uniformly typed rescues).
+
+**The regression is concentrated and cheaply reversible.** `SQLiteStore` grew **584 → 901 LOC (+54%)**, absorbing OTel + observation CRUD with no extraction — the one real god-object backslide, fixable with the module-inclusion pattern the file already uses. A duplication cluster (Jaccard ×3, `percentile` ×2, observation aggregation ×3, token-estimate `/4.0` ×3–4) crept in because new subsystems didn't reach for existing homes. And the `Observe::Reflector`'s deterministic dedup pass fused pure clustering decisions with DB writes, so its logic can't be unit-tested without a disk DB — the only boundary regression in new code.
+
+**No 🔴-blocking correctness bugs.** One Critical (structural), two High, the rest Medium/Low and mostly cheap.
+
+### Current Strengths
+
+- **Dashboard decomposition executed as prescribed** — `dashboard/api.rb` 622 LOC; `Timeline`/`Health`/`FactPresenter`/`Telemetry`/`PromptJourney` extracted; panel endpoints are 1-line delegators.
+- **`otel/otlp_json_envelope.rb`** — textbook functional core: 254 LOC, `module_function`, clock injected (`parse_metrics(payload, clock: Time)`), zero I/O; `otel/ingestor.rb` uses `multi_insert` in `transaction_with_retry` (no N+1) and returns `Core::Result`.
+- **Observational layer is test-first** — H1 race fix pinned by `observations_spec.rb:210`; `< 2 → nil`, summed-corroboration, multi-row tombstone all covered; Reflector dedupe/folding (#73)/TTL/idempotency specced.
+- **Confident-code discipline improved** — `trust.rb` rescues now scoped to `Sequel::DatabaseError`/`JSON::ParserError`; `.send(:private_method)` private-API smell gone (`ag "\.send\(:" lib/` → 0); border coercion (`coerce_observation`) is textbook.
+- **Value objects frozen + self-validating** — `Domain::Observation`, `Domain::Fact`, `Domain::Entity` all freeze + `validate!`.
+
+---
+
+## 1. Sandi Metz Perspective
+
+### What's Been Fixed ✅
+
+- **Prior 🔴 A — `Dashboard::API` regrowth** (was 807, projected 1000+): REVERSED to **622 LOC**. Extractions landed (`Timeline` 68, `Health` 175, `FactPresenter` 109; `Telemetry`/`PromptJourney` delegated).
+- **Prior 🟡 C — `digest_command` `.send(:utilization)`**: RESOLVED. `Trust#utilization` is now `public` (`trust.rb:397`); called directly. Zero `.send(:` across `lib/`.
+- **`observe/` subsystem is exemplary** — `Reflector` (107), `TokenOverlapMatcher` (55), `ObservationsRenderer` (49): each single-purpose, matcher injected, pure functions.
+
+### Critical Issues 🔴
+
+**Q1. `SQLiteStore` regressed 584 → 901 LOC — new god object.** `lib/claude_memory/store/sqlite_store.rb`. Absorbed two table families with no extraction: OTel writers (`insert_otel_metric`/`bulk_insert_*`/row-builders, lines **185–308**, ~125 LOC) and observation CRUD (`insert_observation` … `consolidate_observations`/`promotion_candidates`, lines **686–862**, ~180 LOC). The class now owns CRUD for ~13 table domains. *Metz: SRP/cohesion.*
+- **Fix:** the file already includes `LLMCache`/`MetricsAggregator` as modules (`sqlite_store.rb:24-25`). Extract `Store::OtelWrites` and `Store::ObservationWrites` the same way — preserves the public API, zero test churn (matches the project's documented module-inclusion refactoring convention). Drops the class to ~580 LOC.
+- **Effort:** 2–3h.
+
+### Medium Issues 🟡
+
+**Q2. Jaccard-over-tokens implemented three times** (will drift; each has its own stopwords/threshold): `Observe::TokenOverlapMatcher#similar?` (`token_overlap_matcher.rb:41-52`), `Sweep::Maintenance#restore_jaccard`/`restore_tokenize` (`maintenance.rb:456-469`), `Commands::CensusCommand#jaccard`/`tokenize` (`census_command.rb:198-206`). `TokenOverlapMatcher` is already the tested, injectable home. Fix: Maintenance + Census depend on it (or a shared `Core::Jaccard`). *DRY.* ~1–2h.
+
+**Q3. `percentile` copy-pasted byte-identically** — `dashboard/trust.rb:199` and `commands/stats_command.rb:525` (verified identical). Extract `Core::Percentile.of(sorted, pct)`. *DRY.* ~20m (quick win).
+
+**Q4. Observation aggregation triplicated** — counts-by-status/kind/priority + corroboration + compression-ratio in `StatsCommand#print_observation_stats` (`stats_command.rb:98-150`), `ObservationsCommand` (`:183-250`), `Dashboard::Observations` (115 LOC). The code admits it: `observations_command.rb:175` comment "*mirrors Dashboard::Observations*." Same pattern as the "four drifting fact serializers" the project already fixed. Fix: one `Observe::ObservationStats` returning the aggregate hash; all three render from it. *DRY/SRP.* ~2–3h.
+
+**Q5. Token-budget aggregation duplicated** — `context_tokens` parse + p50/p95/avg in `StatsCommand#print_token_budget_stats` (`stats_command.rb:424-490`) and `Trust#token_budget` (`trust.rb:162-192`). Fold into one `TokenBudget` value object once Q3's `Core::Percentile` exists. *DRY.* ~1h.
+
+**Q6. `sweep/maintenance.rb` still 522 LOC, two >55-line methods** (carried, unaddressed) — `dedupe_open_conflicts` (`:304-361`, 58 lines), `restore_multi_value_supersessions` (`:189-245`, 57 lines). These + `reclassify_references`/`fix_scope_leakage`/`dedupe_multi_value_facts` are one-shot historical cleanups, not steady-state sweep. Fix: extract `Sweep::HistoricalCleanup`; at minimum extract `resolve_duplicate_group(keeper, duplicates)` from `dedupe_open_conflicts`. *SRP/single level of abstraction.* ~2–3h.
+
+### Low Issues
+
+- `StatsCommand` (534 LOC) repeats `open_readonly → table_exists? → disconnect` boilerplate (`:360-414`, `:424-490`); add `with_readonly_db(path) { |db| … }`. ~30m.
+- `ObservationsCommand#promote_observation` (`:287-318`) duplicates the corroboration-gate + Resolver intent the MCP handler also has; extract shared `Observe::Promotion`. ~1h.
+- `api.rb` next-extraction candidates if it grows again: `activity_detail` (`:137-173`), `find_recall_trigger` (`:181-212`), `extract_user_prompt` (`:225-253`), `facts` (`:361-399`).
+
+---
+
+## 2. Jeremy Evans Perspective
+
+### What's Been Fixed ✅
+
+- **H1 (`consolidate_observations` race) — FIXED** (`sqlite_store.rb:803-833`): source SELECT now runs inside the `@db.transaction`; tombstone UPDATE re-asserts `status: "active"` in its WHERE; whole thing wrapped in `with_retry { @db.transaction { … } }` (retries the whole transaction — correct).
+- **M4/M5 (`resolver.rb:29-47`)** — rdoc now documents `:observations_created`/`:fact_ids` and the nil contract ("consumers must `.compact`"). Fixed.
+- **No raw-SQL or transaction-safety regressions.** FTS/vec raw SQL is unavoidable (no Sequel DSL for MATCH/vec0) and correctly parameterized via `Sequel.lit("text MATCH ?", q)` / `@db.fetch(…, ?)`.
+
+### High Priority Issues
+
+**Q7. N+1 in `Dashboard::Moments`** (carried, NOT fixed) — `dashboard/moments.rb:168-176`; `build_moment` calls `extracted_facts` (a `facts`⋈`provenance` query, `:233-237`) **and** `resolve_content` (`:196`) *per row*. A 50-moment feed page ≈ ~100 queries. `attach_feedback` (`:214`) already batches correctly — mirror it. Fix: collect all `content_item_id`s up front, run one `facts.join(:provenance).where(content_item_id: ids)` + one `content_items.where(id: ids)`, `group_by` in Ruby, hand slices to each moment. ~45m.
+
+### Medium / Low Issues
+
+- **🟡→Low `LexicalFTS#rebuild!` non-atomic + slow** (`index/lexical_fts.rb:105-118`) — drops `content_fts`, recreates, then per-row INSERT via `paged_each` with NO transaction: each insert self-commits (slow), and a mid-rebuild failure leaves recall pointed at a partial index after the old one is gone. Fix: wrap the insert loop in `@db.transaction` (atomic + collapses N commits → 1). ~30m.
+- **Low `VectorIndex` writes not transaction-wrapped** (`index/vector_index.rb:39-44`, `:108-122`) — `insert_embedding` does DELETE+INSERT+UPDATE as 3 writes; interruption drifts the row vs `vec_indexed_at` flag (self-heals via backfill, hence low). Wrap in txn. ~20m.
+- **Low `Trust#used_fact_pairs` unbounded load** (carried) — `trust.rb:418-433` loads ALL recall/hook_context events in the window (`.all.each`, JSON-parsing each), no `.limit`. Add safety `.limit(10_000)`. ~10m.
+- **Idiom nit** — several sites reach through `store.db[:facts]` instead of the `store.facts`/`store.provenance` dataset accessors (`moments.rb:233`, `stats_handlers.rb`). Cosmetic.
+
+### What's Clean (no action)
+
+`otel/ingestor.rb` (multi_insert in txn, `Core::Result`), `StoreManager#promote_fact` (reads project data before opening the global txn — can't span two SQLite files), `QueryCore`/`DualEngine` (batch_find everywhere, no N+1), `Reflector#reflect!` (both passes in one transaction), `RetryHandler#transaction_with_retry`.
+
+---
+
+## 3. Kent Beck Perspective
+
+### What's Been Fixed ✅
+
+- **M1 — `consolidate_observations` now thoroughly specced** (`spec/claude_memory/store/observations_spec.rb:164-225`): `< 2 → nil` guard, cross-scope floor, summed-corroboration, multi-row tombstone, and the H1 race itself (`:210`). MCP-layer coverage in `tools_consolidate_observations_spec.rb`. Closed with a stronger spec than requested.
+- **Dashboard sleep latency (~4.4s) eliminated** (prior review's biggest Beck item): `moments_spec.rb` now injects explicit `occurred_at` (Option 1 from prior review); `api_spec.rb` has **zero** sleeps.
+- `observe/` fully covered (Reflector dedupe/folding/TTL/idempotency, matcher pluggability; `Sweep::Maintenance#reflect_observations`; promotion bridge across three specs).
+
+### Issues
+
+- **🟡 Low — `OTel::Status` has no direct spec** (`otel/status.rb`) — only shape-tested indirectly via `telemetry_spec.rb:37`. Its load-bearing branches (safe-count on missing table + `rescue Sequel::DatabaseError → 0`, `last_timestamp` max/nil, `configured_env` via injected settings_writer, `Errno::ENOENT/JSON::ParserError → {}`) are unexercised; used by both `otel_command.rb:77` and `dashboard/telemetry.rb:54`. Fix: add `spec/claude_memory/otel/status_spec.rb` driving an in-memory store. ~45m.
+- **🟡 Low — `recent_observations` `min_priority` name inverted** (carried M3) — `sqlite_store.rb:731-735` filters `priority <= min_priority`, but priority is inverted (1 = 🔴 important), so a higher "minimum" returns *more* rows. One caller (`query_handlers.rb:134`). Rename `importance_floor`/`max_priority_value`. ~30m.
+- **Low — CQS asymmetry:** `increment_corroboration` (`sqlite_store.rb:772`) returns void; siblings (`tombstone_observation`, `expire_observation`, `mark_observation_promoted`) return `updated > 0`. Make symmetric. ~10m.
+
+### `sleep` audit (specs)
+
+7 calls, ~5.2s total, all carried/legitimate: `ingester_spec.rb:43,65,81` (`sleep 1.01` ×3 — filesystem 1s mtime resolution, biggest offender), `publish_spec.rb:222` (`sleep 1.1`), `otel_routes_spec.rb:131` (`sleep 0.05` — bounded TCP startup poll, legitimate), `recall_spec.rb:185` (`0.01`), `sqlite_store_concurrency_spec.rb:186` (`0.01`, intentional). Only the ingester mtime sleeps are worth revisiting (~1h, inject a clock or stub `File.mtime`).
+
+---
+
+## 4. Avdi Grimm Perspective
+
+### What's Been Fixed ✅
+
+- **Bare rescues 19 → 6** (verified). All 6 are defensible safe-default probes: `instructions_builder.rb:148`, `stats_handlers.rb:102`, `stats_command.rb:340`, `hook_command.rb:104` (forked handler must not propagate), `maintenance.rb:144` (per-row loop isolation), `maintenance.rb:429` (precise `CorruptRankIndexError` rescued first, bare only for the "couldn't repair" tail). Consistent with Standard Ruby's `Style/RescueStandardError` (explicit-rescue change was rejected in a prior review). **No action.**
+- **`trust.rb` bare rescues eliminated** — all 6 now scoped (`:86,189,228,270,358,393`). Was the highest-count file (9).
+- **Prior "New Concern F" resolved** — `digest_command.rb` no longer `.send`s into `Trust`'s private API.
+
+### Exemplary New Code
+
+- `otel/` (7 files) — **zero bare rescues**, every rescue scoped. `observe/` (3 files) — zero rescues.
+- **Border coercion done right** — `coerce_observation` (`management_handlers.rb:69-79`) invoked via `filter_map` so nil-return drops invalid input (no downstream nil checks); `kind` defaults, `priority` clamped. Boundary coercion, not scattered defense.
+
+### Carried-Forward 🟡
+
+- **Low — inconsistent payload validation** (`hook/handler.rb`) — `ingest` (`:17-23`) strictly raises `PayloadError` for missing `session_id`/`transcript_path`, but `sweep` (`:54`) and `publish` (`:83`) use lenient `fetch(…, default)` with no validation. Tell-don't-ask asymmetry at the same boundary; defensible to leave since requirements genuinely differ. ~20m.
+- Note: 36 `rescue => e` (bare-with-var) remain; spot-checked, all log/reclassify/re-raise (e.g. `lexical_fts.rb:139` reclassifies to `CorruptRankIndexError` and `raise`s everything else) — none silently swallow. No action.
+
+---
+
+## 5. Gary Bernhardt Perspective
+
+### What's Been Fixed / Exemplary ✅
+
+- `otel/otlp_json_envelope.rb` — pure functional core, clock injected (`:26,59,83,229`), Hash#fetch for required keys. The model for the rest of the new code.
+- `observe/token_overlap_matcher.rb` — pure, deterministic Jaccard over frozen STOPWORDS, injected into Reflector (`:38`).
+- `distill/null_distiller.rb`, `ingest/observation_compressor.rb` — pure string transforms, no I/O (`File.basename` is string manipulation, not a disk read).
+- Value objects frozen + self-validating across the new layer.
+
+### Issues
+
+**Q8. 🟡 High — `Observe::Reflector` dedup interleaves pure clustering with DB writes** — `observe/reflector.rb:65-92` (`dedupe_scope`). Which observation folds into which keeper is a pure function of `(rows, matcher)`, but it's fused to `@store.increment_corroboration` (`:82`) + `@store.tombstone_observation` (`:83`) inside the greedy loop. Result: the clustering algorithm can't be exercised without a DB — `reflector_spec.rb:7-8` stands up a real disk-backed SQLite; there is no DB-free unit test of the algorithm. The semantic-vs-GC split *concept* is sound; the deterministic half just never got its pure core extracted. Fix: extract a pure planner `dedupe_scope(rows) → [{keeper_id:, loser_id:, corroboration:}, …]` (zero I/O); the shell walks the plan. Unit-test the planner in-memory; one integration test for the applier. ~1.5h.
+
+**Q9. 🟡 Medium — `ContextInjector` fuses I/O fetching with pure presentation** — `hook/context_injector.rb` holds `@manager`/`@recall` (I/O) *and* a large body of pure markdown formatting (`format_observation_reflection:184-205`, `format_distillation_prompt:240-267`, `format_observation_capture_prompt:276-295`, `format_auto_memory_mirror:333-354`, `format_section:297-304`). Same "wrong layer" smell as the resolved Dashboard::API item. Fix: extract a pure `Hook::ContextPresenter` (rows → section strings); leave `ContextInjector` as the fetch-and-delegate shell. Enables fast DB-free prompt-text tests. ~2h.
+
+**Q10. 🟡 Low — `Reflector` reads the clock directly** — `reflector.rb:95` `Time.now - @info_ttl_days * 86400`, inconsistent with the sibling `OtlpJsonEnvelope` which injects `clock:`. Forces the spec to compute `days_ago(n)` against the wall clock. Fix: `clock: Time` in `#initialize`, use `@clock.now`. ~15m.
+
+### Carried-Forward
+
+- Sweeper mutable state (`@start_time`/`@stats` reset in `run!`, `sweep/sweeper.rb:23-24`). ~20m.
+- `Dir.chdir` in publish tests (`spec/publish_spec.rb`). ~15m.
+
+---
+
+## 6. General Ruby Idioms
+
+- **Token-estimate `/4.0` divisor triplicated** (`sqlite_store.rb:714,823`, `dashboard/observations.rb:98`, `commands/observations_command.rb:232`) — compression-ratio correctness rests on 3–4 copies staying in sync. Extract `Core::TokenEstimate.from_chars`. ~1h.
+- Prefer `store.facts`/`store.provenance` dataset accessors over reaching through `store.db[:facts]`.
+- `otel/status.rb`/`stats_handlers.rb` use hardcoded table symbols (no injection risk) — fine.
+
+## 7. Positive Observations
+
+- Dashboard god-object decomposition is the standout: prescription from the prior review executed cleanly, regression reversed and held (622 LOC).
+- The observational layer shipped test-first — the load-bearing edge cases (H1 race, #73 non-exact folding, promotion gate) are pinned by behavior specs, above repo-average coverage.
+- `otel/` is the new gold standard in this codebase for functional-core/imperative-shell discipline and should be the template for future subsystems.
+- Confident-code metrics all moved the right way (bare rescues halved-and-more, private-API `.send` eliminated, typed rescues throughout new code).
+
+## 8. Priority Refactoring Recommendations
+
+### High Priority (This Week)
+
+1. **Q1 — Extract `Store::OtelWrites` + `Store::ObservationWrites`** from `SQLiteStore` (module inclusion, zero test churn). Reverses the 901-LOC god-object regression. ~2–3h.
+2. **Q7 — Batch the `Dashboard::Moments` N+1** (~100 queries/page → ~3). ~45m.
+3. **Q8 — Extract the `Reflector` pure dedup planner** so clustering is DB-free testable. ~1.5h.
+
+### Medium Priority (Next Sprint)
+
+4. **Q4 — `Observe::ObservationStats`** to collapse the triplicated aggregation. ~2–3h.
+5. **Q2 — Consolidate Jaccard** onto `TokenOverlapMatcher`/`Core::Jaccard`. ~1–2h.
+6. **Q9 — Extract `Hook::ContextPresenter`** (pure presentation) from `ContextInjector`. ~2h.
+7. **Q6 — Extract `Sweep::HistoricalCleanup`** for one-shot data fixes. ~2–3h.
+8. **Q5 — Fold token-budget aggregation** into one value object (after Q3). ~1h.
+9. **LexicalFTS#rebuild! transaction wrap** (atomicity + speed). ~30m.
+
+### Low Priority (Later)
+
+- `OTel::Status` spec (~45m); `Core::TokenEstimate` extraction (~1h); `VectorIndex` txn wrap (~20m); `Trust#used_fact_pairs` `.limit` (~10m); `hook/handler.rb` payload validation symmetry (~20m); `StatsCommand#with_readonly_db` helper (~30m); `Observe::Promotion` shared service (~1h); Sweeper mutable-state cleanup (~20m); ingester mtime-sleep removal (~1h).
+
+### Quick Wins (Today)
+
+- **Q3 — `Core::Percentile.of`** (byte-identical dup, ~20m).
+- **Q10 — inject clock into `Reflector`** (~15m).
+- **Rename `recent_observations` `min_priority`** → `importance_floor` (~30m).
+- **`increment_corroboration` return symmetry** (~10m).
+- **`Trust#used_fact_pairs .limit(10_000)`** (~10m).
+
+## 9. Conclusion
+
+**Risk assessment: low.** No correctness blockers; the codebase grew 30% while *improving* on the prior review's headline concerns. The work this cycle is consolidation, not firefighting: one structural god-object regression (Q1) with a proven in-file fix, one real N+1 (Q7), and one boundary regression (Q8) — together ~5h — plus a duplication cluster that's cheap to unify. The `otel/` subsystem sets a raised bar the rest of the code should be pulled toward. **Next step:** land the three High items (Q1/Q7/Q8, ~5h) and the five Quick Wins (~1.5h) before adding new surface.
+
+## Appendix A: Metrics Comparison
+
+| Metric | 2026-04-28 | 2026-07-01 | Δ |
+|--------|-----------:|-----------:|---|
+| Total lib LOC | 19,025 | 24,650 | +5,625 (+30%) |
+| lib files | ~170 | 192 | +22 |
+| Spec files | ~200 | 219 | +19 |
+| `SQLiteStore` LOC | 584 | **901** | +317 (+54%) 🔴 |
+| `dashboard/api.rb` LOC | 807 (peak) → 607 | 622 | held (healthy) ✅ |
+| Bare rescues (whole lib) | 19 | **6** | −13 ✅ |
+| `.send(:private)` in lib | present | **0** | eliminated ✅ |
+| `sleep` in specs | dashboard-heavy | 7 (dashboard sleeps gone) | ✅ |
+| New subsystems (`observe/`+`otel/`) | — | 957 LOC | new |
+| Commits since prior review | — | 142 | — |
+
+## Appendix B: File Size Report (largest lib files, 2026-07-01)
+
+| LOC | File | Note |
+|----:|------|------|
+| 901 | `store/sqlite_store.rb` | 🔴 Q1 — extract OtelWrites + ObservationWrites |
+| 622 | `dashboard/api.rb` | ✅ healthy after decomposition |
+| 534 | `commands/stats_command.rb` | print-everything; dup aggregation (Q4/Q5) |
+| 522 | `sweep/maintenance.rb` | Q6 — extract HistoricalCleanup |
+| 517 | `mcp/tool_definitions.rb` | data table, acceptable |
+| 454 | `dashboard/trust.rb` | rescues scoped ✅; percentile dup (Q3) |
+| 397 | `mcp/response_formatter.rb` | — |
+| 388 | `audit/checks.rb` | — |
+| 371 | `recall/query_core.rb` | clean (batch queries) |
+| 367 | `commands/observations_command.rb` | dup aggregation (Q4) |
+| 357 | `hook/context_injector.rb` | Q9 — extract ContextPresenter |
+| 332 | `resolve/resolver.rb` | rdoc fixed ✅ |
+| 254 | `otel/otlp_json_envelope.rb` | ✅ exemplary functional core |
+
+---
+
+## Historical Reviews
+
+*The reviews below predate 2026-07-01 and are retained for provenance. Items marked resolved above may still appear open here.*
+
 **Review Date:** 2026-04-28
 **Previous Review:** 2026-04-22 (6 days ago)
 **Last Quality Update:** 2026-04-22 (4 items completed — LLMCache + MetricsAggregator extractions, Publish DRY, Dashboard specs)
