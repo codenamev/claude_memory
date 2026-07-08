@@ -454,13 +454,9 @@ module ClaudeMemory
         end
         stdout.puts
 
-        tokens = dataset.select_map(:detail_json).filter_map do |json|
-          next unless json
-          value = JSON.parse(json)["context_tokens"]
-          value if value.is_a?(Integer) && value > 0
-        end
+        budget = Core::TokenBudget.from_detail_json(dataset.select_map(:detail_json))
 
-        if tokens.empty?
+        if budget.empty?
           stdout.puts "No context injections recorded in window."
           stdout.puts ""
           stdout.puts "Token telemetry is recorded automatically on SessionStart hooks."
@@ -470,16 +466,14 @@ module ClaudeMemory
           return 0
         end
 
-        sorted = tokens.sort
-        total = sorted.size
-        stdout.puts "Sessions: #{format_number(total)}"
-        stdout.puts "p50: #{format_number(Core::Percentile.of(sorted, 0.50))} tokens"
-        stdout.puts "p95: #{format_number(Core::Percentile.of(sorted, 0.95))} tokens"
-        stdout.puts "Avg: #{format_number((sorted.sum.to_f / total).round)} tokens"
-        stdout.puts "Min: #{format_number(sorted.first)} tokens"
-        stdout.puts "Max: #{format_number(sorted.last)} tokens"
+        stdout.puts "Sessions: #{format_number(budget.sample_size)}"
+        stdout.puts "p50: #{format_number(budget.p50)} tokens"
+        stdout.puts "p95: #{format_number(budget.p95)} tokens"
+        stdout.puts "Avg: #{format_number(budget.avg)} tokens"
+        stdout.puts "Min: #{format_number(budget.min)} tokens"
+        stdout.puts "Max: #{format_number(budget.max)} tokens"
         stdout.puts ""
-        print_token_distribution(sorted)
+        print_token_distribution(budget.sorted)
 
         db.disconnect
         manager.close

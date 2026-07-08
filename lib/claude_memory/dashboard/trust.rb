@@ -174,20 +174,14 @@ module ClaudeMemory
           .select(:detail_json)
           .all
 
-        tokens = rows.filter_map do |row|
-          details = row[:detail_json] ? JSON.parse(row[:detail_json]) : {}
-          value = details["context_tokens"]
-          value if value.is_a?(Integer) && value > 0
-        end
+        budget = Core::TokenBudget.from_detail_json(rows.map { |row| row[:detail_json] })
+        return token_budget_zero if budget.empty?
 
-        return token_budget_zero if tokens.empty?
-
-        sorted = tokens.sort
         {
-          p50: Core::Percentile.of(sorted, 0.50),
-          p95: Core::Percentile.of(sorted, 0.95),
-          avg: (sorted.sum.to_f / sorted.size).round,
-          sample_size: sorted.size,
+          p50: budget.p50,
+          p95: budget.p95,
+          avg: budget.avg,
+          sample_size: budget.sample_size,
           window_days: UTILIZATION_DAYS
         }
       rescue Sequel::DatabaseError, JSON::ParserError => e
