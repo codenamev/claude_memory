@@ -36,6 +36,10 @@ module ClaudeMemory
     class Trust
       WEEK_SECONDS = 7 * 86_400
       UTILIZATION_DAYS = 30
+      # Safety cap on how many recall/context events used_fact_pairs loads +
+      # JSON-parses into memory. The 30-day window bounds it in practice; this
+      # guards against pathological event volume. Newest events win.
+      MAX_USED_FACT_EVENTS = 10_000
       VALUE_EVENT_TYPES = %w[hook_context recall store_extraction].freeze
 
       def initialize(manager)
@@ -414,6 +418,8 @@ module ClaudeMemory
         store.activity_events
           .where(event_type: %w[recall hook_context], status: "success")
           .where { occurred_at >= cutoff }
+          .order(Sequel.desc(:occurred_at))
+          .limit(MAX_USED_FACT_EVENTS)
           .select(:detail_json)
           .all
           .each do |row|
