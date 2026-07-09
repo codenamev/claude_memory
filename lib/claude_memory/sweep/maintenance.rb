@@ -319,45 +319,50 @@ module ClaudeMemory
 
         @store.db.transaction do
           groups = open_rows.group_by { |row| pair_key(row, facts) }.reject { |key, _| key.nil? }
-          groups.each_value do |rows_in_group|
-            result[:inspected] += rows_in_group.size
-            next if rows_in_group.size < 2
-
-            keeper = rows_in_group.first
-            duplicates = rows_in_group[1..]
-            duplicates.each do |dup|
-              result[:decisions] << {
-                conflict_id: dup[:id],
-                action: :resolve_duplicate,
-                keeper_id: keeper[:id],
-                duplicate_fact_id: dup[:fact_b_id]
-              }
-              # Counted whether or not we actually write, so dry-run output
-              # matches real-run output and callers can compare plans.
-              result[:resolved] += 1
-              next if dry_run
-
-              # Resolve the duplicate conflict. Also reject its disputed
-              # side (fact_b_id is always the newer inserted-as-disputed
-              # fact per Resolver convention), and shift its provenance
-              # onto the keeper's fact_b so the evidence isn't lost.
-              keeper_fact_b_id = keeper[:fact_b_id]
-              if dup[:fact_b_id] != keeper_fact_b_id
-                @store.provenance.where(fact_id: dup[:fact_b_id]).update(fact_id: keeper_fact_b_id)
-                @store.facts.where(id: dup[:fact_b_id]).update(
-                  status: "rejected",
-                  valid_to: Time.now.utc.iso8601
-                )
-              end
-              @store.conflicts.where(id: dup[:id]).update(
-                status: "resolved",
-                notes: "Deduplicated into conflict ##{keeper[:id]}"
-              )
-            end
-          end
+          groups.each_value { |rows_in_group| resolve_conflict_group(rows_in_group, result, dry_run: dry_run) }
         end
 
         result
+      end
+
+      # Process one group of open conflicts sharing a subject/predicate/object
+      # pair: keep the first, dedupe the rest into it. Mutates `result` with the
+      # inspected/resolved counts + decision log. Counts are recorded whether or
+      # not we write, so dry-run output matches a real run.
+      def resolve_conflict_group(rows_in_group, result, dry_run:)
+        result[:inspected] += rows_in_group.size
+        return if rows_in_group.size < 2
+
+        keeper = rows_in_group.first
+        rows_in_group[1..].each do |dup|
+          result[:decisions] << {
+            conflict_id: dup[:id],
+            action: :resolve_duplicate,
+            keeper_id: keeper[:id],
+            duplicate_fact_id: dup[:fact_b_id]
+          }
+          result[:resolved] += 1
+          resolve_duplicate_conflict(keeper, dup) unless dry_run
+        end
+      end
+
+      # Resolve a single duplicate conflict: reject its disputed side (fact_b_id
+      # is always the newer inserted-as-disputed fact per Resolver convention),
+      # shift that fact's provenance onto the keeper's fact_b so evidence isn't
+      # lost, then mark the conflict resolved.
+      def resolve_duplicate_conflict(keeper, dup)
+        keeper_fact_b_id = keeper[:fact_b_id]
+        if dup[:fact_b_id] != keeper_fact_b_id
+          @store.provenance.where(fact_id: dup[:fact_b_id]).update(fact_id: keeper_fact_b_id)
+          @store.facts.where(id: dup[:fact_b_id]).update(
+            status: "rejected",
+            valid_to: Time.now.utc.iso8601
+          )
+        end
+        @store.conflicts.where(id: dup[:id]).update(
+          status: "resolved",
+          notes: "Deduplicated into conflict ##{keeper[:id]}"
+        )
       end
 
       # Reclassify active facts currently labeled `convention` whose object
