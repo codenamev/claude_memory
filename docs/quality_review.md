@@ -170,9 +170,8 @@
 > `Observe::ObservationStats`, `Hook::ContextPresenter`; plus `Store::OtelWrites`
 > / `Store::ObservationWrites`.
 > Completed: Q1 ✅ Q7 ✅ Q8 ✅ Q3 ✅ Q10 ✅ + quick-win renames/caps ✅;
-> Medium: Q2 ✅ Q4 ✅ Q5 ✅ Q9 ✅ LexicalFTS txn ✅, Q6 partial ✅ (long-method
-> decomposition; full `Sweep::HistoricalCleanup` class split still open).
-> Remaining: Q6 class split + the Low-priority list below.
+> Medium: Q2 ✅ Q4 ✅ Q5 ✅ Q9 ✅ Q6 ✅ (`Sweep::HistoricalCleanup` extracted;
+> `Maintenance` 519→296 LOC) LexicalFTS txn ✅. Remaining: the Low-priority list.
 
 ### High Priority (This Week)
 
@@ -185,7 +184,7 @@
 4. ~~**Q4 — `Observe::ObservationStats`** to collapse the triplicated aggregation~~ ✅ Done (`de45e5e`).
 5. ~~**Q2 — Consolidate Jaccard** onto a shared `Core::Jaccard`~~ ✅ Done (`6a6e309`, set-math only; tokenizers left per-domain).
 6. ~~**Q9 — Extract `Hook::ContextPresenter`** (pure presentation)~~ ✅ Done (`fffe18b`).
-7. **Q6 — Extract `Sweep::HistoricalCleanup`** for one-shot data fixes. ~2–3h. **Partial:** `dedupe_open_conflicts` decomposed (`9dde790`); the full class split + `restore_multi_value_supersessions` decomposition remain.
+7. ~~**Q6 — Extract `Sweep::HistoricalCleanup`** for one-shot data fixes~~ ✅ Done (`9dde790` decomposed `dedupe_open_conflicts`; `787236f` extracted the class — the 3 on-demand cleanups moved out, `Maintenance` 519→296 LOC).
 8. ~~**Q5 — Fold token-budget aggregation** into one value object~~ ✅ Done (`156ca7c`, `Core::TokenBudget`).
 9. ~~**LexicalFTS#rebuild! transaction wrap**~~ ✅ Done (`46f8a26`).
 
