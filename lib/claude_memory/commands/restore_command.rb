@@ -28,7 +28,7 @@ module ClaudeMemory
         store = manager.store_for_scope(opts[:scope])
 
         begin
-          result = Sweep::Maintenance.new(store).restore_multi_value_supersessions(
+          result = Sweep::HistoricalCleanup.new(store).restore_multi_value_supersessions(
             predicate: opts[:predicate],
             dry_run: opts[:dry_run]
           )

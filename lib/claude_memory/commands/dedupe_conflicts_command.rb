@@ -24,7 +24,7 @@ module ClaudeMemory
         store = manager.store_for_scope(opts[:scope])
 
         begin
-          result = Sweep::Maintenance.new(store).dedupe_open_conflicts(dry_run: opts[:dry_run])
+          result = Sweep::HistoricalCleanup.new(store).dedupe_open_conflicts(dry_run: opts[:dry_run])
         ensure
           manager.close
         end
