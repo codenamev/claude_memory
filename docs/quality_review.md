@@ -190,7 +190,13 @@
 
 ### Low Priority (Later)
 
-- `OTel::Status` spec (~45m); `Core::TokenEstimate` extraction (~1h); `VectorIndex` txn wrap (~20m); `Trust#used_fact_pairs` `.limit` (~10m); `hook/handler.rb` payload validation symmetry (~20m); `StatsCommand#with_readonly_db` helper (~30m); `Observe::Promotion` shared service (~1h); Sweeper mutable-state cleanup (~20m); ingester mtime-sleep removal (~1h).
+**Done:** ~~`OTel::Status` spec~~ ✅ (`415135a`); ~~`Core::TokenEstimate` reuse for the `/4.0` divisor~~ ✅ (`aeab517`); ~~`VectorIndex` txn wrap~~ ✅ (`5790876`); ~~`Trust#used_fact_pairs` `.limit`~~ ✅ (quick win `c1aea81`); ~~`Observe::Promotion` shared service~~ ✅ (`51cd0e2`).
+
+**Consciously deferred (low value / risk):**
+- `StatsCommand#with_readonly_db` helper — cosmetic DRY, but the `print_*` methods interleave early-returns with `db.disconnect`/`manager.close`, so a block extraction risks the cleanup control flow. Not worth it for the payoff.
+- Sweeper mutable state (`@start_time`/`@stats` reset in `run!`) — reset-at-start is a reasonable per-run pattern; threading state through every `run_if_within_budget` would be less clear, not more.
+- ingester mtime-sleep removal (`ingester_spec.rb`, ~3s) — test-speed only; needs a clock seam in production code for a test-only gain.
+- `hook/handler.rb` payload-validation asymmetry — the reviewer judged this "defensible to leave" since `ingest` genuinely has required fields that `sweep`/`publish` don't.
 
 ### Quick Wins (Today) — all ✅ done 2026-07-08
 
