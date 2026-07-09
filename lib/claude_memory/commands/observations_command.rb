@@ -219,51 +219,20 @@ module ClaudeMemory
         manager = ClaudeMemory::Store::StoreManager.new
         store = manager.store_for_scope(opts[:scope])
 
-        result = promote_observation(store, observation_id, opts)
+        result = Observe::Promotion.new(store, scope: opts[:scope]).call(
+          observation_id: observation_id,
+          predicate: opts[:predicate],
+          object: opts[:object],
+          subject: opts[:subject]
+        )
         manager.close
 
-        return failure(result[:error]) if result[:error]
+        return failure(result.error) unless result.success?
 
-        stdout.puts "Promoted observation ##{observation_id} -> fact ##{result[:fact_id]}"
-        stdout.puts "  #{result[:predicate]}: #{result[:object]}"
-        stdout.puts "  Corroboration: #{result[:corroboration_count]} sighting(s)"
+        stdout.puts "Promoted observation ##{observation_id} -> fact ##{result.fact_id}"
+        stdout.puts "  #{result.predicate}: #{result.object}"
+        stdout.puts "  Corroboration: #{result.corroboration_count} sighting(s)"
         0
-      end
-
-      # Server-side corroboration gate + Resolver path — the same logic the
-      # memory.promote_observation MCP handler uses. Returns {error:} on refusal
-      # or {fact_id:, predicate:, object:, corroboration_count:} on success.
-      def promote_observation(store, observation_id, opts)
-        obs = store.observations.where(id: observation_id).first
-        return {error: "Observation #{observation_id} not found in #{opts[:scope]} database."} unless obs
-        return {error: "Observation #{observation_id} already promoted (fact ##{obs[:promoted_fact_id]})."} unless obs[:promoted_at].nil?
-
-        threshold = Domain::Observation::PROMOTION_THRESHOLD
-        if obs[:corroboration_count].to_i < threshold
-          return {error: "Not yet corroborated: observation #{observation_id} has #{obs[:corroboration_count]} sighting(s), need #{threshold} (anti-hallucination gate)."}
-        end
-
-        occurred_at = Time.now.utc.iso8601
-        project_path = (opts[:scope] == "global") ? nil : Configuration.new.project_dir
-        extraction = Distill::Extraction.new(
-          facts: [{subject: opts[:subject], predicate: opts[:predicate], object: opts[:object], strength: "derived"}]
-        )
-        result = Resolve::Resolver.new(store).apply(
-          extraction, content_item_id: obs[:source_content_item_id],
-          occurred_at: occurred_at, project_path: project_path, scope: opts[:scope]
-        )
-
-        fact_id = result[:fact_ids].compact.first
-        return {error: "Promotion failed: the fact for observation #{observation_id} could not be resolved."} unless fact_id
-
-        store.mark_observation_promoted(observation_id, fact_id: fact_id)
-
-        {
-          fact_id: fact_id,
-          predicate: Resolve::PredicatePolicy.canonicalize(opts[:predicate]),
-          object: opts[:object],
-          corroboration_count: obs[:corroboration_count]
-        }
       end
 
       # --- consolidate --------------------------------------------------------
