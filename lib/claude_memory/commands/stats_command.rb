@@ -105,36 +105,23 @@ module ClaudeMemory
         stdout.puts "=" * 50
 
         threshold = ClaudeMemory::Domain::Observation::PROMOTION_THRESHOLD
+        stats = ClaudeMemory::Observe::ObservationStats.new(stores)
 
-        total = stores.sum { |s| s.observations.count }
-        if total.zero?
+        if stats.total_count.zero?
           stdout.puts "No observations recorded yet."
           manager.close
           return 0
         end
 
-        active = stores.sum { |s| s.observations.where(status: "active").count }
-        consolidated = stores.sum { |s| s.observations.where(status: "consolidated").count }
-        expired = stores.sum { |s| s.observations.where(status: "expired").count }
-        promoted = stores.sum { |s| s.observations.exclude(promoted_at: nil).count }
-        promotable = stores.sum do |s|
-          s.observations.where(status: "active", promoted_at: nil)
-            .where { corroboration_count >= threshold }.count
-        end
-
-        stdout.puts "Active: #{active}"
-        stdout.puts "Consolidated: #{consolidated}"
-        stdout.puts "Expired: #{expired}"
-        stdout.puts "Promoted: #{promoted}"
-        stdout.puts "Promotable (>= #{threshold} sightings): #{promotable}"
+        totals = stats.totals
+        stdout.puts "Active: #{totals[:active]}"
+        stdout.puts "Consolidated: #{totals[:consolidated]}"
+        stdout.puts "Expired: #{totals[:expired]}"
+        stdout.puts "Promoted: #{totals[:promoted]}"
+        stdout.puts "Promotable (>= #{threshold} sightings): #{stats.corroboration[:promotable]}"
         stdout.puts
 
-        kinds = Hash.new(0)
-        stores.each do |store|
-          store.observations.where(status: "active").group_and_count(:kind).each do |row|
-            kinds[row[:kind]] += row[:count]
-          end
-        end
+        kinds = stats.by_field(:kind)
 
         stdout.puts "By kind (active):"
         if kinds.empty?
