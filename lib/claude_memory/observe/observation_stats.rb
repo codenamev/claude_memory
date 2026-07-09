@@ -75,7 +75,7 @@ module ClaudeMemory
         return 0 if ids.empty?
 
         bytes = store.content_items.where(id: ids).sum(:byte_len) || 0
-        (bytes / 4.0).round
+        (bytes / Core::TokenEstimator::CHARS_PER_TOKEN).round
       end
     end
   end

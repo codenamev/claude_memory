@@ -36,7 +36,7 @@ module ClaudeMemory
             scope: scope,
             project_path: project_path,
             source_content_item_id: source_content_item_id,
-            token_count: token_count || (body.length / 4.0).ceil,
+            token_count: token_count || Core::TokenEstimator.from_chars(body.length),
             status: "active",
             session_id: session_id,
             observed_at: observed_at || now,
@@ -148,7 +148,7 @@ module ClaudeMemory
             new_id = observations.insert(
               body: body, kind: kind, priority: priority, scope: scope, project_path: project_path,
               source_content_item_id: source_content_item_id,
-              token_count: (body.length / 4.0).ceil, corroboration_count: combined,
+              token_count: Core::TokenEstimator.from_chars(body.length), corroboration_count: combined,
               status: "active", observed_at: observed_at || now, created_at: now
             )
             # Re-assert `active` on the update so a source consolidated by a
