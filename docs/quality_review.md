@@ -163,11 +163,16 @@
 
 ## 8. Priority Refactoring Recommendations
 
-> **Progress — /quality-update 2026-07-08:** All 5 Quick Wins and all 3 High
-> Priority items landed as atomic `[Quality]` commits (full suite green,
-> 2350 examples). `SQLiteStore` is back to 600 LOC. Remaining: Medium/Low items
-> below. Completed: Q1 ✅, Q7 ✅, Q8 ✅, Q3 ✅, Q10 ✅, `min_priority` rename ✅,
-> `increment_corroboration` symmetry ✅, `used_fact_pairs` limit ✅.
+> **Progress — /quality-update 2026-07-08 → 07-09:** All 5 Quick Wins, all 3
+> High Priority items, and the Medium tier landed as atomic `[Quality]` commits
+> (full suite green). `SQLiteStore` is back to 600 LOC. New pure/value objects:
+> `Core::Percentile`, `Core::Jaccard`, `Core::TokenBudget`, `Observe::DedupPlanner`,
+> `Observe::ObservationStats`, `Hook::ContextPresenter`; plus `Store::OtelWrites`
+> / `Store::ObservationWrites`.
+> Completed: Q1 ✅ Q7 ✅ Q8 ✅ Q3 ✅ Q10 ✅ + quick-win renames/caps ✅;
+> Medium: Q2 ✅ Q4 ✅ Q5 ✅ Q9 ✅ LexicalFTS txn ✅, Q6 partial ✅ (long-method
+> decomposition; full `Sweep::HistoricalCleanup` class split still open).
+> Remaining: Q6 class split + the Low-priority list below.
 
 ### High Priority (This Week)
 
@@ -177,12 +182,12 @@
 
 ### Medium Priority (Next Sprint)
 
-4. **Q4 — `Observe::ObservationStats`** to collapse the triplicated aggregation. ~2–3h.
-5. **Q2 — Consolidate Jaccard** onto `TokenOverlapMatcher`/`Core::Jaccard`. ~1–2h.
-6. **Q9 — Extract `Hook::ContextPresenter`** (pure presentation) from `ContextInjector`. ~2h.
-7. **Q6 — Extract `Sweep::HistoricalCleanup`** for one-shot data fixes. ~2–3h.
-8. **Q5 — Fold token-budget aggregation** into one value object (after Q3). ~1h.
-9. **LexicalFTS#rebuild! transaction wrap** (atomicity + speed). ~30m.
+4. ~~**Q4 — `Observe::ObservationStats`** to collapse the triplicated aggregation~~ ✅ Done (`de45e5e`).
+5. ~~**Q2 — Consolidate Jaccard** onto a shared `Core::Jaccard`~~ ✅ Done (`6a6e309`, set-math only; tokenizers left per-domain).
+6. ~~**Q9 — Extract `Hook::ContextPresenter`** (pure presentation)~~ ✅ Done (`fffe18b`).
+7. **Q6 — Extract `Sweep::HistoricalCleanup`** for one-shot data fixes. ~2–3h. **Partial:** `dedupe_open_conflicts` decomposed (`9dde790`); the full class split + `restore_multi_value_supersessions` decomposition remain.
+8. ~~**Q5 — Fold token-budget aggregation** into one value object~~ ✅ Done (`156ca7c`, `Core::TokenBudget`).
+9. ~~**LexicalFTS#rebuild! transaction wrap**~~ ✅ Done (`46f8a26`).
 
 ### Low Priority (Later)
 
