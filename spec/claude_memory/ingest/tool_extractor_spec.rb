@@ -31,6 +31,18 @@ RSpec.describe ClaudeMemory::Ingest::ToolExtractor do
       expect(tools.map { |t| t[:tool_name] }).to eq(["Read", "Edit"])
     end
 
+    it "extracts server_tool_use blocks (e.g. advisor) like tool_use" do
+      content = [
+        {"type" => "tool_use", "name" => "Read", "input" => {"path" => "a.rb"}},
+        {"type" => "server_tool_use", "name" => "advisor", "input" => {"query" => "how do I x"}}
+      ]
+      raw_text = {type: "assistant", message: {content: content}}.to_json + "\n"
+
+      tools = extractor.extract(raw_text)
+      expect(tools.map { |t| t[:tool_name] }).to eq(["Read", "advisor"])
+      expect(tools.last[:is_error]).to be false
+    end
+
     it "skips non-assistant messages" do
       raw_text = <<~JSONL
         {"type": "system", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {}}]}}
