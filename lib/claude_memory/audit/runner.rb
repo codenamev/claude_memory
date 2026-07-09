@@ -24,6 +24,7 @@ module ClaudeMemory
         observation_promotion_consistency
         observation_tombstone_chain
         observation_status_corroboration
+        truncated_source_content
       ].freeze
 
       Result = Data.define(:findings, :stats) do

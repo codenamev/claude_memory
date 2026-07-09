@@ -245,6 +245,21 @@ Exit code is `0` when `ok: true`, `1` otherwise. `--no-exit` always returns `0`.
 - For a bad `corroboration_count`, re-derive sighting counts via the Reflector's dedup pass.
 - For an unknown status, find the writer that bypassed `insert_observation` (the only sanctioned insert path).
 
+### C015 — Truncated source content
+
+**Severity:** info
+
+**Scope:** both DBs.
+
+**Triggered when:** a `content_items` row's `raw_text` carries a host-truncation marker — e.g. `[Read output capped at N lines]`, `[Truncated: N chars]`, "output was truncated", or an "N lines omitted / N characters truncated" count form (see `Distill::TruncationDetector`).
+
+**Why it matters:** Claude Code caps large tool output (notably Read) and leaves a marker in the transcript. Facts the distiller extracts from such a fragment were drawn from incomplete content, not complete ground truth — the same false-positive class as documentation example text the distiller takes literally. The detector deliberately does not recover the full file from disk: ingest runs after the fact and the file may have changed since, so disk recovery at ingest would be temporally unsound.
+
+**Remediation:**
+- Trace facts back with `claude-memory explain <fact_id>`.
+- Reject any fact that asserts something the truncated fragment could not actually confirm.
+- If you need the full content, re-run the relevant tool without truncation so the complete text is re-ingested.
+
 ## Adding a new check
 
 The audit is extensible by design.
