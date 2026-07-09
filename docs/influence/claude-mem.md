@@ -7,6 +7,32 @@
 
 ---
 
+## Re-studied: 2026-07-09 — v13.10.2 (commit 312d640) — CHANGED (minor)
+
+**Motion:** small. 6 releases in the 9-day window (v13.9.2 → v13.10.2). The bulk is infrastructure we already reject (Antigravity CLI host integration replacing Gemini CLI, IPv6 worker host bracketing, worker-script resolver identity, Windows spawn shims, marketplace runtime root repair, sqlite-runtime module shipping). Three commits carry genuinely transferable signal, all correctness/quality rather than feature.
+
+### NEW adoptable items (net-new since v13.9.1)
+
+#### High Priority
+
+1. **Valid SessionStart `hookSpecificOutput` on the no-op / error path** — *value:* our own `hook_context` has the exact gap claude-mem's #2972 fix closes. When our context injector produces nothing to inject (`context_text` nil — no facts, no observations, empty project) we emit **nothing** to stdout (`hook_command.rb:216-231` only `stdout.puts` when `context_text` is truthy), and on an exception we fall through to `classify_error(e)` (`hook_command.rb:238`) with no `hookSpecificOutput` at all. Standard Claude Code tolerates empty SessionStart stdout today, but a strict validator (claude-mem hit this with Codex's SessionStart validator, which rejects a bare `{continue:true}` outright) would reject the no-op. claude-mem's fix: a `buildNoOpResult(event)` helper that, for the SessionStart-producing handler, always attaches `hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: "" }` — the minimal *valid* payload — instead of an empty/bare object. *Evidence:* `src/cli/hook-command.ts` `buildNoOpResult` (commit 62693445, v13.10.1); CHANGELOG [13.10.1]. Also the sibling fix "preserve empty-string additionalContext" (commit 47d14c17) — don't let an adapter drop an intentional `""`. *Effort:* S (~0.5 day) — emit a minimal valid `hookSpecificOutput` with empty `additionalContext` on both the nil-context and rescue paths of `hook_context`. *Trade-off:* none; strictly more robust, and future-proofs us if Claude Code tightens SessionStart validation or if we ever add a stricter host.
+
+#### Medium Priority
+
+2. **Automated error-handling anti-pattern scanner (pure static, no LLM)** — *value:* codifies our existing "swallowed errors must stay visible" convention as an enforceable check. claude-mem built `scripts/anti-pattern-test/detect-error-handling-antipatterns.ts` (475 lines, pure regex/line scan, zero LLM) that flags `NO_LOGGING_IN_CATCH`, `PROMISE_EMPTY_CATCH`, `GENERIC_CATCH`, `LARGE_TRY_BLOCK`, `ERROR_STRING_MATCHING`, `PARTIAL_ERROR_LOGGING`, `CATCH_AND_CONTINUE_CRITICAL_PATH`, and drove src/ from 331 issues → 0 (commit 39dd77d9). The adoptable *idea* for us: a rake task / CI gate that flags Ruby anti-patterns we care about — bare `rescue` with no logging (many of our `rescue => e` correctly log `.debug`/`.warn`, so this would guard that they keep doing so), `rescue nil`, rescuing `Exception`, error-string-matching (`e.message.include?("...")`) where an exception class would be robust. Their nicest touch: inline `[ANTI-PATTERN IGNORED]: <reason>` override comments so intentional swallows (like our telemetry's deliberate DB-error swallow) are opt-out with a documented justification rather than flagged forever. *Evidence:* `scripts/anti-pattern-test/detect-error-handling-antipatterns.ts:1-475`; pattern names at `:172,192,219,235,252`; override mechanism at `:52-56`. *Effort:* M — a Ruby line/AST scanner (could piggyback on our existing Standard/rubocop AST tooling instead of regex) plus a rake task; complements `/review-for-quality` with a deterministic gate. *Trade-off:* false-positive tuning; the override-comment escape hatch mitigates. Fits our no-extra-API-cost rule (fully static).
+
+### Rejected / reinforced (this window)
+
+- **Antigravity CLI support / Gemini CLI removal** (v13.10.0) — host-editor integration; not our domain (we target Claude Code). Reject.
+- **IPv6 worker host bracketing, worker-script resolver, Windows spawn shims, sqlite-runtime module shipping, marketplace runtime-root repair** (v13.10.2) — all worker/multi-runtime plumbing we don't have and don't want. Reject.
+- **Client-side context-truncation *removal*** (v13.9.2, commit 29af0284) — not an adoptable feature but a useful *cautionary principle*: they ripped out a hardcoded 20-message / 100k-token sliding window that fired on message-count and silently corrupted history ("a second system layered on a component that owns its own context window"). Review-note for us: our hardcoded injection caps (AutoMemoryMirror 5 candidates × 1500 chars, top-N fact/observation limits) are deliberate *size-bounding for injection*, not history mutation, so they're defensible — but the lesson is to keep such caps advisory and visible, never silently lossy on the source of truth.
+
+### Bottom line (2026-07-09)
+
+A 9-day patch window yielded two small correctness/quality items and no new architecture worth chasing. The SessionStart no-op fallback (#1) is the one concrete robustness fix that maps 1:1 onto an actual gap in our `hook_context`; the anti-pattern scanner (#2) is an adoptable *tooling idea* that formalizes a convention we already hold. Everything else is worker/host infra we continue to reject.
+
+---
+
 ## Re-studied: 2026-06-30 — v13.9.1 (commit 3a2ba29)
 
 **CHANGED? Yes — major.** ~60 releases and three major versions since the v10.6.3 baseline (v11.0.0 → v12.0.0 → v13.0.0 → v13.9.1). The project's center of gravity shifted from a single Bun worker + SQLite + Chroma into a far heavier multi-runtime system. Two dominant themes since baseline: (1) a large opt-in **Server Beta** stack (Postgres + Redis + BullMQ + REST `/v1` API), and (2) a ground-up **PostHog cloud telemetry** buildout. Both reinforce our existing rejections rather than offering new adoptable surface. The genuinely adoptable signal is concentrated in observer-output quality and per-prompt context injection.
