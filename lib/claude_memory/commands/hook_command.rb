@@ -194,6 +194,7 @@ module ClaudeMemory
       end
 
       def hook_context(payload, db_path)
+        emitted = false
         project_path = payload["project_path"] || payload["cwd"]
         source = payload["source"]
         session_id = payload["session_id"]
@@ -214,21 +215,8 @@ module ClaudeMemory
         end
         duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round
 
-        if context_text
-          response = {
-            hookSpecificOutput: {
-              hookEventName: "SessionStart",
-              # Wrap in <claude-memory-context> so a later ingest strips our own
-              # injected snapshot back out (ContentSanitizer lists this tag in
-              # SYSTEM_TAGS). Without the wrapper, memory's injected facts and
-              # observation log leak into the transcript and get re-distilled —
-              # a self-ingestion feedback loop. Claude still reads the content;
-              # only the re-ingestion path treats it as strippable.
-              additionalContext: "<claude-memory-context>\n#{context_text}\n</claude-memory-context>"
-            }
-          }
-          stdout.puts JSON.generate(response)
-        end
+        emit_context_response(context_text)
+        emitted = true
 
         record_context_activity(manager, context_text, injector,
           session_id: session_id, source: source, duration_ms: duration_ms)
@@ -236,7 +224,35 @@ module ClaudeMemory
         manager.close
         Hook::ExitCodes::SUCCESS
       rescue => e
-        classify_error(e)
+        exit_code = classify_error(e)
+        # On graceful degradation (transport/infra error → SUCCESS), still emit a
+        # well-formed no-op response so a strict SessionStart validator sees valid
+        # hookSpecificOutput rather than an empty stream. Skip if we already emitted.
+        emit_context_response(nil) if exit_code == Hook::ExitCodes::SUCCESS && !emitted
+        exit_code
+      end
+
+      # Emits the SessionStart context response to stdout. With context present,
+      # wraps it in <claude-memory-context> so a later ingest strips our own
+      # injected snapshot back out (ContentSanitizer lists this tag in SYSTEM_TAGS);
+      # without the wrapper, memory's facts and observation log would leak into the
+      # transcript and get re-distilled — a self-ingestion feedback loop. Claude
+      # still reads the content; only the re-ingestion path treats it as strippable.
+      # With no context (no-op / graceful degradation), emits an empty
+      # additionalContext so the hookSpecificOutput stays well-formed and valid.
+      def emit_context_response(context_text)
+        additional = if context_text
+          "<claude-memory-context>\n#{context_text}\n</claude-memory-context>"
+        else
+          ""
+        end
+        response = {
+          hookSpecificOutput: {
+            hookEventName: "SessionStart",
+            additionalContext: additional
+          }
+        }
+        stdout.puts JSON.generate(response)
       end
 
       CONTEXT_PREVIEW_BYTES = 400
