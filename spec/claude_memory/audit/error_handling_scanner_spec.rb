@@ -190,6 +190,67 @@ RSpec.describe ClaudeMemory::Audit::ErrorHandlingScanner do
         RUBY
         expect(offenses.first.blocking?).to be(false)
       end
+
+      it "does NOT let a following rescue clause's override leak back onto an empty broad rescue" do
+        empty = scan(<<~RUBY).find { |o| o.pattern == "EMPTY_RESCUE" }
+          begin
+            foo
+          rescue
+          rescue TypeError => e
+            # [ANTI-PATTERN IGNORED]: reason for the TypeError clause only
+            log(e)
+          end
+        RUBY
+        expect(empty).not_to be_nil
+        expect(empty.overridden?).to be(false)
+        expect(empty.blocking?).to be(true)
+      end
+
+      it "does NOT let a following ensure clause's override leak back onto an empty broad rescue" do
+        empty = scan(<<~RUBY).find { |o| o.pattern == "EMPTY_RESCUE" }
+          begin
+            foo
+          rescue
+          ensure
+            # [ANTI-PATTERN IGNORED]: this documents the ensure, not the rescue
+            cleanup
+          end
+        RUBY
+        expect(empty.blocking?).to be(true)
+      end
+    end
+
+    context "with top-level qualified error classes" do
+      it "flags `rescue ::StandardError` returning nil as a broad RESCUE_NIL" do
+        expect(patterns_for(<<~RUBY)).to eq(["RESCUE_NIL"])
+          def a
+            risky
+          rescue ::StandardError
+            nil
+          end
+        RUBY
+      end
+
+      it "flags `rescue ::Exception` as RESCUE_EXCEPTION" do
+        patterns = patterns_for(<<~RUBY)
+          def a
+            risky
+          rescue ::Exception => e
+            handle(e)
+          end
+        RUBY
+        expect(patterns).to include("RESCUE_EXCEPTION")
+      end
+
+      it "does NOT treat a namespaced Foo::StandardError as broad" do
+        expect(patterns_for(<<~RUBY)).to be_empty
+          def a
+            risky
+          rescue Foo::StandardError
+            nil
+          end
+        RUBY
+      end
     end
 
     it "handles chained and nested rescues" do

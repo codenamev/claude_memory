@@ -60,15 +60,16 @@ module ClaudeMemory
 
       private
 
-      # Preorder walk that also carries the line of the nearest enclosing
-      # rescuable terminator (`end`). An empty RescueNode's own location
-      # stops at the `rescue` keyword, so an override comment written on a
-      # blank rescue body would otherwise fall outside its span — the
-      # enclosing end lets us extend the override region to the clause body.
-      def walk(node, enclosing_end, &block)
+      # Preorder walk that also carries the nearest enclosing rescuable node
+      # (begin/def/block/lambda). An empty RescueNode's own location stops at
+      # the `rescue` keyword, so its override region has to be extended to the
+      # clause body — and the enclosing node is what lets us bound that region
+      # by the *next* clause (a following rescue/else/ensure) rather than by
+      # the block terminator, so a later clause's annotation can't leak back.
+      def walk(node, enclosing, &block)
         return unless node.is_a?(Prism::Node)
-        yield node, enclosing_end
-        child_enclosing = rescuable?(node) ? node.location.end_line : enclosing_end
+        yield node, enclosing
+        child_enclosing = rescuable?(node) ? node : enclosing
         node.compact_child_nodes.each { |child| walk(child, child_enclosing, &block) }
       end
 
@@ -77,17 +78,17 @@ module ClaudeMemory
           node.is_a?(Prism::BlockNode) || node.is_a?(Prism::LambdaNode)
       end
 
-      def inspect_node(node, path, overrides, enclosing_end)
+      def inspect_node(node, path, overrides, enclosing)
         case node
-        when Prism::RescueNode then rescue_offenses(node, path, overrides, enclosing_end)
+        when Prism::RescueNode then rescue_offenses(node, path, overrides, enclosing)
         when Prism::RescueModifierNode then modifier_offenses(node, path, overrides)
         else []
         end
       end
 
-      def rescue_offenses(node, path, overrides, enclosing_end)
+      def rescue_offenses(node, path, overrides, enclosing)
         line = node.location.start_line
-        reason = override_for(line, rescue_end_line(node, enclosing_end), overrides)
+        reason = override_for(line, rescue_end_line(node, enclosing), overrides)
         offenses = []
 
         if rescues_exception?(node)
@@ -144,8 +145,14 @@ module ClaudeMemory
         node.exceptions.any? { |ex| constant_named?(ex, :StandardError) || constant_named?(ex, :Exception) }
       end
 
+      # Matches a bare `StandardError` (ConstantReadNode) and a top-level
+      # `::StandardError` (ConstantPathNode with no parent). A namespaced
+      # `Foo::StandardError` is a different constant and is left alone.
       def constant_named?(node, name)
-        node.is_a?(Prism::ConstantReadNode) && node.name == name
+        case node
+        when Prism::ConstantReadNode then node.name == name
+        when Prism::ConstantPathNode then node.parent.nil? && node.name == name
+        end
       end
 
       def string_match?(statements)
@@ -161,12 +168,26 @@ module ClaudeMemory
       end
 
       # The last line an override comment can occupy to still attach to this
-      # rescue. A non-empty body ends at its own last statement; an empty
-      # body borrows the enclosing terminator (the clause's `end`) so a
-      # marker on the otherwise-blank body is still recognized.
-      def rescue_end_line(node, enclosing_end)
+      # rescue. A non-empty body ends at its own last statement; an empty body
+      # has no statements to span, so it borrows the line just before the next
+      # clause boundary — the following chained rescue, else, or ensure, or
+      # failing those the enclosing terminator. Bounding by the next clause
+      # (rather than the terminator) is what stops a later clause's
+      # `# [ANTI-PATTERN IGNORED]:` annotation from leaking back and silently
+      # exempting this empty rescue.
+      def rescue_end_line(node, enclosing)
         return node.location.end_line if node.statements
-        enclosing_end ? enclosing_end - 1 : node.location.end_line
+        boundary = next_clause_line(node, enclosing)
+        boundary ? boundary - 1 : node.location.end_line
+      end
+
+      def next_clause_line(node, enclosing)
+        return node.subsequent.location.start_line if node.subsequent
+        if enclosing.is_a?(Prism::BeginNode)
+          return enclosing.else_clause.location.start_line if enclosing.else_clause
+          return enclosing.ensure_clause.location.start_line if enclosing.ensure_clause
+        end
+        enclosing&.location&.end_line
       end
 
       # An override applies when the marker comment sits on, inside, or
