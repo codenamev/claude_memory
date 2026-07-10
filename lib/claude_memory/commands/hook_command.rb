@@ -102,7 +102,7 @@ module ClaudeMemory
 
           store.close
         rescue
-          # Background process must not propagate errors
+          # [ANTI-PATTERN IGNORED]: background async process must never propagate errors to the caller
           nil
         end
       rescue NotImplementedError

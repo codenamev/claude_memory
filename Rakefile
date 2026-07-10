@@ -42,4 +42,50 @@ namespace :plugin do
   end
 end
 
-task default: %i[spec standard]
+namespace :audit do
+  desc "Scan lib/ for error-handling anti-patterns (swallowed errors); exits non-zero on unignored blocking findings"
+  task :error_handling do
+    require_relative "lib/claude_memory/audit/error_handling_scanner"
+
+    scanner = ClaudeMemory::Audit::ErrorHandlingScanner.new
+    offenses = Dir["lib/**/*.rb"].sort.flat_map do |path|
+      scanner.scan(File.read(path), path: path)
+    end
+
+    active = offenses.reject(&:overridden?)
+    overridden = offenses.select(&:overridden?)
+    blocking = active.select(&:blocking?)
+
+    puts "Error-handling anti-pattern scan (lib/)"
+    puts
+
+    if active.empty?
+      puts "  No active findings."
+    else
+      active.sort_by { |o| [o.path, o.line] }.each do |o|
+        puts format("  %-45s %-18s [%s] %s", "#{o.path}:#{o.line}", o.pattern, o.severity, o.message)
+      end
+    end
+
+    unless overridden.empty?
+      puts
+      puts "Documented swallows (overridden):"
+      overridden.sort_by { |o| [o.path, o.line] }.each do |o|
+        puts format("  %-45s %-18s — %s", "#{o.path}:#{o.line}", o.pattern, o.override_reason)
+      end
+    end
+
+    puts
+    puts format("Summary: %d blocking, %d advisory, %d overridden",
+      blocking.size, active.size - blocking.size, overridden.size)
+
+    if blocking.any?
+      puts
+      puts "Blocking findings must re-raise, log, return a real value, or be annotated with"
+      puts "  # [ANTI-PATTERN IGNORED]: <reason>"
+      abort "audit:error_handling failed with #{blocking.size} blocking finding(s)"
+    end
+  end
+end
+
+task default: %i[spec standard audit:error_handling]

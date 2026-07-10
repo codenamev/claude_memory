@@ -260,6 +260,40 @@ Exit code is `0` when `ok: true`, `1` otherwise. `--no-exit` always returns `0`.
 - Reject any fact that asserts something the truncated fragment could not actually confirm.
 - If you need the full content, re-run the relevant tool without truncation so the complete text is re-ingested.
 
+## Source-level gate: `rake audit:error_handling`
+
+Separate from the `C###` checks above. Those inspect **memory-corpus state** (the DBs); this inspects **Ruby source** and enforces the "swallowed errors stay visible" convention as a deterministic, non-LLM gate. It runs as part of `rake default` and can be invoked directly:
+
+```bash
+bundle exec rake audit:error_handling
+```
+
+Backed by `ClaudeMemory::Audit::ErrorHandlingScanner` — a Prism AST walker (not regex), so the checks are structural facts, not pattern guesses.
+
+**What it flags:**
+
+| Pattern | Severity | Meaning |
+| --- | --- | --- |
+| `EMPTY_RESCUE` | error (blocking) | A **broad** rescue (bare, `StandardError`, or `Exception`) with an empty or comment-only body. |
+| `RESCUE_NIL` | error (blocking) | A **broad** rescue whose body is only `nil`, or a `expr rescue nil` modifier. |
+| `RESCUE_EXCEPTION` | warn | Rescues `Exception` — also catches signals and system errors. |
+| `ERROR_STRING_MATCH` | info | Control flow branches on the exception's `.message` text — brittle across library/Ruby versions. |
+
+**Breadth is the discriminator.** A *narrow, typed* rescue that returns `nil` — `rescue JSON::ParserError; nil` — is a documented "unparseable/unavailable → nil" contract, the idiom used throughout `lib/`, and is intentionally **not** flagged. Only broad swallows (which discard the whole `StandardError` hierarchy invisibly) block.
+
+**Override — documenting a deliberate swallow.** A genuine best-effort/background swallow stays green by annotating it inside or directly above the rescue:
+
+```ruby
+rescue
+  # [ANTI-PATTERN IGNORED]: background async process must never propagate errors to the caller
+  nil
+end
+```
+
+Overridden offenses are still reported (under "Documented swallows") but never block. The point is not to permit silent swallows but to convert them into *documented* ones. `lib/` currently carries three: the hook background-close, the stats FTS-metadata read, and the sweep FTS-GC removal.
+
+**Remediation for a new blocking finding:** re-raise, log, return a real value, narrow the rescue to a specific exception class, or — if the swallow is genuinely intended — add the `[ANTI-PATTERN IGNORED]: <reason>` marker.
+
 ## Adding a new check
 
 The audit is extensible by design.

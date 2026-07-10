@@ -137,7 +137,7 @@ module ClaudeMemory
         prunable.select(:id, :raw_text).each do |row|
           fts.remove_content_item(row[:id], row[:raw_text])
         rescue
-          # FTS entry may not exist; skip
+          # [ANTI-PATTERN IGNORED]: FTS entry may not exist for this row; best-effort removal during GC
         end
 
         prunable.delete

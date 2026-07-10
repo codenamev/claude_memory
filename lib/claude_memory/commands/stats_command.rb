@@ -325,7 +325,7 @@ module ClaudeMemory
         stdout.puts "  Optimization available: FTS index stores duplicate text."
         stdout.puts "  Run 'claude-memory compact' to reduce size by ~40%."
       rescue
-        # Ignore errors reading FTS metadata
+        # [ANTI-PATTERN IGNORED]: FTS metadata is advisory display only; a read failure must not break stats output
       end
 
       def format_date(iso8601_string)
