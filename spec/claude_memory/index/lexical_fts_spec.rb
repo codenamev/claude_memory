@@ -101,6 +101,37 @@ RSpec.describe ClaudeMemory::Index::LexicalFTS do
     end
   end
 
+  describe "#rebuild!" do
+    before do
+      [
+        {text: "We are using PostgreSQL as our primary database.", hash: "r1"},
+        {text: "The authentication system uses JWT tokens.", hash: "r2"}
+      ].each do |item|
+        id = store.upsert_content_item(
+          source: "claude_code", session_id: "sess-1",
+          text_hash: item[:hash], byte_len: item[:text].bytesize, raw_text: item[:text]
+        )
+        fts.index_content_item(id, item[:text])
+      end
+    end
+
+    it "rebuilds the index from content_items" do
+      fts.rebuild!
+      expect(fts.search("PostgreSQL")).not_to be_empty
+    end
+
+    it "leaves the existing index intact when the rebuild fails mid-flight (transactional DDL rollback)" do
+      expect(fts.search("PostgreSQL")).not_to be_empty
+
+      # Fail after the DROP but before the reinserts complete; the whole
+      # transaction (incl. the DROP) must roll back, leaving the old index.
+      allow(fts).to receive(:create_contentless_table!).and_raise(RuntimeError, "boom")
+      expect { fts.rebuild! }.to raise_error(RuntimeError, "boom")
+
+      expect(fts.search("PostgreSQL")).not_to be_empty
+    end
+  end
+
   describe "corrupt rank-index handling (issue #7, Finding 2)" do
     it "translates a malformed-on-rank failure into a CorruptRankIndexError with a compact hint" do
       expect {
