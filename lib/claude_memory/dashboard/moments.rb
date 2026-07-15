@@ -31,6 +31,9 @@ module ClaudeMemory
         "sweep" => %w[hook_sweep]
       }.freeze
 
+      # Moment kinds whose detail carries scoped top-fact IDs to resolve.
+      SCOPED_FACT_KINDS = %w[context_injection recall_hit recall_empty].freeze
+
       def initialize(manager)
         @manager = manager
       end
@@ -70,7 +73,12 @@ module ClaudeMemory
         content_by_id = batch_content(store, content_ids)
         facts_by_content = batch_extracted_facts(store, content_ids)
 
-        moments = events.map { |e| build_moment(store, e, content_by_id, facts_by_content) }
+        # Preload scoped top-facts for every recall/context event in one query
+        # per scope (was a per-row facts + entities lookup in resolve_scoped_facts).
+        scoped_details = events.filter_map { |e| e[:details] if SCOPED_FACT_KINDS.include?(kind_for(e)) }
+        fact_index = ScopedFactResolver.build_fact_index(@manager, ScopedFactResolver.merge_scoped_ids(scoped_details))
+
+        moments = events.map { |e| build_moment(store, e, content_by_id, facts_by_content, fact_index) }
         moments = moments.select { |m| kinds.include?(m[:kind]) } unless kinds.empty?
         has_more = moments.size > limit
         moments = moments.first(limit)
@@ -130,7 +138,7 @@ module ClaudeMemory
         end
       end
 
-      def build_moment(store, event, content_by_id, facts_by_content)
+      def build_moment(store, event, content_by_id, facts_by_content, fact_index)
         details = event[:details] || {}
         kind = kind_for(event)
         base = {
@@ -145,10 +153,10 @@ module ClaudeMemory
           details: details
         }
 
-        enrich(base, kind, details, content_by_id, facts_by_content)
+        enrich(base, kind, details, content_by_id, facts_by_content, fact_index)
       end
 
-      def enrich(moment, kind, details, content_by_id, facts_by_content)
+      def enrich(moment, kind, details, content_by_id, facts_by_content, fact_index)
         case kind
         when "context_injection"
           moment.merge(
@@ -156,7 +164,7 @@ module ClaudeMemory
             context_length: details[:context_length],
             fact_count: details[:fact_count] || (details[:top_fact_ids] || []).size,
             top_subjects: details[:top_subjects] || [],
-            top_facts: resolve_scoped_facts(details),
+            top_facts: ScopedFactResolver.resolve_from_index(details, fact_index),
             truncated: details[:truncated]
           )
         when "recall_hit", "recall_empty"
@@ -165,7 +173,7 @@ module ClaudeMemory
             query: details[:query],
             result_count: details[:result_count] || 0,
             scope: details[:scope],
-            top_facts: resolve_scoped_facts(details),
+            top_facts: ScopedFactResolver.resolve_from_index(details, fact_index),
             results_by_scope: details[:results_by_scope]
           )
         when "extraction"
@@ -194,11 +202,6 @@ module ClaudeMemory
         else
           moment
         end
-      end
-
-      def resolve_scoped_facts(details)
-        scoped = ScopedFactResolver.scoped_ids_from_details(details)
-        ScopedFactResolver.resolve(@manager, scoped)
       end
 
       # Collect the distinct content_item ids referenced by extraction/ingest
