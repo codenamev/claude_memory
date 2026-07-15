@@ -1,5 +1,184 @@
 # Code Quality Review - Ruby Best Practices
 
+## Delta Review (2026-07-14)
+
+**Review Date:** 2026-07-14
+**Previous Review:** 2026-07-01 (full) — its findings were all landed by the `/quality-update` runs of 2026-07-08→09
+**Codebase Growth:** 24,650 → **25,180 lib LOC** (+530, +2%; 32 commits). New surface: the `/quality-update` extraction classes (`Core::Percentile`/`Jaccard`/`TokenBudget`/`TokenEstimator`, `Observe::DedupPlanner`/`ObservationStats`/`Promotion`, `Hook::ContextPresenter`, `Store::OtelWrites`/`ObservationWrites`, `Sweep::HistoricalCleanup`) and the influencer-restudy additions (`Audit::ErrorHandlingScanner` #93, `Distill::TruncationDetector` #95, audit check C015, `server_tool_use` recognition).
+**Method:** two parallel expert-lens passes (Metz/Grimm/Bernhardt over the new value/extraction classes; Evans/Beck over the detectors, audit, and the FTS/vector/moments changes the prior review had touched), every finding re-verified against source before inclusion. `Audit::ErrorHandlingScanner` was separately deep-reviewed in PR #8 (two issues found and fixed — override-span leak + `::StandardError` false-negative).
+
+### Executive Summary
+
+**The prior review's headline concerns held.** Every structural fix from 2026-07-01 is intact and stable: `SQLiteStore` is still **600 LOC** (not regrown), `dashboard/api.rb` **622**, `sweep/maintenance.rb` **296** (the `HistoricalCleanup` extraction held). Confident-code metrics are steady-or-better — bare rescues **6** (all defensible; 3 now carry `# [ANTI-PATTERN IGNORED]:` markers thanks to #93), `rescue Exception` **0**, `.send(:private)` **0**, spec `sleep` down **7 → 4**. The extraction classes are a genuine functional-core win: `DedupPlanner`, `ContextPresenter`, `Percentile`, `Jaccard`, `OtelWrites` are actually pure/DB-free and every new public class is spec'd.
+
+**The new issues are concentrated in two places.** (1) A **second N+1 in the moments feed** that the prior review's Q7 batching did *not* close — it batched the extraction/ingest content+facts path, but recall/context moments still resolve their top-facts per-row (facts + entities = ~2 queries/moment). (2) A small **duplication/consistency cluster in the freshly-extracted value objects** — the very drift the refactor was meant to kill leaked back in one spot (`ObservationStats` re-derives the token formula with a different rounding rule), plus a couple of contract-symmetry nits (`TokenBudget#min/max` surprise-nil, un-frozen value object).
+
+**No 🔴-blocking correctness bugs.** One High (the moments N+1), four Medium, the rest Low/nits — all on read-only or on-demand paths, all cheap.
+
+### Current Strengths
+
+- **Prior fixes held under +530 LOC of growth** — no god-object backslide; `SQLiteStore`/`api.rb`/`maintenance.rb` all at their post-refactor sizes.
+- **Extraction pass is real** — the two shared primitives that motivated it (`Core::Percentile`, `Core::Jaccard`) are *depended upon*, not reimplemented, by `TokenBudget`/`HistoricalCleanup`; `Observe::DedupPlanner` cleanly separates pure clustering from the store writes.
+- **`Audit::ErrorHandlingScanner` (#93)** — Prism AST (not regex), pure `#scan`/rake-shell split, breadth-gated so narrow typed rescues stay clean; wired into `rake default` and green against `lib/`. Post PR-#8-review it also handles `::StandardError` and next-clause override bounding.
+- **Detectors are clean** — `TruncationDetector` and the `server_tool_use` extractor change are pure, correct, well-specced, no catastrophic-backtracking regex.
+
+---
+
+## 1. Sandi Metz Perspective
+
+### What's Held ✅
+- `SQLiteStore` 600 LOC (the 901→600 `OtelWrites`/`ObservationWrites` extraction held); `maintenance.rb` 296 (`HistoricalCleanup` held); `api.rb` 622.
+- Every new extraction class is single-purpose and spec'd; no reintroduced `percentile`/`jaccard` duplication.
+
+### Medium Issues 🟡
+
+**D1. `ObservationStats#source_tokens_for` re-derives the token formula — the exact drift the refactor targeted.** `observe/observation_stats.rb:78`: `(bytes / Core::TokenEstimator::CHARS_PER_TOKEN).round` reaches into the constant instead of calling `Core::TokenEstimator.from_chars`, *and* uses `.round` where `from_chars` uses `.ceil`. So the compression ratio's numerator (source tokens, `.round` here) and the observations' `token_count` denominator (`from_chars`, `.ceil`) are computed by two different rounding rules — a silent, drift-prone inconsistency in the one metric that motivated `TokenEstimator`'s extraction. *DRY.*
+- **Fix:** call `Core::TokenEstimator.from_chars(bytes)` (accept `.ceil`), or add a rounding variant so the constant still lives in one place. ~15m.
+
+### Low Issues
+- `Core::TokenEstimator#estimate` (`core/token_estimator.rb:22-27`) duplicates `from_chars`'s `(chars / CHARS_PER_TOKEN).ceil` body in-file; close `estimate` with `from_chars(chars)`. The class holds only `self.` methods — `module` would express "no instances" more honestly than `class`. ~10m.
+- `Sweep::HistoricalCleanup#restore_multi_value_supersessions` (`sweep/historical_cleanup.rb:103-159`) is ~56 lines with a nested subject→candidate loop; the per-candidate restore/skip branch (`:128-153`) is a clean `decide_restore(...)` extraction that would bring it under the 15-line guideline. The class bundles three one-shot fixes (240 LOC) — cohesive under the "historical cleanup" theme; note it if a fourth is added. ~45m.
+
+---
+
+## 2. Jeremy Evans Perspective
+
+### What's Held ✅
+- `insert_embedding` transaction wrap (prior fix) intact and correct — vec0 row + `vec_indexed_at` land atomically (`index/vector_index.rb:40-48`).
+- `LexicalFTS#rebuild!` transaction wrap correct and atomic (SQLite supports transactional DDL; `paged_each` reads `content_items`, not the table being rebuilt).
+- All raw SQL is genuinely un-DSL-able (FTS5 `MATCH`, vec0, contentless-FTS rowid inserts) and parameterized. No `Sequel.sqlite` anywhere (the one grep hit is a comment warning against it).
+
+### High Priority Issues
+
+**D2. Second N+1 in `Dashboard::Moments` — recall/context top-fact resolution was never batched.** `dashboard/moments.rb`: `enrich` calls `resolve_scoped_facts(details)` **per row** for `context_injection`, `recall_hit`, and `recall_empty` moments (`:175-195`), and each call (`:199-201` → `ScopedFactResolver.resolve`) runs `store.facts.where(id: ids).all` **plus** `FactPresenter#list_summary` → `store.entities.where(id: ids)` — **2 queries per moment**. The prior review's Q7 fix batched only the extraction/ingest content+facts path (`content_by_id`/`facts_by_content`), not this one. Failure scenario: a 50-moment page of recall events ⇒ ~100 queries; up to `2×limit` events are enriched before `.first(limit)`, so worst case ≈ **400 queries** for one `/api/moments` request. *N+1.*
+- **Fix:** collect all `ScopedFactResolver.scoped_ids_from_details` across the page first, batch-load facts per scope in one `facts.where(id: all_ids)` + one shared `FactPresenter` entity load, then map back onto moments — the same shape `batch_content`/`batch_extracted_facts` already use. ~1h.
+
+### Medium Issues 🟡
+
+**D3. Audit check C015 materializes every `raw_text` blob at once.** `audit/checks.rb:390`: `store.content_items.select(:id, :raw_text).all` loads the full `raw_text` (the largest column, each up to the ingest cap) for **every** content item in **both** DBs into Ruby to regex-scan. On a mature DB (thousands of chunks) that's an unbounded full-table load. On-demand CLI audit, not a hot path (hence Medium), but no reason to hold it all. *(This confirms the NIT deferred from PR #8 as a real Medium.)*
+- **Fix:** stream with `.order(:id).paged_each(rows_per_fetch: 500) { |row| … }` (the pattern `LexicalFTS#rebuild!` already uses), accumulating flagged ids. Read-only/safe-degradation is otherwise fine. ~30m.
+
+**D4. `VectorIndex#backfill_batch!` writes vec0 rows non-atomically with their flag.** `index/vector_index.rb:112-126`: unlike the correctly-wrapped `insert_embedding`, `backfill_batch!` INSERTs each vec0 row (each auto-commits, no enclosing transaction) and sets `vec_indexed_at` in one batched `update` *after* the loop. The "No DELETE needed: `vec_indexed_at` is nil" comment holds only if the previous run finished its batch update. Failure scenario: crash after some INSERTs but before the batch `update` ⇒ those facts have vec0 rows with `vec_indexed_at` still nil ⇒ next `backfill_batch!` re-INSERTs them **without a DELETE** ⇒ duplicate embeddings in `facts_vec` that never self-heal (once flagged, never revisited). *Transaction safety.*
+- **Fix:** wrap the loop + batch update in one `@db.transaction`, or mirror `insert_embedding` and `DELETE` before each INSERT. ~30m.
+
+---
+
+## 3. Avdi Grimm Perspective
+
+### What's Held ✅
+- Bare rescues **6** (all defensible safe-default probes); 3 now carry `# [ANTI-PATTERN IGNORED]:` markers (the #93 override mechanism turned undocumented swallows into documented ones). `rescue Exception` **0**; every new `otel/`/`observe/`/`core/` file uses scoped rescues or none.
+- Border coercion (`coerce_observation`) still textbook; `.send(:private)` still 0.
+
+### Medium Issues 🟡
+
+**D5. `Observe::Reflector#reflect!` runs its writes in a non-retryable transaction.** `observe/reflector.rb:49`: `@store.db.transaction do … end` wraps `dedupe` (`increment_corroboration` + `tombstone_observation`) and `expire_stale_info` (`expire_observation`), but uses raw `@db.transaction`, **not** `RetryHandler#transaction_with_retry`. This runs in the sweep hook, which races the ingest hook (the documented WAL-contention gotcha). `insert_observation`/`consolidate_observations` correctly wrap themselves in `with_retry`; the reflection path doesn't. `PRAGMA busy_timeout = 1000` (`retry_handler.rb:45`) mitigates at the SQLite level, so this is Medium-leaning-Low, not High.
+- **Fix:** change `reflect!` to `transaction_with_retry`. Note: do **not** wrap the individual mutators (`tombstone`/`increment`/`expire`) in `with_retry` — they run inside `reflect!`'s open transaction, so the retry belongs on the transaction boundary, not the statement. `Promotion#call`'s bare `mark_observation_promoted` (`observe/promotion.rb:43`) is a separate single write (busy_timeout-mitigated); leave or wrap in `with_retry` for symmetry. ~20m.
+
+### Low Issues
+- **`Core::TokenBudget#min`/`#max` surprise-nil** (`core/token_budget.rb:56-62`) — return `@sorted.first`/`.last` (nil on empty), while sibling aggregates `avg`/`p50`/`p95` all return `0` for the empty sample. A caller doing `budget.max - budget.min` on an empty budget gets `NoMethodError`. Guard both (`return 0 if empty?`) to match the object's own contract. ~5m.
+- **`Core::Jaccard.score` dead defensive branch** (`core/jaccard.rb:16`) — `return 0.0 if union.zero?` is unreachable: line 13 already returns unless both sets are non-empty, and two non-empty sets always union to ≥1. Remove the guard (and the misleading "so there is no 0/0" half of the comment). ~5m.
+
+---
+
+## 4. Gary Bernhardt Perspective
+
+### Exemplary ✅
+- `Observe::DedupPlanner` — pure greedy clustering, matcher injected, zero I/O, returns `Fold` structs in application order; the decision is fully separated from the store writes the Reflector applies. The clean realization of the prior review's Q8 ask.
+- `Hook::ContextPresenter` — genuinely pure data→string (`module_function`, no `StoreManager`/clock); `Core::Percentile`/`Jaccard` pure and DB-free; `Store::OtelWrites` isolates pure row-builders from `multi_insert`.
+
+### Low Issues
+- **`Core::TokenBudget` isn't frozen** (`core/token_budget.rb:31-33`) — the docstring calls it "a pure value object" but only `@sorted` is frozen, not the instance. Add `freeze` at the end of `initialize` to match the stated intent. ~5m.
+
+---
+
+## 5. Kent Beck Perspective
+
+### What's Held ✅
+- Every new public class is spec'd (`Core::*`, `Observe::DedupPlanner`/`ObservationStats`/`Promotion`, `Hook::ContextPresenter`, `Sweep::HistoricalCleanup`, `Distill::TruncationDetector`, `Audit::ErrorHandlingScanner`). C015 has both the flag and no-flag branches (`runner_spec.rb:115,140`); `server_tool_use` at `tool_extractor_spec.rb:34`.
+
+### Low Issues
+- **`LexicalFTS#rebuild!` rollback branch untested** (`index/lexical_fts.rb:110-125`) — the transaction wrap is correct, but the *reason* for it (a mid-rebuild failure rolls back and leaves the old `content_fts` intact) has no spec. Add one that stubs the reinsert loop to raise and asserts the pre-existing rows still match. ~30m.
+- **`Store::OtelWrites` / `Store::ObservationWrites` have no dedicated spec** — covered indirectly via `SQLiteStore` (observations/otel specs exercise every method), consistent with the module-inclusion convention. Acceptable; noted only because they're the two new files without a same-named spec.
+
+### `sleep` audit (specs)
+Down to **4** (was 7): the dashboard sleeps are gone; the remainder are the ingester 1s-mtime waits + bounded TCP-startup polls flagged as legitimate in the prior review. No new sleeps introduced.
+
+---
+
+## 6. General Ruby Idioms
+- **`Distill::TruncationDetector` prose pattern** (`distill/truncation_detector.rb:31`) — `/\boutput (?:was )?truncated\b/i` keys on free prose, so "if the output truncated, re-run without the cap" in a doc would flag its content item. Info-only, read-only (C015 severity `:info`); the other patterns require a bracketed host marker. No change needed — noted as the one prose-keyed pattern. 
+- Scanner NIT carried from PR #8: `ErrorHandlingScanner#string_match?` can double-count an `ERROR_STRING_MATCH` (info) across nested rescues. Cosmetic.
+
+## 7. Positive Observations
+- The refactor→review→refactor loop is working: the prior review's prescriptions landed cleanly, held under continued growth, and the extraction classes they produced are genuinely pure and tested.
+- The #93 scanner is the standout new subsystem — and its own PR review caught a real defect (override-span leak) before merge, exactly the silent-swallow class the tool exists to prevent.
+- Both this review's higher-value findings (D2 moments N+1, D1 token-formula drift) are *incomplete-refactor residue*, not new debt — the batching and the shared-primitive extraction each stopped one call site short. Cheap to finish.
+
+## 8. Priority Refactoring Recommendations
+
+> **Progress — `/quality-update` 2026-07-14:** All five High/Medium items (D1–D5)
+> and every quick win except one landed as atomic `[Quality]`/`[Test]` commits
+> (full suite green). Commits: D1+value-object nits `328b49a`; D2 `23296cc`
+> (new `ScopedFactResolver.build_fact_index`/`resolve_from_index`); D3 `a669ab5`;
+> D4+D5 `a46e24d`; `rebuild!` rollback spec `7b2645f`.
+> **Remaining:** `HistoricalCleanup#decide_restore` extraction (Low, deferred —
+> readability polish on one-shot historical code, lowest value/risk).
+
+### High Priority (This Week)
+1. ~~**D2 — Batch the recall/context top-fact resolution in `Dashboard::Moments`** (~400 queries/page → ~3)~~ ✅ `23296cc`.
+
+### Medium Priority (Next Sprint)
+2. ~~**D1 — `ObservationStats#source_tokens_for` → `Core::TokenEstimator.from_chars`** (kills the rounding drift)~~ ✅ `328b49a`.
+3. ~~**D3 — Stream C015 with `paged_each`** instead of materializing every `raw_text`~~ ✅ `a669ab5`.
+4. ~~**D4 — Wrap `VectorIndex#backfill_batch!` in a transaction** (atomic vec0 row + flag)~~ ✅ `a46e24d`.
+5. ~~**D5 — `Reflector#reflect!` → `transaction_with_retry`** (retryable reflection under WAL contention)~~ ✅ `a46e24d`.
+
+### Low Priority / Quick Wins
+- ~~`TokenBudget#min/max` empty-guard~~ ✅ · ~~`TokenBudget` `freeze`~~ ✅ · ~~`Jaccard` dead-branch removal~~ ✅ · ~~`TokenEstimator#estimate` → `from_chars` reuse + `class`→`module`~~ ✅ (all `328b49a`) · ~~`LexicalFTS#rebuild!` rollback spec~~ ✅ `7b2645f`.
+- **Deferred:** `HistoricalCleanup#decide_restore` extraction (~45m) — the ~56-line `restore_multi_value_supersessions` is one-shot historical-cleanup code; the readability gain doesn't justify the refactor risk right now.
+
+## 9. Conclusion
+
+**Risk assessment: low.** The codebase grew 2% and the prior review's structural wins all held — no god-object regression, confident-code metrics steady-or-better, and the new detector/scanner subsystems are clean and tested. The work here is finishing two refactors that stopped one call site short (D2's second N+1, D1's token-formula drift) plus contract-polish on the fresh value objects — the whole list is ~4h, none of it blocking. **Next step:** land D2 (the one real performance issue) and the five quick wins before adding new surface.
+
+## Appendix A: Metrics Comparison
+
+| Metric | 2026-04-28 | 2026-07-01 | 2026-07-14 | Δ (last) |
+|--------|-----------:|-----------:|-----------:|---|
+| Total lib LOC | 19,025 | 24,650 | 25,180 | +530 (+2%) |
+| lib files | ~170 | 192 | 204 | +12 |
+| Spec files | ~200 | 219 | 230 | +11 |
+| `SQLiteStore` LOC | 584 | 600 (post-fix) | **600** | held ✅ |
+| `dashboard/api.rb` LOC | 807 peak | 622 | **622** | held ✅ |
+| `sweep/maintenance.rb` LOC | — | 296 (post-fix) | **296** | held ✅ |
+| Bare rescues (whole lib) | 19 | 6 | **6** | held (3 now annotated) ✅ |
+| `rescue Exception` | — | 0 | **0** | ✅ |
+| `.send(:private)` in lib | present | 0 | **0** | ✅ |
+| `sleep` in specs | dashboard-heavy | 7 | **4** | −3 ✅ |
+| Commits since prior review | — | 142 | 32 | — |
+
+## Appendix B: File Size Report (largest lib files, 2026-07-14)
+
+| LOC | File | Note |
+|----:|------|------|
+| 622 | `dashboard/api.rb` | ✅ held |
+| 600 | `store/sqlite_store.rb` | ✅ held (OtelWrites/ObservationWrites extracted) |
+| 517 | `mcp/tool_definitions.rb` | data table, acceptable |
+| 507 | `commands/stats_command.rb` | down from 534 |
+| 446 | `dashboard/trust.rb` | rescues scoped ✅ |
+| 416 | `audit/checks.rb` | C015 added; D3 (paged_each) |
+| 397 | `mcp/response_formatter.rb` | — |
+| 371 | `recall/query_core.rb` | clean (batch queries) |
+| 332 | `resolve/resolver.rb` | — |
+| 296 | `sweep/maintenance.rb` | ✅ held |
+| 276 | `dashboard/moments.rb` | D2 — batch recall/context top-facts |
+| 193 | `audit/error_handling_scanner.rb` | ✅ new #93, PR-#8 reviewed |
+
+## Appendix C: Quick Wins
+`TokenBudget#min/max` empty-guard · `TokenBudget#freeze` · remove `Jaccard` dead branch · `TokenEstimator#estimate`→`from_chars` · `ObservationStats`→`from_chars` (D1) · these five are ~40m total and remove all the value-object contract/drift nits in one sweep.
+
+---
+
 ## Full-Codebase Review (2026-07-01)
 
 **Review Date:** 2026-07-01
