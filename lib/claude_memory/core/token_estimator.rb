@@ -2,7 +2,7 @@
 
 module ClaudeMemory
   module Core
-    class TokenEstimator
+    module TokenEstimator
       # Approximation: ~4 characters per token for English text
       # More accurate for Claude's tokenizer than simple word count
       CHARS_PER_TOKEN = 4.0
@@ -18,12 +18,9 @@ module ClaudeMemory
       def self.estimate(text)
         return 0 if text.nil? || text.empty?
 
-        # Remove extra whitespace and count characters
-        normalized = text.strip.gsub(/\s+/, " ")
-        chars = normalized.length
-
-        # Return ceiling to avoid underestimation
-        (chars / CHARS_PER_TOKEN).ceil
+        # Normalize whitespace before counting, then defer to from_chars so the
+        # 4-chars/token arithmetic lives in exactly one place.
+        from_chars(text.strip.gsub(/\s+/, " ").length)
       end
 
       def self.estimate_fact(fact)

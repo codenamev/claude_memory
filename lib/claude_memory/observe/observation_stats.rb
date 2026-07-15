@@ -75,7 +75,10 @@ module ClaudeMemory
         return 0 if ids.empty?
 
         bytes = store.content_items.where(id: ids).sum(:byte_len) || 0
-        (bytes / Core::TokenEstimator::CHARS_PER_TOKEN).round
+        # Same estimator (and rounding) the observation token_count denominator
+        # uses (observation_writes.rb), so the compression ratio compares like
+        # with like instead of ceil-vs-round.
+        Core::TokenEstimator.from_chars(bytes)
       end
     end
   end
