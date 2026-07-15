@@ -109,21 +109,28 @@ module ClaudeMemory
         now = Time.now.utc.iso8601
         indexed_ids = []
 
-        rows.each do |row|
-          vector = JSON.parse(row[:embedding_json])
-          blob = vector.pack("f*")
-          # No DELETE needed: vec_indexed_at is nil so these rows can't be in vec0
-          execute_with_params(
-            "INSERT INTO facts_vec(fact_id, embedding) VALUES (?, ?)",
-            row[:id], blob
-          )
-          indexed_ids << row[:id]
-        rescue JSON::ParserError
-          next
-        end
+        # Atomic: the vec0 rows and their vec_indexed_at flags must land
+        # together. Without the transaction each INSERT self-commits, so a crash
+        # before the batch flag-update leaves vec0 rows with vec_indexed_at nil —
+        # the next backfill re-INSERTs them (the "no DELETE needed" invariant
+        # below only holds inside a transaction), duplicating embeddings that
+        # never self-heal.
+        @db.transaction do
+          rows.each do |row|
+            vector = JSON.parse(row[:embedding_json])
+            blob = vector.pack("f*")
+            # No DELETE needed: vec_indexed_at is nil so these rows can't be in vec0
+            execute_with_params(
+              "INSERT INTO facts_vec(fact_id, embedding) VALUES (?, ?)",
+              row[:id], blob
+            )
+            indexed_ids << row[:id]
+          rescue JSON::ParserError
+            next
+          end
 
-        # Batch-update timestamps
-        @store.facts.where(id: indexed_ids).update(vec_indexed_at: now) if indexed_ids.any?
+          @store.facts.where(id: indexed_ids).update(vec_indexed_at: now) if indexed_ids.any?
+        end
 
         indexed_ids.size
       end
