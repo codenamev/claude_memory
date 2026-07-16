@@ -106,7 +106,9 @@ module ClaudeMemory
         return [] if scoped.empty?
         scoped.flat_map do |scope, ids|
           per_scope = index[scope.to_s] || {}
-          ids.filter_map { |id| per_scope[id.to_i] }
+          # uniq so a repeated id in one event's list emits its fact once,
+          # matching the row-set dedup the query-based resolve gets for free.
+          ids.uniq.filter_map { |id| per_scope[id.to_i] }
         end
       end
 

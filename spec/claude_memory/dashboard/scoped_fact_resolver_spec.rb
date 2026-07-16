@@ -141,5 +141,12 @@ RSpec.describe ClaudeMemory::Dashboard::ScopedFactResolver do
     it "returns [] from resolve_from_index for events with no scoped facts" do
       expect(described_class.resolve_from_index({}, {})).to eq([])
     end
+
+    it "emits a repeated id once (matching the query-based resolve's row-set dedup)" do
+      p = insert(manager.project_store, object: "P", scope: "project")
+      details = {"top_facts_by_scope" => {"project" => [p, p]}}
+      index = described_class.build_fact_index(manager, described_class.merge_scoped_ids([details]))
+      expect(described_class.resolve_from_index(details, index).map { |f| f[:object] }).to eq(%w[P])
+    end
   end
 end
