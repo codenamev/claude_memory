@@ -23,22 +23,25 @@
 require_relative "../benchmark_helper"
 
 RSpec.describe "memory database signal health", :benchmark do
-  # Skip the entire suite when the committed `.claude/memory.sqlite3` is an
-  # unresolved git-lfs pointer (CI checkout without LFS, an LFS bandwidth
-  # cap, or a fresh clone before `git lfs pull`). Reading the pointer text
-  # as a SQLite file raises `Extralite::Error: file is not a database`,
-  # which would fail benchmarks on unrelated changes — and the project's
-  # LFS blobs aren't reliably present on the GitHub LFS server, so CI runs
-  # always see the pointer. The signal-health contracts only mean something
-  # against the real committed DB; run locally after `git lfs pull` to
-  # validate them before tagging a release (see docs/api_stability.md §7).
+  # Skip the entire suite unless the real committed `.claude/memory.sqlite3`
+  # is present as an actual SQLite file. Two cases make it unavailable:
+  #   1. Absent — the dogfood DB is gitignored/untracked as of the
+  #      2026-06-27 "untrack machine-local state" change (ae077b7), so CI
+  #      and fresh clones simply don't have the file.
+  #   2. An unresolved git-lfs pointer — older checkouts LFS-tracked the DB,
+  #      and the project's LFS blobs aren't reliably on the GitHub LFS
+  #      server, so LFS-less CI checkouts see the pointer text instead.
+  # In both cases the signal-health contracts have nothing real to assert
+  # against; running them would fail on unrelated changes (an empty DB trips
+  # the "≥ 5 active facts" sanity floor; a pointer raises "file is not a
+  # database"). These contracts only mean something against the live DB —
+  # run locally to validate them before tagging a release (docs/api_stability.md §7).
   before(:all) do
     project_db = ClaudeMemory::Configuration.new.project_db_path
-    if File.exist?(project_db)
-      header = File.binread(project_db, 16).to_s
-      unless header.start_with?("SQLite format 3")
-        skip "skipping: #{project_db} is not a SQLite file (likely an unresolved git-lfs pointer). Run `git lfs pull` locally to validate signal contracts."
-      end
+    live_db = File.exist?(project_db) &&
+      File.binread(project_db, 16).to_s.start_with?("SQLite format 3")
+    unless live_db
+      skip "skipping: #{project_db} is absent or not a SQLite file (dogfood DB is untracked/gitignored, or an unresolved git-lfs pointer). Run locally against the live DB to validate signal contracts."
     end
   end
 
