@@ -30,6 +30,7 @@ module ClaudeMemory
 
       def initialize(tokens)
         @sorted = tokens.sort.freeze
+        freeze
       end
 
       def empty?
@@ -54,10 +55,12 @@ module ClaudeMemory
       end
 
       def min
+        return 0 if empty?
         @sorted.first
       end
 
       def max
+        return 0 if empty?
         @sorted.last
       end
     end

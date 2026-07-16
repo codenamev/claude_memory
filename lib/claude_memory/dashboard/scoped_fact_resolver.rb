@@ -63,6 +63,55 @@ module ClaudeMemory
         []
       end
 
+      # Merge the scoped-id hashes of many events into one {scope => [ids]}
+      # (deduped), so a whole page of recall/context events can be resolved
+      # with one query per scope instead of one per event.
+      def merge_scoped_ids(details_list)
+        merged = Hash.new { |h, k| h[k] = [] }
+        details_list.each do |details|
+          scoped_ids_from_details(details).each { |scope, ids| merged[scope.to_s].concat(ids) }
+        end
+        merged.transform_values(&:uniq)
+      end
+
+      # Batch-load presented facts for a merged {scope => [ids]} hash into a
+      # {scope => {fact_id => presented_fact}} index — one facts query and one
+      # FactPresenter entity load per scope for the entire page. Feed the
+      # result to resolve_from_index for each event. Replaces the per-event
+      # resolve (facts + entities query per row) with a per-scope batch.
+      def build_fact_index(manager, merged_scoped_ids)
+        return {} if merged_scoped_ids.nil? || merged_scoped_ids.empty?
+        index = {}
+        merged_scoped_ids.each do |scope, ids|
+          next if ids.nil? || ids.empty?
+          store = manager.store_if_exists(scope.to_s)
+          next unless store
+          rows = store.facts.where(id: ids.map(&:to_i)).all
+          next if rows.empty?
+          presented = FactPresenter.new(store).list_summary(rows)
+          index[scope.to_s] = presented.each_with_object({}) do |fact, acc|
+            acc[fact[:id]] = fact.merge(source: scope.to_s)
+          end
+        end
+        index
+      rescue Sequel::DatabaseError => e
+        ClaudeMemory.logger.debug("ScopedFactResolver#build_fact_index failed: #{e.message}")
+        {}
+      end
+
+      # Resolve one event's details against a prebuilt index (see
+      # build_fact_index), preserving per-scope input order. Pure — no I/O.
+      def resolve_from_index(details, index)
+        scoped = scoped_ids_from_details(details)
+        return [] if scoped.empty?
+        scoped.flat_map do |scope, ids|
+          per_scope = index[scope.to_s] || {}
+          # uniq so a repeated id in one event's list emits its fact once,
+          # matching the row-set dedup the query-based resolve gets for free.
+          ids.uniq.filter_map { |id| per_scope[id.to_i] }
+        end
+      end
+
       # Flat list of unique scoped pairs — handy for counting unique facts
       # referenced across a set of events.
       #

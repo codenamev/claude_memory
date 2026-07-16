@@ -47,5 +47,14 @@ RSpec.describe ClaudeMemory::Core::TokenBudget do
       expect(budget.avg).to eq(0)
       expect(budget.p50).to eq(0)
     end
+
+    it "returns 0 (not nil) for min and max, matching the other aggregates" do
+      expect(budget.min).to eq(0)
+      expect(budget.max).to eq(0)
+    end
+
+    it "is frozen" do
+      expect(budget).to be_frozen
+    end
   end
 end

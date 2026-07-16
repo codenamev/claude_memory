@@ -100,4 +100,53 @@ RSpec.describe ClaudeMemory::Dashboard::ScopedFactResolver do
       expect(pairs).to contain_exactly(["project", 1], ["project", 2], ["global", 1], ["global", 3])
     end
   end
+
+  describe "batch resolution (build_fact_index + resolve_from_index)" do
+    it "merges many events' scoped ids into one deduped {scope => ids}" do
+      d1 = {"top_facts_by_scope" => {"project" => [1, 2]}}
+      d2 = {"top_facts_by_scope" => {"project" => [2, 3], "global" => [1]}}
+      merged = described_class.merge_scoped_ids([d1, d2])
+      expect(merged["project"]).to eq([1, 2, 3])
+      expect(merged["global"]).to eq([1])
+    end
+
+    it "resolves each event from a shared index with one query per scope, not per event" do
+      p = insert(manager.project_store, object: "P", scope: "project")
+      g = insert(manager.global_store, object: "G", scope: "global")
+      details = [
+        {"top_facts_by_scope" => {"project" => [p]}},
+        {"top_facts_by_scope" => {"global" => [g]}},
+        {"top_facts_by_scope" => {"project" => [p], "global" => [g]}}
+      ]
+      index = described_class.build_fact_index(manager, described_class.merge_scoped_ids(details))
+
+      # Two scopes touched ⇒ index has exactly the two scope buckets.
+      expect(index.keys).to contain_exactly("project", "global")
+      # build_fact_index does not re-query per event; resolve_from_index is pure.
+      expect(manager.project_store).not_to receive(:facts)
+      expect(described_class.resolve_from_index(details[0], index).map { |f| f[:object] }).to eq(%w[P])
+      expect(described_class.resolve_from_index(details[1], index).map { |f| f[:source] }).to eq(%w[global])
+      expect(described_class.resolve_from_index(details[2], index).map { |f| f[:object] }).to eq(%w[P G])
+    end
+
+    it "preserves per-scope input order when resolving from the index" do
+      a = insert(manager.project_store, object: "A", scope: "project")
+      b = insert(manager.project_store, object: "B", scope: "project")
+      c = insert(manager.project_store, object: "C", scope: "project")
+      details = {"top_facts_by_scope" => {"project" => [c, a, b]}}
+      index = described_class.build_fact_index(manager, described_class.merge_scoped_ids([details]))
+      expect(described_class.resolve_from_index(details, index).map { |f| f[:object] }).to eq(%w[C A B])
+    end
+
+    it "returns [] from resolve_from_index for events with no scoped facts" do
+      expect(described_class.resolve_from_index({}, {})).to eq([])
+    end
+
+    it "emits a repeated id once (matching the query-based resolve's row-set dedup)" do
+      p = insert(manager.project_store, object: "P", scope: "project")
+      details = {"top_facts_by_scope" => {"project" => [p, p]}}
+      index = described_class.build_fact_index(manager, described_class.merge_scoped_ids([details]))
+      expect(described_class.resolve_from_index(details, index).map { |f| f[:object] }).to eq(%w[P])
+    end
+  end
 end

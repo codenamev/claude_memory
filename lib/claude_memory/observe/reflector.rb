@@ -46,7 +46,12 @@ module ClaudeMemory
       def reflect!
         deduped = 0
         expired = 0
-        @store.db.transaction do
+        # Retryable transaction: reflection runs in the sweep hook, which races
+        # the ingest hook for the WAL writer (the documented contention gotcha).
+        # transaction_with_retry retries the whole transaction on SQLITE_BUSY —
+        # the individual mutators must NOT be wrapped, since retrying a single
+        # statement inside an open transaction can't clear the busy lock.
+        @store.transaction_with_retry do
           deduped = dedupe
           expired = expire_stale_info
         end

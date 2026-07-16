@@ -10,11 +10,11 @@ module ClaudeMemory
     # both-empty, so there is no 0/0).
     module Jaccard
       def self.score(a, b)
+        # The empty guard also covers both-empty, so the union below is always
+        # ≥ 1 and there is no 0/0 to defend against.
         return 0.0 if a.empty? || b.empty?
 
-        union = (a | b).size
-        return 0.0 if union.zero?
-        (a & b).size.to_f / union
+        (a & b).size.to_f / (a | b).size
       end
     end
   end

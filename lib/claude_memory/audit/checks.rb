@@ -382,14 +382,16 @@ module ClaudeMemory
       def truncated_source_content(manager)
         detector = Distill::TruncationDetector.new
         flagged = []
-        total = 0
 
         %w[project global].each do |scope|
           store = manager.store_if_exists(scope)
           next unless store
-          rows = store.content_items.select(:id, :raw_text).all
-          total += rows.size
-          flagged.concat(rows.select { |r| detector.truncated?(r[:raw_text]) }.map { |r| r[:id] })
+          # Stream raw_text a page at a time — it is the largest column in the
+          # table (up to the ingest cap per row) and a mature DB holds thousands
+          # of rows, so materializing all of it at once is an unbounded load.
+          store.content_items.select(:id, :raw_text).order(:id).paged_each(rows_per_fetch: 500) do |row|
+            flagged << row[:id] if detector.truncated?(row[:raw_text])
+          end
         end
         return [] if flagged.empty?
 
