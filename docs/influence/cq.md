@@ -4,6 +4,10 @@
 *Repository: https://github.com/technicalpickles/cq*
 *Focus: Tool usefulness (not internals)*
 
+> **Re-studied: 2026-07-09 — v0.2.1 (commit 650ca67) — CHANGED (one real net-new item).** Motion since v0.2.0 is small (5 substantive commits): a `run-cq` build/smoke skill, CI toolchain pinning + cache-artifact gitignore, CLAUDE.md/CONTEXT.md doc sync, and one fix that matters to us — **cq's SQL views now recognize `advisor()` calls (commit 81cee42).** advisor uses `server_tool_use` (call) + `advisor_tool_result` (result) content blocks instead of the standard `tool_use`/`tool_result` pair, and the result block lives in an *assistant*-type record with `content` nested as `{type, text}`, not the following user record. cq extended its type filter from `= 'tool_use'` to `IN ('tool_use', 'server_tool_use')`. **ClaudeMemory's `Ingest::ToolExtractor` (lib/claude_memory/ingest/tool_extractor.rb:51) has the *exact* pre-fix shape** — it filters `block["type"] == "tool_use"` in assistant messages only, so `server_tool_use`/advisor calls are silently absent from our `tool_calls` table (and thus `memory.facts_by_tool` attribution). That is the single net-new adoptable finding; see the dated section at the very bottom. Rejections: the run-cq smoke skill and all CI/toolchain/gitignore mechanics are Rust/DuckDB-specific and not adoptable. Prior v0.2.0 re-study preserved below.
+>
+> **Re-studied: 2026-06-30 — cq v0.2.0 (commit 343c092, released 2026-06-30).** The 2026-04-28 baseline below predates a versioned release (cq's first tagged release is v0.2.0). Since then cq added: subagent transcript indexing (`is_sidechain`/`agent_id`/`agent_type`/`workflow_id`, recurses into `<uuid>/subagents/*.jsonl`), a Claude Code plugin (`claude-plugin/` + marketplace) that teaches Claude to write `cq sql` audit queries, `--count-by` aggregation, `--fields` JSON-column extraction, `--offset` pagination, a `projects` subcommand, multi-source discovery (`--source`/cenv), and a batch of CLI-UX hardening (parameterized SQL, stdout/stderr split, empty-result suggestions, truncation hints). **The single highest-value finding for ClaudeMemory is the subagent-transcript gap — see the dated section at the bottom.** Original analysis preserved unchanged below.
+
 ---
 
 ## Executive Summary
@@ -185,3 +189,86 @@ ClaudeMemory already captures some of this in its own SQLite databases:
 - [ ] Install cq locally
 - [ ] Run `cq sql` audit on `mcp__memory__*` activation rate over the last 30d
 - [ ] If the audit surfaces a real gap, file it and decide whether the fix lives in skill descriptions, MCP server instructions, or elsewhere
+
+---
+
+## Re-study: 2026-06-30 — cq v0.2.0 (commit 343c092)
+
+**Baseline:** 2026-04-28 (pre-release working tree). **Current:** v0.2.0, released 2026-06-30. **Changed:** yes — substantial. The architecture verdict from April still holds (observability vs curation; complementary, not competing; don't adopt DuckDB/cross-project-default/raw-SQL-as-curation). What follows is only what is *new* and adoptable.
+
+### High Priority ⭐
+
+#### R1. Verify ClaudeMemory ingests subagent transcripts — likely a real coverage gap
+
+This is the headline finding. cq now recurses into `<project>/<session-uuid>/subagents/*.jsonl` and tags every row with `is_sidechain`, `agent_id`, `agent_type`, `workflow_id` (claude_provider.rs:245, README "Views" section). Their skill-activation use case explicitly attributes many misses to subagents: *"subagents (which may not have the skill list in their context) accounted for many of the misses."*
+
+- **Why it matters for us:** `Ingest::Ingester#ingest` (lib/claude_memory/ingest/ingester.rb:35) consumes exactly one `transcript_path` handed in by the hook payload. It never enumerates a `subagents/` directory. So any knowledge produced *inside* a subagent run only reaches memory if Claude Code fires a Stop/SessionEnd/TaskCompleted hook carrying that subagent's transcript path. If it doesn't (cq's evidence suggests subagent activity is a non-trivial slice), **ClaudeMemory is blind to a whole class of sessions** — which is the same "is the plugin firing when it should?" question the lead is chasing, one layer down.
+- **Evidence:** cq commits `capture subagent agentType from meta.json` (d865669), `recurse into subagents/ when scanning, exclude journal.jsonl` (4407e66), `recursive max_dir_mtime so Auto-sync detects deep subagent files` (9bd2f94); cq's own use-cases.md attribution.
+- **Action (not a code change yet — a measurement):** run `cq sql` to count how many of *our own* `claude_memory` project sessions had subagent activity, and cross-check against which transcript paths the `content_items` table actually ingested. If there's a delta, decide whether the ingest hook payload already carries subagent paths or whether we need a `subagents/`-aware glob in the ingest path.
+- **Effort:** measurement ~1h; fix (if needed) ~half-day (subagent-aware discovery + a `is_sidechain`/`agent_type` column on `content_items` for provenance).
+- **Recommendation:** **INVESTIGATE FIRST.** Don't build blind — this is exactly the "survey real multi-project data before a schema change" discipline this project follows.
+
+#### R2. `--count-by` + `--fields`: the audit ergonomics our `docs/audit-queries.md` plan wanted
+
+cq added `--count-by <field>` (group-and-count over any column, incl. JSON input fields) and `--fields a,b` (project JSON input keys into columns) across tools/messages/sessions (commits 2e62b06, 2aa4f3f). This is the cheap version of the skill-activation audit — `cq tools Skill --count-by skill` reproduces "The Audit" use case without writing SQL.
+
+- **Why it matters:** our April doc floated a speculative `claude-memory sql` subcommand (deferred). cq shows the lighter-weight win is *aggregation flags on existing list commands*, not a raw-SQL passthrough. If we ever surface tool/recall telemetry on the CLI, copy `--count-by` (group `mcp_tool_calls` by `tool_name`) rather than exposing SQL.
+- **Effort:** low if/when we add it; for now it's a design note.
+- **Recommendation:** **CONSIDER** — fold into any future `claude-memory stats --tools` enhancement; reject the raw-`sql` subcommand idea in favor of this.
+
+### Medium Priority
+
+#### R3. cq now ships a Claude Code plugin whose skill *teaches Claude to write the audit queries*
+
+`claude-plugin/skills/cq/SKILL.md` + marketplace packaging (commit 3893ff8). The skill hands Claude the full schema + query cookbook so Claude reaches for cq automatically on "is my git-commit skill firing?"-shaped questions. Their README has a candid "When it doesn't fire" section (competing skills, description tuning) — the same triggering problem ClaudeMemory's `memory_guide` prompt and skill descriptions face.
+
+- **Relevance:** we already have the analog (`memory_guide` MCP prompt, the memory-first-workflow skill). The adoptable nuance is cq's *honesty about non-activation* baked into the plugin README, and their `--examples` schema dump "designed to be consumed by AI agents building their own queries." Our `docs/audit-queries.md` (if/when written) should be phrased as agent-consumable query templates, not just human docs.
+- **Recommendation:** **CONSIDER** — low effort, aligns with our `feedback_honest_evidence_public_materials` norm.
+
+#### R4. CLI-UX hardening worth mirroring
+
+Two concrete, low-cost patterns: (a) **parameterized queries** replacing string interpolation (commit 0e3eebe) — a security fix that retroactively validates our April "read-only enforcement / footgun" worry about any SQL surface; (b) **stdout/stderr separation** (progress/errors to stderr, data to stdout — commit 500d755) so output is pipeable. ClaudeMemory's CLI commands should keep telemetry/progress noise off stdout for the same reason. Also: empty-result contextual suggestions and `--limit` truncation hints (d46ebf6, bcc1303) — small UX wins if we touch the recall/stats commands.
+
+- **Recommendation:** **DEFER** — pick up opportunistically; the stdout/stderr discipline is the one worth auditing now since hooks parse our stdout as JSON.
+
+### Features to avoid (unchanged + new)
+
+- All April "avoid" items still stand (DuckDB primary store, cross-project default, re-index-on-every-command).
+- **New:** cq's multi-source/cenv discovery (`--source`, `$CENV_BASE`) solves cq's "query across remote container envs" problem. ClaudeMemory's `CLAUDE_CONFIG_DIR` override already covers our isolation need; don't generalize it into a multi-source union — our project/global scope split is the deliberate boundary.
+
+### Bottom line
+
+cq matured from a pre-release tool into a v0.2.0 plugin-shipping product; the one thing that should change *our* roadmap is the subagent-transcript coverage question (R1) — measure whether ClaudeMemory's hook-driven ingest is silently skipping subagent sessions before doing anything else.
+
+---
+
+## Re-study: 2026-07-09 — cq v0.2.1 (commit 650ca67)
+
+**Baseline:** v0.2.0 (2026-06-30). **Current:** v0.2.1 (2026-07-07). **Changed:** yes, but narrowly — 5 substantive commits, one of which is directly adoptable. All v0.2.0 architecture verdicts stand unchanged (complementary/observability-vs-curation; reject DuckDB, cross-project default, raw-SQL-as-curation).
+
+### High Priority ⭐
+
+#### R5. Recognize `server_tool_use` (advisor) blocks in `ToolExtractor` — a real, currently-silent coverage gap
+
+cq's fix `recognize advisor() calls in tool_calls/tool_results views` (commit 81cee42) documents a Claude Code transcript tool-call shape our ingest is blind to:
+
+- **The shape:** `advisor()` invocations are emitted as a `server_tool_use` content block (the call — same `id`/`name`/`input` shape as `tool_use`) and an `advisor_tool_result` block (the result). Unlike normal tools, **both blocks live in `assistant`-type records** — the result is *not* in the following `user` record — and the result's `content` is a nested object `{type, text}`, not a plain string. Fixture: `tests/fixtures/advisor_session.jsonl` in their repo; view logic: `src/views.rs:143-210`.
+- **Our gap:** `Ingest::ToolExtractor#extract_tools_from_message` (lib/claude_memory/ingest/tool_extractor.rb:43,51) returns early unless `message["type"] == "assistant"` (OK — advisor calls *are* in assistant records) and then only keeps blocks where `block["type"] == "tool_use"`. `server_tool_use` blocks fall through, so **every advisor call is absent from the `tool_calls` table**, and therefore from `memory.facts_by_tool` context attribution. `ToolFilter` would happily capture an `advisor` tool (not in `DEFAULT_SKIP_TOOLS`), so the only thing blocking it is the extractor's type check.
+- **The fix (mirror cq exactly):** change the guard at tool_extractor.rb:51 from `next unless block["type"] == "tool_use"` to accept both, e.g. `next unless %w[tool_use server_tool_use].include?(block["type"])`. Optionally normalize the recorded `tool_name` to `"advisor"` for the server-tool case. This is the Ruby analog of cq's `IN ('tool_use', 'server_tool_use')`.
+- **Result side:** we *don't* pair tool_results in the extractor at all today (`is_error: false` is hardcoded at tool_extractor.rb:57; the store's `insert_tool_calls` accepts a `tool_result`/`is_error` field that ingest never populates). So the `advisor_tool_result` nested-`{type,text}` unwrap cq had to do is **not** currently our problem — only the call-side block matters until/unless we start ingesting tool results.
+- **Effort:** S (one-line guard change + a fixture-backed spec asserting an advisor `server_tool_use` block lands in `tool_calls`). Verify per the project's installed-gem discipline: `rake install`, fire a real hook, confirm the row exists — specs assert against the working tree, hooks run the installed gem.
+- **Trade-off:** advisor() is a niche server-side tool, so absolute volume is low; the win is correctness/consistency of the `tool_calls` telemetry, not a large data recovery. Low risk — additive, no schema change.
+- **Recommendation:** **ADOPT.** Cheap, correct, and it closes the same "is the telemetry seeing everything it should?" gap cq just closed. File as an improvement.
+
+### Rejections (Rust/DuckDB/CI-specific, not adoptable)
+
+- **`run-cq` build/smoke skill** (commit 89f5491, `.claude/skills/run-cq/SKILL.md` + `smoke.sh`). A self-contained skill that builds the release binary if missing and drives every subcommand against an isolated `CQ_CACHE_DIR`, asserting exit codes incl. one deliberate error path. The *pattern* (hermetic smoke driver that shells the real binary and checks exit codes) is sound, but ClaudeMemory already covers this ground with rspec, evals, the `debug-memory`/`setup-memory` skills, and the documented "fire a real hook, check `activity_events`" smoke test. Not net-new for us. Note only: if we ever want a one-shot end-to-end CLI smoke skill, cq's frontmatter-lists-the-verbs + isolated-cache + assert-the-error-path structure is a decent template.
+- **CI toolchain pinning** (Rust 1.96.0), **gitignore of `index.duckdb`/`index.lock`** stray cache artifacts, **release-please automation** — all DuckDB/Rust/GitHub-Actions mechanics with no Ruby/SQLite analog worth importing.
+
+### Audit-query surface
+
+No new use-cases or audit queries beyond one advisor lookup added to their plugin SKILL.md (`SELECT ... FROM tool_calls WHERE name = 'advisor'`). Nothing to add to our `docs/audit-queries.md` beyond noting that once R5 lands, an advisor-activation audit becomes possible against our own `tool_calls` table.
+
+### Bottom line
+
+One adoptable item this cycle: teach `ToolExtractor` to recognize `server_tool_use`/advisor blocks (R5), the direct Ruby mirror of cq's 81cee42. Everything else is Rust/DuckDB/CI plumbing. The subagent-coverage investigation (R1, still open from v0.2.0) remains the larger outstanding question.

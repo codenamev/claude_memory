@@ -62,7 +62,15 @@ module ClaudeMemory
           r
         }
 
-        moments = events.map { |e| build_moment(store, e) }
+        # Preload content previews + extracted facts for every extraction/ingest
+        # event in one query each, so build_moment doesn't fire a per-row
+        # content_items lookup + facts⋈provenance join (was ~2 queries × up to
+        # 2×limit rows).
+        content_ids = content_item_ids_for(events)
+        content_by_id = batch_content(store, content_ids)
+        facts_by_content = batch_extracted_facts(store, content_ids)
+
+        moments = events.map { |e| build_moment(store, e, content_by_id, facts_by_content) }
         moments = moments.select { |m| kinds.include?(m[:kind]) } unless kinds.empty?
         has_more = moments.size > limit
         moments = moments.first(limit)
@@ -122,7 +130,7 @@ module ClaudeMemory
         end
       end
 
-      def build_moment(store, event)
+      def build_moment(store, event, content_by_id, facts_by_content)
         details = event[:details] || {}
         kind = kind_for(event)
         base = {
@@ -137,10 +145,10 @@ module ClaudeMemory
           details: details
         }
 
-        enrich(base, kind, store, details)
+        enrich(base, kind, details, content_by_id, facts_by_content)
       end
 
-      def enrich(moment, kind, store, details)
+      def enrich(moment, kind, details, content_by_id, facts_by_content)
         case kind
         when "context_injection"
           moment.merge(
@@ -161,18 +169,20 @@ module ClaudeMemory
             results_by_scope: details[:results_by_scope]
           )
         when "extraction"
+          cid = (details[:content_item_id] || details[:content_id])&.to_i
           moment.merge(
             tool: details[:tool],
             facts_created: details[:facts_created] || 0,
             entities_created: details[:entities_created] || 0,
-            content_item: resolve_content(store, details[:content_item_id] || details[:content_id]),
-            extracted_facts: extracted_facts(store, details[:content_item_id] || details[:content_id])
+            content_item: content_by_id[cid],
+            extracted_facts: facts_by_content[cid] || []
           )
         when "ingest"
+          cid = details[:content_id]&.to_i
           moment.merge(
             bytes_read: details[:bytes_read],
-            content_item: resolve_content(store, details[:content_id]),
-            extracted_facts: extracted_facts(store, details[:content_id])
+            content_item: content_by_id[cid],
+            extracted_facts: facts_by_content[cid] || []
           )
         when "ingest_skipped"
           moment.merge(reason: details[:reason])
@@ -191,11 +201,29 @@ module ClaudeMemory
         ScopedFactResolver.resolve(@manager, scoped)
       end
 
-      def resolve_content(store, id)
-        return nil unless id
-        row = store.content_items.where(id: id.to_i).first
-        return nil unless row
+      # Collect the distinct content_item ids referenced by extraction/ingest
+      # events, so their content + facts can be batch-loaded once per page.
+      def content_item_ids_for(events)
+        events.filter_map { |e|
+          details = e[:details] || {}
+          case kind_for(e)
+          when "extraction" then details[:content_item_id] || details[:content_id]
+          when "ingest" then details[:content_id]
+          end
+        }.map(&:to_i).uniq
+      end
 
+      # id => content preview hash, loaded in one query.
+      def batch_content(store, ids)
+        return {} if ids.empty?
+        store.content_items.where(id: ids).all.each_with_object({}) do |row, h|
+          h[row[:id]] = content_preview(row)
+        end
+      rescue Sequel::DatabaseError
+        {}
+      end
+
+      def content_preview(row)
         raw = row[:raw_text].to_s
         truncated = raw.bytesize > CONTENT_PREVIEW_BYTES
         {
@@ -207,8 +235,6 @@ module ClaudeMemory
           preview: truncated ? raw.byteslice(0, CONTENT_PREVIEW_BYTES) : raw,
           truncated: truncated
         }
-      rescue Sequel::DatabaseError
-        nil
       end
 
       def attach_feedback(store, moments)
@@ -228,16 +254,22 @@ module ClaudeMemory
         # Table missing on older DBs — skip silently.
       end
 
-      def extracted_facts(store, content_item_id)
-        return [] unless content_item_id
+      # content_item_id => [fact summaries], loaded in one join keyed by the
+      # provenance content_item_id (tagged as __cid, stripped before presenting).
+      def batch_extracted_facts(store, ids)
+        return {} if ids.empty?
         rows = store.db[:facts]
           .join(:provenance, fact_id: :id)
-          .where(Sequel[:provenance][:content_item_id] => content_item_id.to_i)
-          .select(Sequel[:facts].*)
+          .where(Sequel[:provenance][:content_item_id] => ids)
+          .select(Sequel[:facts].*, Sequel[:provenance][:content_item_id].as(:__cid))
           .all
-        FactPresenter.new(store).list_summary(rows)
+        presenter = FactPresenter.new(store)
+        rows.group_by { |r| r[:__cid] }.transform_values do |group|
+          group.each { |r| r.delete(:__cid) }
+          presenter.list_summary(group)
+        end
       rescue Sequel::DatabaseError
-        []
+        {}
       end
     end
   end

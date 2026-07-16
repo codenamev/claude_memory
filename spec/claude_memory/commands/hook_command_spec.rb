@@ -245,7 +245,7 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
         expect(details["context_length"]).to be > 0
       end
 
-      it "outputs nothing when no facts exist" do
+      it "emits a well-formed no-op hookSpecificOutput when no facts exist" do
         payload = {"hook_event_name" => "SessionStart"}
         stdin.string = JSON.generate(payload)
 
@@ -262,8 +262,13 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
 
         exit_code = command.call(["context", "--db", db_path])
 
+        # No facts -> nil context, but output must still be valid SessionStart JSON
+        # with an empty additionalContext (not an empty stream), so a strict
+        # validator accepts it.
         expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
-        expect(stdout.string.strip).to be_empty
+        output = JSON.parse(stdout.string)
+        expect(output.dig("hookSpecificOutput", "hookEventName")).to eq("SessionStart")
+        expect(output.dig("hookSpecificOutput", "additionalContext")).to eq("")
       end
     end
 
@@ -405,6 +410,10 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
 
       expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
       expect(stderr.string).to include("degraded gracefully")
+      # Even on graceful degradation, emit a well-formed no-op response.
+      output = JSON.parse(stdout.string)
+      expect(output.dig("hookSpecificOutput", "hookEventName")).to eq("SessionStart")
+      expect(output.dig("hookSpecificOutput", "additionalContext")).to eq("")
     end
 
     it "returns SUCCESS (0) for unexpected RuntimeError (graceful degradation)" do

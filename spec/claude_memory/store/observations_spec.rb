@@ -53,8 +53,8 @@ RSpec.describe ClaudeMemory::Store::SQLiteStore, "observations" do
       expect(store.recent_observations(scope: "global").map { |r| r[:body] }).to eq(["global note"])
     end
 
-    it "filters by min_priority (important-only)" do
-      rows = store.recent_observations(min_priority: ClaudeMemory::Domain::Observation::IMPORTANT)
+    it "filters by max_priority (important-only)" do
+      rows = store.recent_observations(max_priority: ClaudeMemory::Domain::Observation::IMPORTANT)
       expect(rows.map { |r| r[:body] }).to eq(["new important"])
     end
 

@@ -105,36 +105,23 @@ module ClaudeMemory
         stdout.puts "=" * 50
 
         threshold = ClaudeMemory::Domain::Observation::PROMOTION_THRESHOLD
+        stats = ClaudeMemory::Observe::ObservationStats.new(stores)
 
-        total = stores.sum { |s| s.observations.count }
-        if total.zero?
+        if stats.total_count.zero?
           stdout.puts "No observations recorded yet."
           manager.close
           return 0
         end
 
-        active = stores.sum { |s| s.observations.where(status: "active").count }
-        consolidated = stores.sum { |s| s.observations.where(status: "consolidated").count }
-        expired = stores.sum { |s| s.observations.where(status: "expired").count }
-        promoted = stores.sum { |s| s.observations.exclude(promoted_at: nil).count }
-        promotable = stores.sum do |s|
-          s.observations.where(status: "active", promoted_at: nil)
-            .where { corroboration_count >= threshold }.count
-        end
-
-        stdout.puts "Active: #{active}"
-        stdout.puts "Consolidated: #{consolidated}"
-        stdout.puts "Expired: #{expired}"
-        stdout.puts "Promoted: #{promoted}"
-        stdout.puts "Promotable (>= #{threshold} sightings): #{promotable}"
+        totals = stats.totals
+        stdout.puts "Active: #{totals[:active]}"
+        stdout.puts "Consolidated: #{totals[:consolidated]}"
+        stdout.puts "Expired: #{totals[:expired]}"
+        stdout.puts "Promoted: #{totals[:promoted]}"
+        stdout.puts "Promotable (>= #{threshold} sightings): #{stats.corroboration[:promotable]}"
         stdout.puts
 
-        kinds = Hash.new(0)
-        stores.each do |store|
-          store.observations.where(status: "active").group_and_count(:kind).each do |row|
-            kinds[row[:kind]] += row[:count]
-          end
-        end
+        kinds = stats.by_field(:kind)
 
         stdout.puts "By kind (active):"
         if kinds.empty?
@@ -338,7 +325,7 @@ module ClaudeMemory
         stdout.puts "  Optimization available: FTS index stores duplicate text."
         stdout.puts "  Run 'claude-memory compact' to reduce size by ~40%."
       rescue
-        # Ignore errors reading FTS metadata
+        # [ANTI-PATTERN IGNORED]: FTS metadata is advisory display only; a read failure must not break stats output
       end
 
       def format_date(iso8601_string)
@@ -454,13 +441,9 @@ module ClaudeMemory
         end
         stdout.puts
 
-        tokens = dataset.select_map(:detail_json).filter_map do |json|
-          next unless json
-          value = JSON.parse(json)["context_tokens"]
-          value if value.is_a?(Integer) && value > 0
-        end
+        budget = Core::TokenBudget.from_detail_json(dataset.select_map(:detail_json))
 
-        if tokens.empty?
+        if budget.empty?
           stdout.puts "No context injections recorded in window."
           stdout.puts ""
           stdout.puts "Token telemetry is recorded automatically on SessionStart hooks."
@@ -470,16 +453,14 @@ module ClaudeMemory
           return 0
         end
 
-        sorted = tokens.sort
-        total = sorted.size
-        stdout.puts "Sessions: #{format_number(total)}"
-        stdout.puts "p50: #{format_number(percentile(sorted, 0.50))} tokens"
-        stdout.puts "p95: #{format_number(percentile(sorted, 0.95))} tokens"
-        stdout.puts "Avg: #{format_number((sorted.sum.to_f / total).round)} tokens"
-        stdout.puts "Min: #{format_number(sorted.first)} tokens"
-        stdout.puts "Max: #{format_number(sorted.last)} tokens"
+        stdout.puts "Sessions: #{format_number(budget.sample_size)}"
+        stdout.puts "p50: #{format_number(budget.p50)} tokens"
+        stdout.puts "p95: #{format_number(budget.p95)} tokens"
+        stdout.puts "Avg: #{format_number(budget.avg)} tokens"
+        stdout.puts "Min: #{format_number(budget.min)} tokens"
+        stdout.puts "Max: #{format_number(budget.max)} tokens"
         stdout.puts ""
-        print_token_distribution(sorted)
+        print_token_distribution(budget.sorted)
 
         db.disconnect
         manager.close
@@ -514,20 +495,12 @@ module ClaudeMemory
           calls = row[:count]
           durations = dataset.where(tool_name: tool).select_map(:duration_ms).sort
           avg = (durations.sum.to_f / calls).round(1)
-          p95 = percentile(durations, 0.95)
+          p95 = Core::Percentile.of(durations, 0.95)
           tool_errors = dataset.where(tool_name: tool).exclude(error_class: nil).count
           tool_err_rate = (tool_errors * 100.0 / calls).round(1)
 
           stdout.puts "  #{tool.to_s.ljust(28)} #{calls.to_s.rjust(7)}  #{avg.to_s.rjust(8)}  #{p95.to_s.rjust(8)}  #{tool_err_rate.to_s.rjust(6)}"
         end
-      end
-
-      def percentile(sorted, pct)
-        return 0 if sorted.empty?
-        idx = (sorted.size * pct).ceil - 1
-        idx = 0 if idx < 0
-        idx = sorted.size - 1 if idx >= sorted.size
-        sorted[idx]
       end
     end
   end

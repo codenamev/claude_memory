@@ -5,6 +5,54 @@
 *Version: 1.0.15 (commit 6feaa5b)*
 *Re-studied: 2026-03-30 — No changes since v1.0.15. Repo dormant. One adoptable pattern identified: CLAUDE_CONFIG_DIR env var support (`src/paths.ts:20-22`) for configurable Claude config directory. Orphaned MCP process prevention (SIGHUP handler in wrapper) not applicable — ClaudeMemory runs as single Ruby process, no wrapper/child architecture.*
 
+*Re-studied: 2026-06-30 — v1.4.2 (commit 1075769). **Active again** — 8 releases since baseline (1.1.0 → 1.4.2). Highlights below.*
+
+---
+
+## Re-study 2026-06-30 (v1.0.15 → v1.4.2)
+
+The repo went from dormant to actively maintained, shipping 8 releases between 2026-05-02 and 2026-05-21. The work clustered into four themes: an embedding-model upgrade with background migration, Codex cross-harness support, hardening of the auto-sync/summarizer pipeline against process explosion and queue poisoning, and version-drift tooling.
+
+### NEW adoptable — High priority
+
+#### A. Background, resumable embedding-model migration (v1.2.0)
+- **What**: When they upgraded the encoder from all-MiniLM-L6-v2 to bge-small-en-v1.5, existing indexes kept working against a *mixed* set of old/new embeddings while a background job re-embedded stale rows in bounded batches (default 500/sync, `EPISODIC_MEMORY_MIGRATION_BATCH`). An `EMBEDDING_VERSION` integer is stamped per row; `pickStaleBatch` selects `WHERE embedding_version < EMBEDDING_VERSION`; `recordReembedded` atomically swaps the vector + bumps the version; crash mid-batch just leaves rows tagged for the next run. Lock-protected so concurrent syncs don't double-embed.
+- **Evidence**: `src/embedding-migration.ts:19-89` (EMBEDDING_VERSION, pickStaleBatch, recordReembedded, countStale), `src/sync-cli.ts:152-172` (per-sync batch driver), CHANGELOG 1.2.0.
+- **Why it matters to us**: ClaudeMemory has pluggable embedding providers (tfidf/fastembed/api) and `Embeddings::DimensionCheck`, but DimensionCheck only *detects* a mismatch — there's no graceful, online re-embed path. Today a provider/model switch means stale or unusable vectors until a full rebuild. Their pattern (per-row `embedding_version` column + bounded re-embed batch wired into the existing Sweep/hook maintenance, no extra API cost) maps cleanly onto our PreCompact/SessionEnd sweep and our "no separate API call" convention (fastembed is local).
+- **Effort**: 2-3 days (add `embedding_version` to the vec store, a `Sweep` step that re-embeds N stale rows per run, bump-on-pipeline-change constant).
+
+#### B. Version-drift test + one-command bump script (v1.1.1)
+- **What**: `package.json` is the single source of truth; `src/version.ts` is generated from it; a `test/version-consistency.test.ts` asserts plugin.json + marketplace.json all equal it (CI fails on drift); `scripts/bump-version.sh X.Y.Z` rewrites every declared file (driven by `.version-bump.json`) and `--audit` greps the repo for stray version strings.
+- **Evidence**: `test/version-consistency.test.ts:1-40`, `scripts/bump-version.sh`, `.version-bump.json`, CHANGELOG 1.1.1.
+- **Why it matters to us**: We have this *exact* problem documented as a manual chore/gotcha — "Version must be updated in three places: version.rb, plugin.json, marketplace.json." We bump them by hand and rely on the release skill. A drift spec (assert plugin.json/marketplace.json == `ClaudeMemory::VERSION`) is a ~20-line RSpec test that turns a known footgun into a CI failure. The bump-script is optional gravy; the spec is the high-value, low-effort win.
+- **Effort**: 0.5 day for the drift spec; +0.5 day for a rake bump task.
+
+### NEW adoptable — Medium priority
+
+#### C. Single-instance file lock for hook-spawned maintenance (v1.4.2, #97)
+- **What**: Concurrent SessionStart hooks (multi-worktree) spawned competing sync workers that collided on SQLite with `SQLITE_BUSY`. Fix: a `proper-lockfile` single-instance lock with PID-liveness fallback; losers print "already running (pid X); skipping" and exit clean. Same lock is reused for the embedding migration.
+- **Evidence**: `src/file-lock.ts`, CHANGELOG 1.4.2.
+- **Why it matters to us**: We've hit hook DB-contention (memory: "looping `claude-memory reject` silently no-ops under hook contention"; we lean on WAL + busy_timeout). A lightweight machine-level lock around hook-spawned sweep/ingest would make concurrent-session behavior deterministic rather than relying purely on busy_timeout retries. Lower urgency since WAL handles most of it.
+- **Effort**: 1 day.
+
+#### D. Exact-match metadata search filters (v1.1.0, #63)
+- **What**: `--project`, `--session-id`, `--git-branch` scope filters on CLI + MCP search, bound as SQL parameters.
+- **Evidence**: CHANGELOG 1.1.0.
+- **Why it matters to us**: We scope by project/global already. A `git_branch` recall filter could be a useful cross-cut (facts learned on a feature branch). Speculative — gather usage data first per our data-driven-design convention.
+- **Effort**: 1 day.
+
+### Validations (no action, confirms our choices)
+
+- **bge-small-en-v1.5 is the right model**: They migrated *to* the exact model we already default to in fastembed, citing measured retrieval gains on 17k real exchanges — rank-1 47%→53%, top-10 68%→75% (CHANGELOG 1.2.0). Our prior influence-doc note ("ours is better") is now "they agree."
+- **High-water-mark delta ingestion**: Their indexer's `COUNT(*) > 0` skip silently dropped appended exchanges; fixed with a `MAX(line_end)` high-water mark (#84). This is exactly our cursor-per-session delta model — worth a one-time check that our ingest cursor advances on *appended* transcript tails, not just first-seen files.
+- **Cosine-vs-L2 score display bug (#55)**: `1 - distance` is wrong for L2; unit-normalized cosine is `1 - d²/2`. Ranking was unaffected (monotonic) but displayed similarity was. If/when we expose sqlite-vec L2 distances as "similarity %", verify the conversion math.
+
+### Features to AVOID (unchanged stance, reinforced)
+
+- **Claude Agent SDK summarization** (their core mechanism) — violates our no-extra-API-cost convention. v1.1.2's "recursive process explosion" (#87: SDK subprocess fires SessionStart → re-runs sync → spawns subprocess → fan-out of hundreds of detached processes, burning API quota) is a cautionary tale that *validates* our decision to never spawn Claude subprocesses for memory work. Their reentrancy-guard env var fix is N/A to us because the cascade can't exist in our architecture.
+- **Codex cross-harness support** (v1.3.0) — out of scope; we target Claude Code.
+- **Summarizer error-sentinel/queue-retry machinery** (v1.4.1/1.4.2) — only needed because they have an async LLM summarization queue; we don't.
+
 ---
 
 ## Executive Summary

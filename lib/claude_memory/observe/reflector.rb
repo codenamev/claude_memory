@@ -35,10 +35,11 @@ module ClaudeMemory
         end
       end
 
-      def initialize(store, info_ttl_days: DEFAULT_INFO_TTL_DAYS, matcher: TokenOverlapMatcher.new)
+      def initialize(store, info_ttl_days: DEFAULT_INFO_TTL_DAYS, matcher: TokenOverlapMatcher.new, clock: Time)
         @store = store
         @info_ttl_days = info_ttl_days
-        @matcher = matcher
+        @clock = clock
+        @planner = DedupPlanner.new(matcher)
       end
 
       # @return [Result] number of observations deduped and expired
@@ -54,45 +55,24 @@ module ClaudeMemory
 
       private
 
+      # Plan folds per scope with the pure DedupPlanner (no I/O), then apply
+      # them: fold the loser's sightings into the keeper before tombstoning it
+      # so corroboration survives consolidation and can cross the promotion
+      # threshold.
       def dedupe
         active = @store.observations.where(status: "active").order(:id).all
-        active.group_by { |o| o[:scope] }.sum { |_scope, rows| dedupe_scope(rows) }
-      end
+        folds = active.group_by { |o| o[:scope] }
+          .flat_map { |_scope, rows| @planner.plan(rows) }
 
-      # Greedy clustering within one scope: the newest observation in a cluster
-      # is the keeper; older near-duplicates fold into it. O(n²) matcher calls,
-      # but n is bounded (#74 cut the inflow; expire_stale_info bounds the tail).
-      def dedupe_scope(rows)
-        return 0 if rows.size < 2
-
-        ordered = rows.sort_by { |r| [r[:observed_at].to_s, r[:id]] }.reverse
-        folded = {}
-        merged = 0
-
-        ordered.each do |keeper|
-          next if folded[keeper[:id]]
-
-          ordered.each do |other|
-            next if other[:id] == keeper[:id] || folded[other[:id]]
-            next unless @matcher.similar?(keeper[:body], other[:body])
-
-            # Fold the duplicate's sightings into the keeper before tombstoning
-            # so corroboration survives consolidation and can cross the promotion
-            # threshold. A duplicate IS a repeated sighting.
-            @store.increment_corroboration(keeper[:id], by: other[:corroboration_count] || 1)
-            @store.tombstone_observation(other[:id], into_id: keeper[:id])
-            folded[other[:id]] = true
-            merged += 1
-          end
-
-          folded[keeper[:id]] = true
+        folds.each do |fold|
+          @store.increment_corroboration(fold.keeper_id, by: fold.corroboration)
+          @store.tombstone_observation(fold.loser_id, into_id: fold.keeper_id)
         end
-
-        merged
+        folds.size
       end
 
       def expire_stale_info
-        cutoff = (Time.now - @info_ttl_days * 86400).utc.iso8601
+        cutoff = (@clock.now - @info_ttl_days * 86400).utc.iso8601
         ids = @store.observations
           .where(status: "active", priority: Domain::Observation::INFO)
           .where { observed_at < cutoff }

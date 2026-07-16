@@ -7,6 +7,11 @@ module ClaudeMemory
     # Extracts tool usage information from JSONL transcript messages
     # Tracks which tools were called during a session
     class ToolExtractor
+      # Content-block types that represent a tool invocation. Standard tools use
+      # "tool_use"; server-side tools (e.g. advisor()) use "server_tool_use" with
+      # the same name/input shape. Both must be captured so tool usage reaches the
+      # tool_calls table and memory.facts_by_tool attribution.
+      TOOL_USE_BLOCK_TYPES = %w[tool_use server_tool_use].freeze
       # Extract tool calls from raw transcript text
       # @param raw_text [String] the raw JSONL transcript content
       # @return [Array<Hash>] array of tool call hashes
@@ -48,7 +53,7 @@ module ClaudeMemory
         timestamp = message["timestamp"] || Time.now.utc.iso8601
 
         content.each do |block|
-          next unless block["type"] == "tool_use"
+          next unless TOOL_USE_BLOCK_TYPES.include?(block["type"])
 
           tools << {
             tool_name: block["name"],

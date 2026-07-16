@@ -36,6 +36,10 @@ module ClaudeMemory
     class Trust
       WEEK_SECONDS = 7 * 86_400
       UTILIZATION_DAYS = 30
+      # Safety cap on how many recall/context events used_fact_pairs loads +
+      # JSON-parses into memory. The 30-day window bounds it in practice; this
+      # guards against pathological event volume. Newest events win.
+      MAX_USED_FACT_EVENTS = 10_000
       VALUE_EVENT_TYPES = %w[hook_context recall store_extraction].freeze
 
       def initialize(manager)
@@ -170,20 +174,14 @@ module ClaudeMemory
           .select(:detail_json)
           .all
 
-        tokens = rows.filter_map do |row|
-          details = row[:detail_json] ? JSON.parse(row[:detail_json]) : {}
-          value = details["context_tokens"]
-          value if value.is_a?(Integer) && value > 0
-        end
+        budget = Core::TokenBudget.from_detail_json(rows.map { |row| row[:detail_json] })
+        return token_budget_zero if budget.empty?
 
-        return token_budget_zero if tokens.empty?
-
-        sorted = tokens.sort
         {
-          p50: percentile(sorted, 0.50),
-          p95: percentile(sorted, 0.95),
-          avg: (sorted.sum.to_f / sorted.size).round,
-          sample_size: sorted.size,
+          p50: budget.p50,
+          p95: budget.p95,
+          avg: budget.avg,
+          sample_size: budget.sample_size,
           window_days: UTILIZATION_DAYS
         }
       rescue Sequel::DatabaseError, JSON::ParserError => e
@@ -194,14 +192,6 @@ module ClaudeMemory
 
       def token_budget_zero
         {p50: 0, p95: 0, avg: 0, sample_size: 0, window_days: UTILIZATION_DAYS}
-      end
-
-      def percentile(sorted, pct)
-        return 0 if sorted.empty?
-        idx = (sorted.size * pct).ceil - 1
-        idx = 0 if idx < 0
-        idx = sorted.size - 1 if idx >= sorted.size
-        sorted[idx]
       end
 
       private
@@ -422,6 +412,8 @@ module ClaudeMemory
         store.activity_events
           .where(event_type: %w[recall hook_context], status: "success")
           .where { occurred_at >= cutoff }
+          .order(Sequel.desc(:occurred_at))
+          .limit(MAX_USED_FACT_EVENTS)
           .select(:detail_json)
           .all
           .each do |row|

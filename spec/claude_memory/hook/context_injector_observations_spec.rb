@@ -79,7 +79,7 @@ RSpec.describe ClaudeMemory::Hook::ContextInjector, "observations (Block 1)" do
     )
 
     injector.generate_context
-    distill_only = injector.send(:format_distillation_prompt, injector.send(:fetch_undistilled, 5))
+    distill_only = ClaudeMemory::Hook::ContextPresenter.distillation_prompt(injector.send(:fetch_undistilled, 5))
     expect(distill_only).not_to include("observations")
   end
 

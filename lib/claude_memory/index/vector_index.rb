@@ -35,13 +35,17 @@ module ClaudeMemory
 
         ensure_vec_table!
         blob = vector.pack("f*")
-        # vec0 doesn't support INSERT OR REPLACE; delete first
-        execute_with_params("DELETE FROM facts_vec WHERE fact_id = ?", fact_id)
-        execute_with_params(
-          "INSERT INTO facts_vec(fact_id, embedding) VALUES (?, ?)",
-          fact_id, blob
-        )
-        @store.facts.where(id: fact_id).update(vec_indexed_at: Time.now.utc.iso8601)
+        # Atomic: the vec0 row and the fact's vec_indexed_at flag must land
+        # together, or an interruption between them drifts the row vs the flag.
+        @db.transaction do
+          # vec0 doesn't support INSERT OR REPLACE; delete first
+          execute_with_params("DELETE FROM facts_vec WHERE fact_id = ?", fact_id)
+          execute_with_params(
+            "INSERT INTO facts_vec(fact_id, embedding) VALUES (?, ?)",
+            fact_id, blob
+          )
+          @store.facts.where(id: fact_id).update(vec_indexed_at: Time.now.utc.iso8601)
+        end
         true
       end
 

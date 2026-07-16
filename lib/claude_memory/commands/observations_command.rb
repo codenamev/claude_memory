@@ -66,12 +66,13 @@ module ClaudeMemory
       end
 
       def build_report(stores, opts)
+        stats = Observe::ObservationStats.new(stores)
         {
-          totals: totals(stores),
-          by_kind: by_field(stores, :kind),
-          by_priority: by_field(stores, :priority),
-          corroboration: corroboration(stores),
-          compression: compression(stores),
+          totals: stats.totals,
+          by_kind: stats.by_field(:kind),
+          by_priority: stats.by_field(:priority),
+          corroboration: stats.corroboration,
+          compression: stats.compression,
           recent: recent(stores, opts)
         }
       end
@@ -180,58 +181,6 @@ module ClaudeMemory
           .select { |store| store.db.table_exists?(:observations) }
       end
 
-      def totals(stores)
-        {
-          active: count_where(stores, status: "active"),
-          consolidated: count_where(stores, status: "consolidated"),
-          expired: count_where(stores, status: "expired"),
-          promoted: stores.sum { |s| s.observations.exclude(promoted_at: nil).count }
-        }
-      end
-
-      def count_where(stores, **filter)
-        stores.sum { |s| s.observations.where(**filter).count }
-      end
-
-      def by_field(stores, field)
-        merged = Hash.new(0)
-        stores.each do |store|
-          store.observations.where(status: "active").group_and_count(field).each do |row|
-            merged[row[field]] += row[:count]
-          end
-        end
-        merged
-      end
-
-      def corroboration(stores)
-        threshold = Domain::Observation::PROMOTION_THRESHOLD
-        {
-          max: stores.map { |s| s.observations.where(status: "active").max(:corroboration_count) || 0 }.max || 0,
-          promotable: stores.sum do |s|
-            s.observations.where(status: "active", promoted_at: nil)
-              .where { corroboration_count >= threshold }.count
-          end
-        }
-      end
-
-      def compression(stores)
-        obs_tokens = stores.sum { |s| s.observations.where(status: "active").sum(:token_count) || 0 }
-        source_tokens = stores.sum { |s| source_tokens_for(s) }
-        ratio = obs_tokens.zero? ? nil : (source_tokens.to_f / obs_tokens).round(1)
-        {observation_tokens: obs_tokens, source_tokens: source_tokens, ratio: ratio}
-      end
-
-      def source_tokens_for(store)
-        ids = store.observations
-          .where(status: "active").exclude(source_content_item_id: nil)
-          .distinct.select(:source_content_item_id)
-          .map { |r| r[:source_content_item_id] }
-        return 0 if ids.empty?
-
-        bytes = store.content_items.where(id: ids).sum(:byte_len) || 0
-        (bytes / 4.0).round
-      end
-
       def recent(stores, opts)
         rows = stores.flat_map do |store|
           dataset = store.observations
@@ -270,51 +219,20 @@ module ClaudeMemory
         manager = ClaudeMemory::Store::StoreManager.new
         store = manager.store_for_scope(opts[:scope])
 
-        result = promote_observation(store, observation_id, opts)
+        result = Observe::Promotion.new(store, scope: opts[:scope]).call(
+          observation_id: observation_id,
+          predicate: opts[:predicate],
+          object: opts[:object],
+          subject: opts[:subject]
+        )
         manager.close
 
-        return failure(result[:error]) if result[:error]
+        return failure(result.error) unless result.success?
 
-        stdout.puts "Promoted observation ##{observation_id} -> fact ##{result[:fact_id]}"
-        stdout.puts "  #{result[:predicate]}: #{result[:object]}"
-        stdout.puts "  Corroboration: #{result[:corroboration_count]} sighting(s)"
+        stdout.puts "Promoted observation ##{observation_id} -> fact ##{result.fact_id}"
+        stdout.puts "  #{result.predicate}: #{result.object}"
+        stdout.puts "  Corroboration: #{result.corroboration_count} sighting(s)"
         0
-      end
-
-      # Server-side corroboration gate + Resolver path — the same logic the
-      # memory.promote_observation MCP handler uses. Returns {error:} on refusal
-      # or {fact_id:, predicate:, object:, corroboration_count:} on success.
-      def promote_observation(store, observation_id, opts)
-        obs = store.observations.where(id: observation_id).first
-        return {error: "Observation #{observation_id} not found in #{opts[:scope]} database."} unless obs
-        return {error: "Observation #{observation_id} already promoted (fact ##{obs[:promoted_fact_id]})."} unless obs[:promoted_at].nil?
-
-        threshold = Domain::Observation::PROMOTION_THRESHOLD
-        if obs[:corroboration_count].to_i < threshold
-          return {error: "Not yet corroborated: observation #{observation_id} has #{obs[:corroboration_count]} sighting(s), need #{threshold} (anti-hallucination gate)."}
-        end
-
-        occurred_at = Time.now.utc.iso8601
-        project_path = (opts[:scope] == "global") ? nil : Configuration.new.project_dir
-        extraction = Distill::Extraction.new(
-          facts: [{subject: opts[:subject], predicate: opts[:predicate], object: opts[:object], strength: "derived"}]
-        )
-        result = Resolve::Resolver.new(store).apply(
-          extraction, content_item_id: obs[:source_content_item_id],
-          occurred_at: occurred_at, project_path: project_path, scope: opts[:scope]
-        )
-
-        fact_id = result[:fact_ids].compact.first
-        return {error: "Promotion failed: the fact for observation #{observation_id} could not be resolved."} unless fact_id
-
-        store.mark_observation_promoted(observation_id, fact_id: fact_id)
-
-        {
-          fact_id: fact_id,
-          predicate: Resolve::PredicatePolicy.canonicalize(opts[:predicate]),
-          object: opts[:object],
-          corroboration_count: obs[:corroboration_count]
-        }
       end
 
       # --- consolidate --------------------------------------------------------

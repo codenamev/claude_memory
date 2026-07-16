@@ -12,7 +12,6 @@ module ClaudeMemory
       MAX_OBSERVATIONS = 10
       MAX_PROMOTION_CANDIDATES = 5
       MAX_UNDISTILLED = 3
-      MAX_TEXT_PER_ITEM = 1500
       MAX_MIRROR_CANDIDATES = 5
 
       FRESH_SESSION_SOURCES = %w[startup resume clear].freeze
@@ -55,13 +54,13 @@ module ClaudeMemory
         sections = []
 
         decisions = fetch(:decisions, MAX_DECISIONS)
-        sections << format_section("Decisions", decisions) if decisions.any?
+        sections << ContextPresenter.section("Decisions", decisions) if decisions.any?
 
         conventions = fetch(:conventions, MAX_CONVENTIONS)
-        sections << format_section("Conventions", conventions) if conventions.any?
+        sections << ContextPresenter.section("Conventions", conventions) if conventions.any?
 
         architecture = fetch(:architecture, MAX_ARCHITECTURE)
-        sections << format_section("Architecture", architecture) if architecture.any?
+        sections << ContextPresenter.section("Architecture", architecture) if architecture.any?
 
         # Block 1 of the two-block context: the episodic observation log. Sits
         # ahead of the (fresh-session) undistilled "Pending Knowledge Extraction"
@@ -74,18 +73,18 @@ module ClaudeMemory
         if fresh_session?
           undistilled = fetch_undistilled(MAX_UNDISTILLED)
           if undistilled.any?
-            sections << format_distillation_prompt(undistilled)
+            sections << ContextPresenter.distillation_prompt(undistilled)
             # The episodic-capture ask is its own prominent section (#72), not a
             # buried paragraph inside the deep-distill prompt.
-            sections << format_observation_capture_prompt
+            sections << ContextPresenter.observation_capture_prompt
           end
 
           promotion = fetch_promotion_candidates(MAX_PROMOTION_CANDIDATES)
-          sections << format_observation_reflection(promotion) if promotion.any?
+          sections << ContextPresenter.observation_reflection(promotion) if promotion.any?
 
           mirror_candidates = fetch_mirror_candidates(MAX_MIRROR_CANDIDATES)
           if mirror_candidates.any?
-            sections << format_auto_memory_mirror(mirror_candidates)
+            sections << ContextPresenter.auto_memory_mirror(mirror_candidates)
             auto_memory_mirror.commit(mirror_candidates)
           end
         end
@@ -105,7 +104,7 @@ module ClaudeMemory
         candidates = fetch_promotion_candidates(MAX_PROMOTION_CANDIDATES)
         return nil if candidates.empty?
 
-        format_observation_reflection(candidates)
+        ContextPresenter.observation_reflection(candidates)
       end
 
       private
@@ -120,7 +119,7 @@ module ClaudeMemory
         results.filter_map do |r|
           fact = r[:fact]
           next unless fact
-          formatted = format_fact(fact)
+          formatted = ContextPresenter.fact_line(fact, stale_threshold_days: stale_threshold_days)
           next unless formatted
           if fact[:id]
             @emitted_fact_ids << fact[:id]
@@ -134,24 +133,6 @@ module ClaudeMemory
       rescue => e
         ClaudeMemory.logger.debug("ContextInjector#fetch(#{category}) failed: #{e.message}")
         []
-      end
-
-      def format_fact(fact)
-        return nil unless fact
-
-        subject = fact[:subject_name] || fact[:subject_entity_id]
-        predicate = fact[:predicate]
-        object = fact[:object_literal]
-
-        line = if subject && predicate && object
-          "#{subject}.#{predicate} = #{object}"
-        elsif object
-          object.to_s
-        end
-        return nil unless line
-
-        marker = Recall::StalenessAnnotator.marker_for(fact, threshold_days: stale_threshold_days)
-        marker ? "#{line}  #{marker}" : line
       end
 
       def stale_threshold_days
@@ -179,29 +160,6 @@ module ClaudeMemory
       rescue => e
         ClaudeMemory.logger.warn("ContextInjector#fetch_promotion_candidates failed: #{e.message}")
         []
-      end
-
-      def format_observation_reflection(candidates)
-        lines = [
-          "## Observation Reflection",
-          "",
-          "**Promote:** these observations have recurred enough to be worth committing",
-          "as facts (corroboration gate passed). For each that represents a stable truth,",
-          "call `memory.promote_observation(observation_id, predicate, object)` — embed a",
-          "reason in the object (\"… because …\", \"… so that …\"). Skip noise / already-captured.",
-          "",
-          "**Consolidate:** if several observations in the log above (by `#id`) describe the",
-          "same thing in different words, merge them with",
-          "`memory.consolidate_observations(from_ids: […], body: \"<synthesis>\")`. Their",
-          "corroboration combines, which can tip the merged observation past the promotion gate."
-        ]
-
-        candidates.each do |obs|
-          lines << ""
-          lines << "- [obs ##{obs[:id]} ×#{obs[:corroboration_count]}] #{obs[:body]}"
-        end
-
-        lines.join("\n")
       end
 
       def fetch_observations(limit)
@@ -237,72 +195,6 @@ module ClaudeMemory
         []
       end
 
-      def format_distillation_prompt(items)
-        lines = [
-          "## Pending Knowledge Extraction",
-          "",
-          "The following transcript segments haven't been deeply analyzed yet.",
-          "Extract facts, entities, and decisions, then call `memory.store_extraction`",
-          "followed by `memory.mark_distilled` for each item.",
-          "",
-          "**What to extract:** technology decisions, conventions, preferences, architecture",
-          "**What to skip:** debugging steps, code output, transient errors",
-          "",
-          "**Reasoning requirement:** decisions and conventions MUST embed a reason",
-          "in the object (e.g., \"… because …\", \"… so that …\", \"caused by …\",",
-          "\"breaks when …\"). A fact with a reason is recoverable once stale; a",
-          "bare conclusion is dead weight. Prefer one fact-with-reason over two",
-          "facts-without."
-        ]
-
-        items.each do |item|
-          ago = Core::RelativeTime.format(item[:occurred_at]) || "unknown"
-          truncated = Core::TextBuilder.truncate(item[:raw_text], MAX_TEXT_PER_ITEM)
-          lines << ""
-          lines << "### Content Item #{item[:id]} (#{ago})"
-          lines << truncated
-        end
-
-        lines.join("\n")
-      end
-
-      # First-class, standalone ask for the episodic layer (#72). Authoring
-      # observations was previously a paragraph buried inside the optional
-      # deep-distill flow above, and that flow fires almost never — so the
-      # episodic log was 100% Layer-1 scrapes. This decouples it: a prominent,
-      # lightweight instruction to log "what happened" directly, the same way
-      # the fact context rides the session. Effectiveness is measurable via the
-      # `mcp_extraction` content-item source (Layer-2) vs `claude_code` (Layer-1).
-      def format_observation_capture_prompt
-        <<~PROMPT.strip
-          ## Log What Happened (episodic memory)
-
-          Record the recent narrative as **observations** — "what happened",
-          complementing the facts above ("what is true"). For each discrete
-          event in the recent work above (a decision made, a preference stated,
-          a notable fix or outcome), call `memory.store_extraction` with an
-          `observations` array — one entry per event:
-
-          - `body`: one concise sentence of what happened (embed a reason for
-            decisions/preferences — "… because …", "… so that …")
-          - `kind`: `decision`, `preference`, or `event`
-          - `priority`: 1 important, 2 maybe, 3 info
-
-          Keep it to genuine events worth remembering — skip routine steps and
-          code output. Observations accumulate and a corroborated one graduates
-          into a fact. Send them with the facts in the same call, or on their own.
-        PROMPT
-      end
-
-      def format_section(title, items)
-        items = items.compact.uniq
-        return nil if items.empty?
-
-        lines = ["## #{title}"]
-        items.each { |item| lines << "- #{item}" }
-        lines.join("\n")
-      end
-
       def fetch_mirror_candidates(limit)
         mirror = auto_memory_mirror
         return [] unless mirror
@@ -328,29 +220,6 @@ module ClaudeMemory
       rescue => e
         ClaudeMemory.logger.debug("ContextInjector#build_default_mirror failed: #{e.message}")
         nil
-      end
-
-      def format_auto_memory_mirror(candidates)
-        lines = [
-          "## Auto-Memory Mirror Candidates",
-          "",
-          "The following auto-memory entries (from `~/.claude/projects/<slug>/memory/`)",
-          "are new or changed since the last mirror. Consider extracting them into",
-          "claude_memory via `memory.store_extraction` so future sessions can recall",
-          "them via `memory.conventions` / `memory.recall_semantic`.",
-          "",
-          "**Review discipline applies:** only extract high-signal entries (gotchas,",
-          "feedback, references). Skip transient project state. Preserve the `**Why:**`",
-          "and `**How to apply:**` reasoning when present."
-        ]
-
-        candidates.each do |candidate|
-          lines << ""
-          lines << "### #{candidate[:name]}"
-          lines << candidate[:content]
-        end
-
-        lines.join("\n")
       end
     end
   end

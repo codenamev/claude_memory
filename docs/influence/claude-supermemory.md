@@ -8,6 +8,33 @@
 
 ---
 
+## Re-studied: 2026-06-30 — v0.0.9 (commit 42cc164) — CHANGED (significant)
+
+**Versioning/packaging reset.** The plugin was renamed `claude-supermemory` → `supermemory` and re-versioned off the "2.x" marketing line down to semantic `0.0.9` (plugin.json + package.json). Source was restructured into a `plugin/` directory of bundled `.cjs` scripts (built from `src/*.js` via esbuild). Still cloud-only (Supermemory Pro API), still no automated tests — both prior rejections stand unchanged.
+
+### NEW headline feature: Reasoned (per-turn) Recall — HIGH relevance to us
+
+Since v2.0.1, recall moved from a SessionStart-only injection to a **per-message decision loop**, implemented with two new hooks (`plugin/hooks/hooks.json`):
+
+1. **`UserPromptSubmit` → `recall-hook.cjs`** injects a directive (`src/recall-hook.js:DEFAULT_RECALL_DIRECTIVE`) telling Claude to *silently decide whether recalling memory would materially improve the answer to THIS message*, and only then invoke the `supermemory-search` skill. The prompt explicitly lists recall triggers ("refers to earlier work", "ambiguous in a way past context would resolve") and skip conditions ("self-contained, trivial, a greeting/meta, already recalled this session"). Cadence is per-message — fine to recall several turns in a row, fine to never recall. Overridable via `recallDirective` setting.
+2. **`PreToolUse` (matcher `Skill|Bash`) → `recall-approve.cjs`** auto-approves the search invocation (`permissionDecision: 'allow'`) so the auto-recall never triggers a permission prompt. It pattern-matches the supermemory-search skill / `search-memory.cjs` Bash call and refuses if shell metacharacters are present (`src/recall-approve.js:SHELL_OPS`) — a tidy injection-guard.
+3. **Debug mode** appends a `[recall-decision] yes|no — <reason>` line requirement so the user can audit when/why recall fired (`RECALL_DEBUG_SUFFIX`).
+
+**Why this matters for us:** This directly targets our known [project_headless_retrieval_gap.md] — in a running session Claude only sees memory at SessionStart; it rarely calls `memory.recall` mid-session on its own. A `UserPromptSubmit` directive that nudges Claude to call `memory.recall`/`memory.recall_semantic` when the current message would benefit, paired with a `PreToolUse` auto-approve for our read-only recall MCP tools, would add mid-session recall **at no extra API cost** (pure `additionalContext` injection riding the existing session) — squarely inside our no-extra-API-cost convention. We do not currently wire any `UserPromptSubmit` hook, so this is new surface.
+
+### NEW secondary feature: in-context update notice — LOW relevance
+
+`version-check.js` fetches a `latest.json` manifest from GitHub raw, compares semver, and on a newer version injects a `<supermemory-update>` block via `additionalContext` instructing Claude to print a two-line "update available" notice at the top of its next reply. State/cooldown in `~/.supermemory-claude/update-check.json` (3-day cooldown, dedup by version). The 2026-06-21 commit ("fix update notification on every session") fixed it firing every session. Clever zero-UI nudge, but it spends user context tokens to advertise updates and assumes a network fetch on session start — misaligned with our local-first, quiet-by-default posture. We already cover "is memory contributing" via the SessionEnd ROI nudge. AVOID as-is.
+
+### Adoption recommendation
+
+- **⭐ HIGH — Reasoned-recall directive via `UserPromptSubmit` + `PreToolUse` auto-approve for recall tools.** Value: closes the mid-session / headless recall gap that SessionStart injection can't reach. Evidence: `src/recall-hook.js`, `src/recall-approve.js`, `plugin/hooks/hooks.json`. Effort: ~1-2 days (new hook event handler emitting the directive + a PreToolUse allow-rule scoped to `memory.*` read tools; prompt-tune the directive; specs). Trade-off: adds a per-turn `additionalContext` injection (small, steerable) and we must scope auto-approve tightly to read-only recall tools. Pairs well with the data-driven-design convention — gate behind a setting and measure recall-call rate before/after.
+- **AVOID** — GitHub `latest.json` self-update notice (context-token spend + network dependency, against local-first/quiet posture); cloud storage; no-test approach; container-tag scope model (still inferior to our dual-DB) — all unchanged from prior studies.
+
+**Bottom line (2026-06-30):** The one genuinely new, adoptable idea is *reasoned per-turn recall* — a `UserPromptSubmit` directive that lets Claude decide when to pull memory mid-session, plus a `PreToolUse` auto-approve so it runs frictionlessly; a strong, no-API-cost fix for our headless/mid-session retrieval gap. Everything else (cloud, no tests, update-notice) remains a reject.
+
+---
+
 ## Executive Summary
 
 ### Project Purpose

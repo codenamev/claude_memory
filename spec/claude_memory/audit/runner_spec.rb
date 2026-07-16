@@ -112,6 +112,45 @@ RSpec.describe ClaudeMemory::Audit::Runner do
       expect(c007.severity).to eq(:info)
     end
 
+    it "flags content items ingested from truncated tool output (C015)" do
+      manager.ensure_project!
+      store = manager.project_store
+      truncated = "def config\n...\n[Read output capped at 500 lines]"
+      store.upsert_content_item(
+        source: "transcript",
+        text_hash: Digest::SHA256.hexdigest(truncated),
+        byte_len: truncated.bytesize,
+        raw_text: truncated
+      )
+      complete = "def config\n  :ok\nend"
+      store.upsert_content_item(
+        source: "transcript",
+        text_hash: Digest::SHA256.hexdigest(complete),
+        byte_len: complete.bytesize,
+        raw_text: complete
+      )
+
+      result = described_class.new(manager: manager).run
+      c015 = result.findings.find { |f| f.id == "C015" }
+      expect(c015).not_to be_nil
+      expect(c015.severity).to eq(:info)
+      expect(c015.fact_ids.size).to eq(1)
+    end
+
+    it "does not flag C015 when no content is truncated" do
+      manager.ensure_project!
+      complete = "def config\n  :ok\nend"
+      manager.project_store.upsert_content_item(
+        source: "transcript",
+        text_hash: Digest::SHA256.hexdigest(complete),
+        byte_len: complete.bytesize,
+        raw_text: complete
+      )
+
+      result = described_class.new(manager: manager).run
+      expect(result.findings.find { |f| f.id == "C015" }).to be_nil
+    end
+
     it "collects per-DB stats" do
       manager.ensure_both!
       insert(manager.project_store, predicate: "decision", object: "p1 because reasons")

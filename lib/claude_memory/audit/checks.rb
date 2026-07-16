@@ -375,6 +375,34 @@ module ClaudeMemory
         end
       end
 
+      # C015 — Content items ingested from truncated/capped tool output.
+      # Facts distilled from a host-truncated Read fragment are drawn from
+      # incomplete content, so they carry the same false-positive risk as the
+      # documentation-example-text hallucination pattern. Read-only signal.
+      def truncated_source_content(manager)
+        detector = Distill::TruncationDetector.new
+        flagged = []
+        total = 0
+
+        %w[project global].each do |scope|
+          store = manager.store_if_exists(scope)
+          next unless store
+          rows = store.content_items.select(:id, :raw_text).all
+          total += rows.size
+          flagged.concat(rows.select { |r| detector.truncated?(r[:raw_text]) }.map { |r| r[:id] })
+        end
+        return [] if flagged.empty?
+
+        [Finding.new(
+          id: "C015",
+          severity: :info,
+          title: "#{flagged.size} content item(s) ingested from truncated tool output",
+          detail: "These content items carry a host-truncation marker (e.g. '[Read output capped at N lines]'). Any facts distilled from them were extracted from an incomplete fragment, not complete ground truth — the same false-positive class as documentation example text the distiller takes literally.",
+          suggestion: "Trace facts back with claude-memory explain <fact_id>; reject any that assert something the truncated fragment couldn't actually confirm. Re-run the relevant tool without truncation if you need the full content re-ingested.",
+          fact_ids: flagged
+        )]
+      end
+
       def normalize_convention(text)
         text.to_s
           .downcase

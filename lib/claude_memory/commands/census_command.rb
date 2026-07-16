@@ -186,7 +186,7 @@ module ClaudeMemory
           next if novel_tokens.empty?
 
           best = known.map do |canonical|
-            {canonical: canonical, overlap: jaccard(novel_tokens, tokenize(canonical))}
+            {canonical: canonical, overlap: Core::Jaccard.score(novel_tokens, tokenize(canonical))}
           end.max_by { |candidate| candidate[:overlap] }
 
           next unless best && best[:overlap] >= SYNONYM_OVERLAP_THRESHOLD
@@ -197,13 +197,6 @@ module ClaudeMemory
 
       def tokenize(predicate)
         predicate.to_s.downcase.split(/[_\s-]+/).reject(&:empty?).to_set
-      end
-
-      def jaccard(a, b)
-        return 0.0 if a.empty? || b.empty?
-        intersection = (a & b).size
-        union = (a | b).size
-        union.zero? ? 0.0 : intersection.to_f / union
       end
     end
   end

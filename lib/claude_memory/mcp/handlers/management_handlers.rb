@@ -92,47 +92,22 @@ module ClaudeMemory
           observation_id = args["observation_id"]
           return {error: "observation_id required"} if observation_id.nil?
 
-          obs = store.observations.where(id: observation_id).first
-          return {error: "Observation #{observation_id} not found in #{scope} database"} unless obs
-          return {error: "Observation #{observation_id} already promoted (fact #{obs[:promoted_fact_id]})"} unless obs[:promoted_at].nil?
-
-          threshold = Domain::Observation::PROMOTION_THRESHOLD
-          if obs[:corroboration_count].to_i < threshold
-            return {error: "Not yet corroborated: observation #{observation_id} has #{obs[:corroboration_count]} sighting(s), need #{threshold}. Promotion requires repeated corroboration (anti-hallucination gate)."}
-          end
-
-          predicate = args["predicate"]
-          object = args["object"]
-          return {error: "predicate and object are required"} if predicate.nil? || object.to_s.strip.empty?
-          subject = args["subject"] || "repo"
-
-          config = Configuration.new
-          project_path = config.project_dir
-          occurred_at = Time.now.utc.iso8601
-
-          extraction = Distill::Extraction.new(
-            facts: [{subject: subject, predicate: predicate, object: object, strength: "derived"}]
+          result = Observe::Promotion.new(store, scope: scope).call(
+            observation_id: observation_id,
+            predicate: args["predicate"],
+            object: args["object"],
+            subject: args["subject"] || "repo"
           )
-          result = Resolve::Resolver.new(store).apply(
-            extraction, content_item_id: obs[:source_content_item_id],
-            occurred_at: occurred_at, project_path: project_path, scope: scope
-          )
-
-          # The resolver reports the id of the fact it actually touched
-          # (inserted, reinforced, or disputed) — no need to re-query for it.
-          fact_id = result[:fact_ids].compact.first
-          return {error: "Promotion failed: the fact for observation #{observation_id} could not be resolved after creation"} unless fact_id
-
-          store.mark_observation_promoted(observation_id, fact_id: fact_id)
+          return {error: result.error} unless result.success?
 
           {
             success: true,
             observation_id: observation_id,
-            fact_id: fact_id,
-            predicate: Resolve::PredicatePolicy.canonicalize(predicate),
-            object: object,
-            corroboration_count: obs[:corroboration_count],
-            facts_created: result[:facts_created]
+            fact_id: result.fact_id,
+            predicate: result.predicate,
+            object: result.object,
+            corroboration_count: result.corroboration_count,
+            facts_created: result.facts_created
           }
         end
 
