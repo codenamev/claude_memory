@@ -12,6 +12,8 @@ module ClaudeMemory
         otel_event_retention_days: 14,
         otel_trace_retention_days: 7,
         observation_info_ttl_days: 30,
+        stale_fact_threshold_days: 180,
+        ratify_window_days: 30,
         default_budget_seconds: 5
       }.freeze
 
@@ -42,6 +44,8 @@ module ClaudeMemory
 
         run_if_within_budget { @stats[:proposed_facts_expired] = maintenance.expire_proposed_facts }
         run_if_within_budget { @stats[:disputed_facts_expired] = maintenance.expire_disputed_facts }
+        run_if_within_budget { @stats[:facts_marked_expiring] = maintenance.mark_expiring_facts }
+        run_if_within_budget { @stats[:unratified_facts_expired] = maintenance.expire_unratified_facts }
         run_if_within_budget { @stats[:multi_value_facts_merged] = maintenance.dedupe_multi_value_facts }
         run_if_within_budget { @stats[:scope_leakage_fixed] = maintenance.fix_scope_leakage }
         run_if_within_budget { @stats[:orphaned_provenance_deleted] = maintenance.prune_orphaned_provenance }
