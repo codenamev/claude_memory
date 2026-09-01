@@ -66,7 +66,11 @@ module ClaudeMemory
           section: section_filter,
           totals: {
             project: count_for_scope("project"),
-            global: count_for_scope("global")
+            global: count_for_scope("global"),
+            expiring: {
+              project: count_for_scope("project", status: "expiring"),
+              global: count_for_scope("global", status: "expiring")
+            }
           },
           sections: sections
         }
@@ -74,10 +78,10 @@ module ClaudeMemory
 
       private
 
-      def count_for_scope(scope)
+      def count_for_scope(scope, status: "active")
         store = @manager.store_if_exists(scope)
         return 0 unless store
-        store.facts.where(status: "active").count
+        store.facts.where(status: status).count
       rescue Sequel::DatabaseError
         0
       end

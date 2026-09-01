@@ -51,10 +51,13 @@ module ClaudeMemory
 
         store = @manager.store_for_scope(label)
         version = store.schema_version
+        expiring = store.facts.where(status: "expiring").count
+        message = "Schema v#{version}, #{store.facts.where(status: "active").count} active facts"
+        message += ", #{expiring} expiring (awaiting ratification)" if expiring.positive?
         {
           name: "#{label}_database",
           status: "healthy",
-          message: "Schema v#{version}, #{store.facts.where(status: "active").count} active facts"
+          message: message
         }
       rescue => e
         {
