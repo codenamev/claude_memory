@@ -37,6 +37,7 @@ module ClaudeMemory
         "completion" => {class: CompletionCommand, description: "Generate shell completions"},
         "embeddings" => {class: EmbeddingsCommand, description: "Inspect embedding backend"},
         "reject" => {class: RejectCommand, description: "Mark a fact as rejected"},
+        "ratify" => {class: RatifyCommand, description: "Reaffirm a fact, resetting its decay clock"},
         "observations" => {class: ObservationsCommand, description: "Inspect, promote, or consolidate episodic observations"},
         "restore" => {class: RestoreCommand, description: "Restore superseded facts from obsolete single-value classification"},
         "dedupe-conflicts" => {class: DedupeConflictsCommand, description: "Deduplicate historical open conflict rows that describe the same pair"},
