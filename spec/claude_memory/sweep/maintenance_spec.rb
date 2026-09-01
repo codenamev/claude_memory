@@ -69,9 +69,9 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
       expect(row[:expiring_since]).not_to be_nil
     end
 
-    it "does not touch recently recalled facts" do
+    it "ignores passive recall — a recently recalled but unratified fact still decays" do
       create_fact(status: "active", days_ago: 200, last_recalled_at: days_ago_iso(5))
-      expect(maintenance.mark_expiring_facts).to eq(0)
+      expect(maintenance.mark_expiring_facts).to eq(1)
     end
 
     it "treats recent ratification as freshness even without recall" do

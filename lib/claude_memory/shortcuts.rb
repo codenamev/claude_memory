@@ -90,7 +90,7 @@ module ClaudeMemory
 
       Core::FactQueryBuilder.build_facts_dataset(store)
         .where(Sequel[:facts][:predicate] => predicates,
-          Sequel[:facts][:status] => "active")
+          Sequel[:facts][:status] => %w[active expiring])
         .reverse_order(Sequel[:facts][:id])
         .limit(limit)
         .all

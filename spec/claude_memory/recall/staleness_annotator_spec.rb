@@ -37,6 +37,25 @@ RSpec.describe ClaudeMemory::Recall::StalenessAnnotator do
       expect(described_class.marker_for(fact(last_recalled_at: recent_date), now: now)).to be_nil
     end
 
+    it "flags expiring facts on any predicate, with days since expiring_since" do
+      f = fact(predicate: "convention", status: "expiring", expiring_since: "2026-05-18T00:00:00Z")
+      marker = described_class.marker_for(f, now: now)
+      expect(marker).to include("expiring")
+      expect(marker).to include("10d ago")
+      expect(marker).to include("reaffirm")
+    end
+
+    it "prefers the expiring marker over the heuristic stale marker" do
+      marker = described_class.marker_for(fact(status: "expiring"), now: now)
+      expect(marker).to include("expiring")
+      expect(marker).not_to include("verify before relying")
+    end
+
+    it "does not treat active or expired statuses as expiring" do
+      expect(described_class.marker_for(fact(status: "active", predicate: "convention"), now: now)).to be_nil
+      expect(described_class.marker_for(fact(status: "expired", predicate: "convention"), now: now)).to be_nil
+    end
+
     it "flags when last_recalled_at is also old" do
       expect(described_class.marker_for(fact(last_recalled_at: old_date), now: now)).not_to be_nil
     end

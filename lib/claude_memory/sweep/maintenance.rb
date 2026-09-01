@@ -39,17 +39,20 @@ module ClaudeMemory
       end
 
       # Stage 1 of the two-stage expiry lifecycle (#14): active → expiring.
-      # Uses the StaleDetector predicate (created + last recall both past the
-      # threshold) plus reaffirmed_at — an explicitly ratified fact is fresh
-      # even if nothing has recalled it. Expiring facts still recall
-      # (annotated, down-weighted); this only starts the ratification clock.
+      # The decay clock keys off created_at and reaffirmed_at ONLY —
+      # deliberately NOT last_recalled_at. That column is bulk-refreshed by
+      # RecallTimestampRefresher on every passive recall/context-injection
+      # touch, so counting it as freshness self-defeats decay: any fact the
+      # hook keeps injecting would never expire, used or not. Ratification
+      # (reaffirmed_at) is the explicit signal; mere surfacing is not.
+      # Expiring facts still recall (annotated, down-weighted); this only
+      # starts the ratification clock.
       # Returns: Integer count of facts moved to expiring
       def mark_expiring_facts
         cutoff = cutoff_time(@config[:stale_fact_threshold_days])
         @store.facts
           .where(status: "active")
           .where { created_at < cutoff }
-          .where { (last_recalled_at < cutoff) | {last_recalled_at: nil} }
           .where { (reaffirmed_at < cutoff) | {reaffirmed_at: nil} }
           .update(status: "expiring", expiring_since: Time.now.utc.iso8601)
       end
