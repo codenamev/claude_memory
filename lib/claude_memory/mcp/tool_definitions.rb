@@ -228,6 +228,31 @@ module ClaudeMemory
             annotations: WRITE_IDEMPOTENT
           },
           {
+            name: "memory.list_expiring_facts",
+            description: "List facts in the expiring window — stale, awaiting ratification before they expire. Raise these with the user mid-session ('still true that X?'): user presence is the cheapest honest freshness signal.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                scope: {type: "string", enum: ["project", "global"], description: "Database scope", default: "project"},
+                limit: {type: "integer", description: "Max facts to return", default: 50}
+              }
+            },
+            annotations: READ_ONLY
+          },
+          {
+            name: "memory.ratify_fact",
+            description: "Ratify a fact the user confirms is still true. Returns it to 'active' and resets the decay clock (reaffirmed_at) — the only signal that does; passive recall never resets expiry. Also restores 'expired' facts.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                fact_id: {type: "integer", description: "Fact ID to ratify"},
+                docid: {type: "string", description: "8-char docid (alternative to fact_id)"},
+                scope: {type: "string", enum: ["project", "global"], description: "Database scope", default: "project"}
+              }
+            },
+            annotations: WRITE_IDEMPOTENT
+          },
+          {
             name: "memory.store_extraction",
             description: "Store extracted facts, entities, and decisions from a conversation. Call this to persist knowledge you've learned during the session.",
             inputSchema: {
