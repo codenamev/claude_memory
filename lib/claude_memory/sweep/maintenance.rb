@@ -16,7 +16,9 @@ module ClaudeMemory
         otel_metric_retention_days: 30,
         otel_event_retention_days: 14,
         otel_trace_retention_days: 7,
-        observation_info_ttl_days: 30
+        observation_info_ttl_days: 30,
+        stale_fact_threshold_days: 180,
+        ratify_window_days: 30
       }.freeze
 
       attr_reader :store
@@ -33,6 +35,39 @@ module ClaudeMemory
         @store.facts
           .where(status: "proposed")
           .where { created_at < cutoff }
+          .update(status: "expired")
+      end
+
+      # Stage 1 of the two-stage expiry lifecycle (#14): active → expiring.
+      # The decay clock keys off created_at and reaffirmed_at ONLY —
+      # deliberately NOT last_recalled_at. That column is bulk-refreshed by
+      # RecallTimestampRefresher on every passive recall/context-injection
+      # touch, so counting it as freshness self-defeats decay: any fact the
+      # hook keeps injecting would never expire, used or not. Ratification
+      # (reaffirmed_at) is the explicit signal; mere surfacing is not.
+      # Expiring facts still recall (annotated, down-weighted); this only
+      # starts the ratification clock.
+      # Returns: Integer count of facts moved to expiring
+      def mark_expiring_facts
+        cutoff = cutoff_time(@config[:stale_fact_threshold_days])
+        @store.facts
+          .where(status: "active")
+          .where { created_at < cutoff }
+          .where { (reaffirmed_at < cutoff) | {reaffirmed_at: nil} }
+          .update(status: "expiring", expiring_since: Time.now.utc.iso8601)
+      end
+
+      # Stage 2 (#14): expiring → expired after ratify_window_days without
+      # ratification. Ratifying returns a fact to active and clears
+      # expiring_since, so anything still expiring past the window is
+      # unratified by definition. Expired facts are excluded from default
+      # recall (like superseded) but never deleted.
+      # Returns: Integer count of expired facts
+      def expire_unratified_facts
+        cutoff = cutoff_time(@config[:ratify_window_days])
+        @store.facts
+          .where(status: "expiring")
+          .where { expiring_since < cutoff }
           .update(status: "expired")
       end
 

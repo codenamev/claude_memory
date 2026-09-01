@@ -14,7 +14,7 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
     FileUtils.rm_f(db_path)
   end
 
-  def create_fact(status:, days_ago:)
+  def create_fact(status:, days_ago:, **attrs)
     entity_id = store.find_or_create_entity(type: "repo", name: "test")
     created_at = (Time.now - days_ago * 86400).utc.iso8601
     store.facts.insert(
@@ -22,8 +22,13 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
       predicate: "test_pred",
       object_literal: "test_obj",
       status: status,
-      created_at: created_at
+      created_at: created_at,
+      **attrs
     )
+  end
+
+  def days_ago_iso(days)
+    (Time.now - days * 86400).utc.iso8601
   end
 
   def create_content(days_ago:)
@@ -52,6 +57,54 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
     it "does not expire active facts" do
       create_fact(status: "active", days_ago: 20)
       expect(maintenance.expire_proposed_facts).to eq(0)
+    end
+  end
+
+  describe "#mark_expiring_facts" do
+    it "moves stale active facts to expiring and stamps expiring_since" do
+      id = create_fact(status: "active", days_ago: 200)
+      expect(maintenance.mark_expiring_facts).to eq(1)
+      row = store.facts.where(id: id).first
+      expect(row[:status]).to eq("expiring")
+      expect(row[:expiring_since]).not_to be_nil
+    end
+
+    it "ignores passive recall — a recently recalled but unratified fact still decays" do
+      create_fact(status: "active", days_ago: 200, last_recalled_at: days_ago_iso(5))
+      expect(maintenance.mark_expiring_facts).to eq(1)
+    end
+
+    it "treats recent ratification as freshness even without recall" do
+      create_fact(status: "active", days_ago: 200, reaffirmed_at: days_ago_iso(5))
+      expect(maintenance.mark_expiring_facts).to eq(0)
+    end
+
+    it "ages out facts whose ratification is itself stale" do
+      create_fact(status: "active", days_ago: 400, reaffirmed_at: days_ago_iso(200))
+      expect(maintenance.mark_expiring_facts).to eq(1)
+    end
+
+    it "does not touch fresh facts" do
+      create_fact(status: "active", days_ago: 5)
+      expect(maintenance.mark_expiring_facts).to eq(0)
+    end
+  end
+
+  describe "#expire_unratified_facts" do
+    it "expires facts past the ratification window" do
+      id = create_fact(status: "expiring", days_ago: 300, expiring_since: days_ago_iso(45))
+      expect(maintenance.expire_unratified_facts).to eq(1)
+      expect(store.facts.where(id: id).first[:status]).to eq("expired")
+    end
+
+    it "leaves facts still inside the window" do
+      create_fact(status: "expiring", days_ago: 300, expiring_since: days_ago_iso(5))
+      expect(maintenance.expire_unratified_facts).to eq(0)
+    end
+
+    it "ignores non-expiring facts" do
+      create_fact(status: "active", days_ago: 300)
+      expect(maintenance.expire_unratified_facts).to eq(0)
     end
   end
 

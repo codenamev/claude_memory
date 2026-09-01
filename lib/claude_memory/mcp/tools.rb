@@ -84,6 +84,8 @@ module ClaudeMemory
         when "memory.stats" then stats(arguments)
         when "memory.promote" then promote(arguments)
         when "memory.reject_fact" then reject_fact(arguments)
+        when "memory.list_expiring_facts" then list_expiring_facts(arguments)
+        when "memory.ratify_fact" then ratify_fact(arguments)
         when "memory.store_extraction" then store_extraction(arguments)
         when "memory.decisions" then decisions(arguments)
         when "memory.conventions" then conventions(arguments)

@@ -24,18 +24,18 @@ RSpec.describe ClaudeMemory::Dashboard::Knowledge do
     FileUtils.rm_rf(tmpdir)
   end
 
-  def insert(store, predicate:, object:, subject: "app", scope: "project", confidence: 0.9)
+  def insert(store, predicate:, object:, subject: "app", scope: "project", confidence: 0.9, status: "active")
     entity_id = store.find_or_create_entity(type: "repo", name: subject)
     store.insert_fact(
       subject_entity_id: entity_id, predicate: predicate, object_literal: object,
-      status: "active", confidence: confidence, scope: scope
+      status: status, confidence: confidence, scope: scope
     )
   end
 
   describe "#summary" do
     it "returns the zero shape when empty" do
       data = knowledge.summary
-      expect(data[:totals]).to eq(project: 0, global: 0)
+      expect(data[:totals]).to eq(project: 0, global: 0, expiring: {project: 0, global: 0})
       expect(data[:sections].map { |s| s[:key] }).to eq([
         :decisions, :quality_guards, :conventions, :architecture, :constraints, :references
       ])
@@ -122,7 +122,15 @@ RSpec.describe ClaudeMemory::Dashboard::Knowledge do
       insert(manager.global_store, predicate: "convention", object: "y", scope: "global")
 
       data = knowledge.summary
-      expect(data[:totals]).to eq(project: 1, global: 1)
+      expect(data[:totals]).to eq(project: 1, global: 1, expiring: {project: 0, global: 0})
+    end
+
+    it "counts expiring facts separately from active totals" do
+      insert(manager.project_store, predicate: "decision", object: "x")
+      insert(manager.project_store, predicate: "convention", object: "y", status: "expiring")
+
+      data = knowledge.summary
+      expect(data[:totals]).to eq(project: 1, global: 0, expiring: {project: 1, global: 0})
     end
   end
 end

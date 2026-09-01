@@ -449,6 +449,36 @@ module ClaudeMemory
         {rejected: true, conflicts_resolved: resolved}
       end
 
+      # Ratify a fact: the explicit freshness signal per #14. Returns the
+      # fact to "active" and resets the decay clock (reaffirmed_at). Passive
+      # recall never does this — ratification is the only clock reset.
+      # Expired facts are restorable through the same path; superseded,
+      # rejected, and disputed facts are not (they left the lifecycle for
+      # reasons ratification doesn't answer).
+      def ratify_fact(fact_id)
+        row = facts.where(id: fact_id).first
+        return nil unless row
+        unless %w[active expiring expired].include?(row[:status])
+          return {ratified: false, status: row[:status]}
+        end
+
+        facts.where(id: fact_id).update(
+          status: "active",
+          reaffirmed_at: Time.now.utc.iso8601,
+          expiring_since: nil
+        )
+        {ratified: true, previous_status: row[:status]}
+      end
+
+      # Facts awaiting ratification, oldest first (closest to expiry).
+      def expiring_facts(limit: 50)
+        facts
+          .where(status: "expiring")
+          .order(:expiring_since)
+          .limit(limit)
+          .all
+      end
+
       # Retrieve active facts that have stored embeddings.
       # @param limit [Integer] maximum rows to return
       # @return [Array<Hash>] fact rows with :id, :subject_entity_id,

@@ -34,12 +34,19 @@ module ClaudeMemory
 
       DEFAULT_THRESHOLD_DAYS = 180
 
-      # @param fact [Hash] needs :predicate; reads :valid_from, :created_at,
-      #   :last_recalled_at when present
+      # @param fact [Hash] needs :predicate; reads :status, :valid_from,
+      #   :created_at, :last_recalled_at, :expiring_since when present
       # @param now [Time]
       # @param threshold_days [Integer]
       # @return [String, nil] marker text, or nil when not stale / not guarded
       def marker_for(fact, now: Time.now.utc, threshold_days: DEFAULT_THRESHOLD_DAYS)
+        # Lifecycle state (#14) outranks the heuristic staleness guess: an
+        # expiring fact is one the sweeper has already judged unratified, so
+        # it's flagged on every predicate, not just single-value ones —
+        # this marker is the ratification prompt.
+        expiring = expiring_marker(fact, now: now)
+        return expiring if expiring
+
         return nil unless Resolve::PredicatePolicy.single?(fact[:predicate].to_s)
 
         established = parse_time(fact[:valid_from]) || parse_time(fact[:created_at])
@@ -59,6 +66,17 @@ module ClaudeMemory
       # @return [Boolean] true when marker_for would return a marker
       def stale?(fact, now: Time.now.utc, threshold_days: DEFAULT_THRESHOLD_DAYS)
         !marker_for(fact, now: now, threshold_days: threshold_days).nil?
+      end
+
+      # @return [String, nil] marker for facts in the expiring lifecycle
+      #   state, or nil for any other status
+      def expiring_marker(fact, now: Time.now.utc)
+        return nil unless fact[:status].to_s == "expiring"
+
+        since = parse_time(fact[:expiring_since])
+        days = since ? ((now - since) / 86_400).round : nil
+        age = days ? " #{days}d ago" : ""
+        "⏳ expiring: unratified#{age} — reaffirm if still true, or let it expire"
       end
 
       def parse_time(value)

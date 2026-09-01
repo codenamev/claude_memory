@@ -184,6 +184,54 @@ module ClaudeMemory
           }
         end
 
+        def list_expiring_facts(args)
+          scope = args["scope"] || "project"
+          store = get_store_for_scope(scope)
+          return {error: "Database not available"} unless store
+
+          rows = store.expiring_facts(limit: args["limit"] || 50)
+          {
+            scope: scope,
+            count: rows.size,
+            facts: rows.map do |r|
+              {
+                id: r[:id],
+                docid: r[:docid],
+                predicate: r[:predicate],
+                object: r[:object_literal],
+                expiring_since: r[:expiring_since]
+              }
+            end
+          }
+        end
+
+        def ratify_fact(args)
+          scope = args["scope"] || "project"
+          store = get_store_for_scope(scope)
+          return {error: "Database not available"} unless store
+
+          fact_id = args["fact_id"]
+          if fact_id.nil? && args["docid"]
+            row = store.find_fact_by_docid(args["docid"])
+            fact_id = row && row[:id]
+          end
+          return {error: "fact_id or docid required"} if fact_id.nil?
+
+          result = store.ratify_fact(fact_id)
+          return {error: "Fact #{fact_id} not found in #{scope} database"} if result.nil?
+          unless result[:ratified]
+            return {error: "Fact #{fact_id} is #{result[:status]} — only active, expiring, or expired facts can be ratified"}
+          end
+
+          {
+            success: true,
+            scope: scope,
+            fact_id: fact_id,
+            previous_status: result[:previous_status],
+            message: "Fact ratified — decay clock reset"
+          }
+        end
+
         def sweep_now(args)
           scope = args["scope"] || "project"
           store = get_store_for_scope(scope)
