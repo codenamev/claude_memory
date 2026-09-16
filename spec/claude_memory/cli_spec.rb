@@ -235,7 +235,7 @@ RSpec.describe ClaudeMemory::CLI do
 
         code = run_cli_with_stdin("hook", "ingest", "--db", db_path, input: payload)
 
-        expect(code).to eq(ClaudeMemory::Hook::ExitCodes::WARNING)
+        expect(code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
         expect(stdout.string).to include("Skipped ingestion: transcript_not_found")
       end
     end

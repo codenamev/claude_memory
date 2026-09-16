@@ -137,9 +137,13 @@ module ClaudeMemory
           when "session_excluded"
             stdout.puts "Session excluded by privacy marker"
             Hook::ExitCodes::SUCCESS
-          else
-            # transcript_not_found or other skipped reasons
+          when "transcript_not_found"
+            # Expected at SessionStart: a fresh session has no transcript yet
             stdout.puts "Skipped ingestion: #{result[:reason]}"
+            Hook::ExitCodes::SUCCESS
+          else
+            # Claude Code only surfaces stderr for non-zero exits
+            stderr.puts "Skipped ingestion: #{result[:reason]}"
             Hook::ExitCodes::WARNING
           end
         else

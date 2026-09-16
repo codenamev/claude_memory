@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **SessionStart no longer reports a spurious hook error on fresh sessions.** The plugin's SessionStart `ingest` hook runs before the new session's transcript file exists, and `transcript_not_found` fell into the catch-all skip branch that exits `WARNING` (1) — so every session started with "SessionStart:startup hook error ... No stderr output" (the skip message went to stdout, which Claude Code doesn't surface on failure). A missing transcript at SessionStart is the expected state, not a warning: it now exits `SUCCESS`, and the remaining catch-all skip reasons write to stderr so any future non-zero exit shows a real message.
+
 ## [0.13.2] - 2026-06-27
 
 Theme: **Robustness from a real bug report (issue #7) + a 28MB→606K gem.** Closes [#7](https://github.com/codenamev/claude_memory/issues/7) — three independent failure modes around embeddings, FTS, and process lifecycle — plus two backlog items surfaced alongside it. No schema changes, no breaking changes.
