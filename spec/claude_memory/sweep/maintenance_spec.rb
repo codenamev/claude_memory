@@ -152,6 +152,19 @@ RSpec.describe ClaudeMemory::Sweep::Maintenance do
       create_content(days_ago: 10)
       expect(maintenance.prune_old_content).to eq(0)
     end
+
+    it "prunes aged content that still carries an ingestion metric" do
+      content_id = create_content(days_ago: 35)
+      store.record_ingestion_metrics(
+        content_item_id: content_id,
+        input_tokens: 10,
+        output_tokens: 5,
+        facts_extracted: 1
+      )
+
+      expect(maintenance.prune_old_content).to eq(1)
+      expect(store.ingestion_metrics.where(content_item_id: content_id).count).to eq(0)
+    end
   end
 
   describe "#backfill_vec_index" do

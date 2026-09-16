@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - **SessionStart no longer reports a spurious hook error on fresh sessions.** The plugin's SessionStart `ingest` hook runs before the new session's transcript file exists, and `transcript_not_found` fell into the catch-all skip branch that exits `WARNING` (1) — so every session started with "SessionStart:startup hook error ... No stderr output" (the skip message went to stdout, which Claude Code doesn't surface on failure). A missing transcript at SessionStart is the expected state, not a warning: it now exits `SUCCESS`, and the remaining catch-all skip reasons write to stderr so any future non-zero exit shows a real message.
+- **The sweep no longer aborts on its own pruning step, so databases stop growing without bound.** `ingestion_metrics.content_item_id` was created (v7) as a plain `foreign_key ..., null: false` with no `ON DELETE` action, unlike the sibling `tool_calls` which cascades. `Sweep::Maintenance#prune_old_content` deletes aged content items carrying no provenance, and any such item that still had a metrics row raised `ForeignKeyConstraintViolation` — which escaped the sweeper, so one aged row aborted the entire sweep and nothing was ever pruned. Migration v22 rebuilds the table with `ON DELETE CASCADE`. Observed on a real workspace as a 507 MiB project DB holding 39 facts, where 340 content items were blocking the prune.
 
 ## [0.13.2] - 2026-06-27
 
