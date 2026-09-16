@@ -2,7 +2,7 @@ PATH
   remote: .
   specs:
     claude_memory (0.13.2)
-      extralite (~> 2.14)
+      extralite (>= 2.14, < 3.0, != 2.15)
       sequel (~> 5.102)
       sqlite-vec (~> 0.1, >= 0.1.9)
       webrick (~> 1.8)

@@ -200,7 +200,7 @@ module ClaudeMemory
             vec_index = store.vector_index
 
             unless vec_index.available?
-              stderr.puts "#{label.capitalize}: sqlite-vec not available, cannot backfill"
+              stderr.puts "#{label.capitalize}: sqlite-vec not available, cannot backfill#{" (#{vec_index.load_error})" if vec_index.load_error}"
               next
             end
 

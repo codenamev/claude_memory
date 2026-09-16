@@ -36,7 +36,13 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "sequel", "~> 5.102"
-  spec.add_dependency "extralite", "~> 2.14"
+  # 2.15 alone has no Extralite::Database#load_extension, so SqliteVec.load
+  # raises NoMethodError and VectorIndex reports "sqlite-vec not available"
+  # for what is really a broken dependency. 2.14 and 3.x both have it, so
+  # this excludes the one bad release rather than everything above it.
+  # Held below 3.0 separately: it requires Ruby >= 3.4 (we allow >= 3.2)
+  # and turns foreign keys on by default.
+  spec.add_dependency "extralite", ">= 2.14", "!= 2.15", "< 3.0"
   spec.add_dependency "sqlite-vec", "~> 0.1", ">= 0.1.9"
   spec.add_dependency "webrick", "~> 1.8"
 end
