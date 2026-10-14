@@ -26,6 +26,10 @@ module ClaudeMemory
         @available = load_extension!
       end
 
+      # Why the last extension probe failed, or nil when it succeeded.
+      # @return [String, nil]
+      attr_reader :load_error
+
       # Insert (or replace) a fact's embedding into the vec0 virtual table.
       # Also sets vec_indexed_at on the fact row.
       # @param fact_id [Integer]
@@ -203,8 +207,13 @@ module ClaudeMemory
         @db.synchronize do |conn|
           SqliteVec.load(conn)
         end
+        @load_error = nil
         true
-      rescue LoadError, StandardError
+      rescue LoadError, StandardError => e
+        # Keep the reason: a silently-false probe here reads as "no vector
+        # support configured" when it is really a broken dependency, and an
+        # unusable extension is indistinguishable from an absent one.
+        @load_error = "#{e.class}: #{e.message}"
         false
       end
 

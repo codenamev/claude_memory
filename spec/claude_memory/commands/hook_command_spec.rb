@@ -68,7 +68,7 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
         expect(stdout.string).to include("excluded")
       end
 
-      it "returns WARNING (1) for skipped ingest (missing file)" do
+      it "returns SUCCESS (0) for missing transcript (fresh session at SessionStart)" do
         payload = {
           "session_id" => "sess-123",
           "transcript_path" => "/nonexistent/file.txt"
@@ -77,7 +77,8 @@ RSpec.describe ClaudeMemory::Commands::HookCommand do
 
         exit_code = command.call(["ingest", "--db", db_path])
 
-        expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::WARNING)
+        expect(exit_code).to eq(ClaudeMemory::Hook::ExitCodes::SUCCESS)
+        expect(stdout.string).to include("transcript_not_found")
       end
 
       it "returns ERROR (2) for invalid JSON payload" do

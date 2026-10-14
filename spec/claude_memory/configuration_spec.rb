@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "tmpdir"
+require "fileutils"
+require "open3"
 
 RSpec.describe ClaudeMemory::Configuration do
   describe "#initialize" do
@@ -29,30 +32,113 @@ RSpec.describe ClaudeMemory::Configuration do
   end
 
   describe "#project_dir" do
-    it "returns CLAUDE_PROJECT_DIR when set" do
+    it "returns CLAUDE_PROJECT_DIR when it is not inside a git repo" do
       config = described_class.new({"CLAUDE_PROJECT_DIR" => "/path/to/project"})
+      allow(config).to receive(:git_command).and_return(nil)
+
       expect(config.project_dir).to eq("/path/to/project")
     end
 
     it "resolves git repo root for regular repos" do
       config = described_class.new({})
-      allow(config).to receive(:git_command).with("rev-parse --git-common-dir").and_return(".git")
-      allow(config).to receive(:git_command).with("rev-parse --show-toplevel").and_return("/repo/root")
+      allow(config).to receive(:git_command).with(Dir.pwd, "rev-parse", "--git-common-dir").and_return(".git")
+      allow(config).to receive(:git_command).with(Dir.pwd, "rev-parse", "--show-toplevel").and_return("/repo/root")
 
       expect(config.project_dir).to eq("/repo/root")
     end
 
     it "resolves main repo root when inside a git worktree" do
       config = described_class.new({})
-      allow(config).to receive(:git_command).with("rev-parse --git-common-dir").and_return("/main/repo/.git")
+      allow(config).to receive(:git_command).with(Dir.pwd, "rev-parse", "--git-common-dir").and_return("/main/repo/.git")
       allow(File).to receive(:realpath).with("/main/repo/.git").and_return("/main/repo/.git")
 
       expect(config.project_dir).to eq("/main/repo")
     end
 
+    # Claude Code sets CLAUDE_PROJECT_DIR on every hook and MCP subprocess, to
+    # the directory the session started in. Returning it as-is skipped the
+    # worktree resolution entirely and gave each worktree its own database.
+    it "resolves CLAUDE_PROJECT_DIR through the git root when it names a worktree" do
+      config = described_class.new({"CLAUDE_PROJECT_DIR" => "/wt/feature"})
+      allow(config).to receive(:git_command).with("/wt/feature", "rev-parse", "--git-common-dir").and_return("/main/repo/.git")
+      allow(File).to receive(:realpath).with("/main/repo/.git").and_return("/main/repo/.git")
+
+      expect(config.project_dir).to eq("/main/repo")
+    end
+
+    it "resolves CLAUDE_PROJECT_DIR up to the repo root when it names a subdirectory" do
+      config = described_class.new({"CLAUDE_PROJECT_DIR" => "/repo/root/backend"})
+      allow(config).to receive(:git_command).with("/repo/root/backend", "rev-parse", "--git-common-dir").and_return(".git")
+      allow(config).to receive(:git_command).with("/repo/root/backend", "rev-parse", "--show-toplevel").and_return("/repo/root")
+
+      expect(config.project_dir).to eq("/repo/root")
+    end
+
     it "uses Dir.pwd when CLAUDE_MEMORY_ISOLATE_WORKTREES is set" do
       config = described_class.new({"CLAUDE_MEMORY_ISOLATE_WORKTREES" => "1"})
       expect(config.project_dir).to eq(Dir.pwd)
+    end
+
+    it "keeps CLAUDE_PROJECT_DIR unresolved when CLAUDE_MEMORY_ISOLATE_WORKTREES is set" do
+      config = described_class.new({
+        "CLAUDE_PROJECT_DIR" => "/wt/feature",
+        "CLAUDE_MEMORY_ISOLATE_WORKTREES" => "1"
+      })
+      expect(config).not_to receive(:git_command)
+
+      expect(config.project_dir).to eq("/wt/feature")
+    end
+
+    context "against a real git worktree" do
+      let(:tmp) { Dir.mktmpdir("cm-worktree") }
+      let(:repo) { File.join(tmp, "repo") }
+      let(:worktree) { File.join(tmp, "wt") }
+
+      # git exports GIT_DIR, GIT_INDEX_FILE and friends to its own hooks, so a
+      # suite run from pre-commit inherits them and every git call below acts
+      # on the wrong repository. Scrub them, and raise on failure instead of
+      # discarding stderr - a fixture that silently fails to build breaks a
+      # later expectation, somewhere that does not name the cause.
+      def git!(*args)
+        out, status = Open3.capture2e(ClaudeMemory::Configuration::GIT_ENV_SCRUB, "git", *args)
+        raise "git #{args.join(" ")} failed: #{out}" unless status.success?
+        out
+      end
+
+      before do
+        FileUtils.mkdir_p(repo)
+        git!("init", "-q", repo)
+        git!("-C", repo, "config", "user.email", "t@example.com")
+        git!("-C", repo, "config", "user.name", "t")
+        File.write(File.join(repo, "README"), "x")
+        git!("-C", repo, "add", "README")
+        git!("-C", repo, "commit", "-qm", "init")
+        git!("-C", repo, "worktree", "add", "-q", worktree, "-b", "feature")
+        raise "worktree fixture was not created" unless File.directory?(worktree)
+      end
+
+      after { FileUtils.remove_entry(tmp) }
+
+      it "maps a worktree named by CLAUDE_PROJECT_DIR back to the main repo" do
+        config = described_class.new({"CLAUDE_PROJECT_DIR" => worktree})
+        expect(File.realpath(config.project_dir)).to eq(File.realpath(repo))
+      end
+
+      it "gives the worktree and the main repo the same project database" do
+        from_worktree = described_class.new({"CLAUDE_PROJECT_DIR" => worktree}).project_db_path
+        from_repo = described_class.new({"CLAUDE_PROJECT_DIR" => repo}).project_db_path
+
+        expect(File.realpath(File.dirname(from_worktree, 2)))
+          .to eq(File.realpath(File.dirname(from_repo, 2)))
+      end
+
+      it "still isolates the worktree when CLAUDE_MEMORY_ISOLATE_WORKTREES is set" do
+        config = described_class.new({
+          "CLAUDE_PROJECT_DIR" => worktree,
+          "CLAUDE_MEMORY_ISOLATE_WORKTREES" => "1"
+        })
+        expect(config.project_dir).to eq(worktree)
+      end
     end
 
     it "falls back to Dir.pwd when git is not available" do
@@ -64,7 +150,7 @@ RSpec.describe ClaudeMemory::Configuration do
 
     it "falls back to Dir.pwd when not in a git repo" do
       config = described_class.new({})
-      allow(config).to receive(:git_command).with("rev-parse --git-common-dir").and_return(nil)
+      allow(config).to receive(:git_command).with(Dir.pwd, "rev-parse", "--git-common-dir").and_return(nil)
 
       expect(config.project_dir).to eq(Dir.pwd)
     end
