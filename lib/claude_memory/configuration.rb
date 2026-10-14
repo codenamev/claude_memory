@@ -9,6 +9,16 @@ module ClaudeMemory
   class Configuration
     attr_reader :env
 
+    # Environment overrides that clear git's per-invocation variables. A Hash
+    # passed to Process.spawn is merged into the caller's environment, so a
+    # filtered copy of ENV does not remove anything - only an explicit nil
+    # unsets a variable.
+    GIT_ENV_SCRUB = %w[
+      GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+      GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+      GIT_PREFIX GIT_CEILING_DIRECTORIES
+    ].to_h { |k| [k, nil] }.freeze
+
     # @param env [Hash] environment variables (default: ENV)
     def initialize(env = ENV)
       @env = env
@@ -21,7 +31,10 @@ module ClaudeMemory
 
     # @return [String] project root directory (resolves git worktrees)
     def project_dir
-      env["CLAUDE_PROJECT_DIR"] || resolve_project_dir
+      base = env["CLAUDE_PROJECT_DIR"] || Dir.pwd
+      return base if env["CLAUDE_MEMORY_ISOLATE_WORKTREES"]
+
+      git_main_repo_root(base) || base
     end
 
     # @return [String] Claude config directory (default: ~/.claude)
@@ -128,38 +141,45 @@ module ClaudeMemory
 
     private
 
-    def resolve_project_dir
-      return Dir.pwd if env["CLAUDE_MEMORY_ISOLATE_WORKTREES"]
-
-      git_main_repo_root || Dir.pwd
-    end
-
-    # Resolve main repository root, even when running inside a git worktree.
-    # Uses --git-common-dir which returns the shared .git directory across
-    # all worktrees, preventing duplicate project databases per worktree.
-    def git_main_repo_root
-      common_dir = git_command("rev-parse --git-common-dir")
+    # Resolve the main repository root for +dir+, even when +dir+ is a git
+    # worktree. --git-common-dir returns the shared .git directory across all
+    # worktrees, so every worktree of a repo maps to one project database.
+    #
+    # CLAUDE_PROJECT_DIR is resolved through here rather than returned as-is.
+    # Claude Code sets it on every hook and MCP subprocess, pointing at the
+    # directory the session started in, so reading it directly would skip this
+    # entirely and mint a database per worktree. Asking for that is what
+    # CLAUDE_MEMORY_ISOLATE_WORKTREES is for, and it still does exactly that.
+    def git_main_repo_root(dir)
+      common_dir = git_command(dir, "rev-parse", "--git-common-dir")
       return nil unless common_dir
 
       if common_dir == ".git"
-        git_command("rev-parse --show-toplevel")
+        git_command(dir, "rev-parse", "--show-toplevel")
       else
-        # Worktree - common_dir is absolute path to main repo's .git dir
-        # (or .git/worktrees parent). Resolve to repo root.
-        File.dirname(File.realpath(common_dir))
+        # Worktree - common_dir points at the main repo's .git dir. It can be
+        # relative, and git resolves it against +dir+, not the process cwd.
+        File.dirname(File.realpath(File.absolute_path(common_dir, dir)))
       end
-    rescue Errno::ENOENT
-      # git not available or path doesn't exist
+    rescue Errno::ENOENT, Errno::ENOTDIR
+      # git not available, or the path does not exist
       nil
     end
 
-    # Run a git command and return stripped output, or nil on failure
-    def git_command(args)
-      output, status = Open3.capture2("git #{args}", err: File::NULL)
+    # Run a git command in +dir+ and return stripped output, or nil on failure.
+    # Array form, so a directory containing spaces or shell metacharacters is
+    # passed through as one argument rather than reparsed by a shell.
+    #
+    # GIT_ENV_SCRUB is passed so -C decides the repository. git exports GIT_DIR
+    # and GIT_INDEX_FILE to its own hooks, and those outrank -C, so a
+    # claude-memory command invoked from a git hook would otherwise resolve
+    # every project to whatever repository ran the hook.
+    def git_command(dir, *args)
+      output, status = Open3.capture2(GIT_ENV_SCRUB, "git", "-C", dir.to_s, *args, err: File::NULL)
       return nil unless status.success?
       stripped = output.strip
       stripped.empty? ? nil : stripped
-    rescue Errno::ENOENT
+    rescue Errno::ENOENT, Errno::ENOTDIR
       nil
     end
   end
