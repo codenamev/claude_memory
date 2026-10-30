@@ -24,6 +24,8 @@ module ClaudeMemory
           Checks::DistillCheck.new(manager.project_db_path, "project"),
           Checks::FtsRankCheck.new(manager.global_db_path, "global"),
           Checks::FtsRankCheck.new(manager.project_db_path, "project"),
+          Checks::NovelPredicateCheck.new(manager.global_db_path, "global"),
+          Checks::NovelPredicateCheck.new(manager.project_db_path, "project"),
           Checks::VecCheck.new,
           Checks::EmbeddingsCheck.new,
           Checks::SnapshotCheck.new,
