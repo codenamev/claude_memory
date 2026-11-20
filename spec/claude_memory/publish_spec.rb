@@ -160,11 +160,14 @@ RSpec.describe ClaudeMemory::Publish do
     end
 
     context "home mode" do
-      let(:home_memory_dir) { File.join(Dir.home, ".claude", "claude_memory") }
+      # Sandbox HOME so the spec never writes into the real ~/.claude.
+      let(:fake_home) { Dir.mktmpdir("claude_memory_home") }
+      let(:home_memory_dir) { File.join(fake_home, ".claude", "claude_memory") }
       let(:project_name) { File.basename(test_dir) }
       let(:home_file) { File.join(home_memory_dir, "#{project_name}.md") }
 
-      after { FileUtils.rm_f(home_file) }
+      before { ENV["HOME"] = fake_home }
+      after { FileUtils.rm_rf(fake_home) }
 
       it "writes to user home directory" do
         create_fact("convention", "test rule")
