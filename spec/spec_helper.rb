@@ -23,6 +23,18 @@ RSpec.configure do |config|
     ].each { |var| ENV.delete(var) }
   end
 
+  # Several specs point HOME at a tmpdir and then ENV.delete("HOME") instead of
+  # restoring it. With HOME unset, Dir.home falls back to the login name, which
+  # under launchd/cron resolves to /var/root, so later specs that write under
+  # Dir.home fail with EACCES depending on run order. Restore HOME after every
+  # example, whatever the example did to it.
+  config.around do |example|
+    original_home = ENV["HOME"]
+    example.run
+  ensure
+    ENV["HOME"] = original_home
+  end
+
   # Disable RSpec exposing methods globally on `Module` and `main`
   config.disable_monkey_patching!
 
