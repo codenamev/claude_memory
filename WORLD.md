@@ -7,9 +7,8 @@ reads this document before proposing anything and stays inside its fences. If a
 proposal conflicts with this file, the proposal is wrong.
 
 Status: PROPOSED. Drafted 2026-09-13 as a seven-section charter. Restructured
-2026-09-20 under the six headings every repo in the fleet now shares, so a loop
-session or a portfolio pass finds the same answer in the same place in every
-repo. Awaiting maintainer approval.
+2026-09-20 under six standard headings, so the same question always has its
+answer in the same place. Awaiting maintainer approval.
 
 ## VISION (where we hope this goes)
 
@@ -32,12 +31,11 @@ the end of a conversation without anyone maintaining a notes file by hand.
 
 ## CONSTITUTION (what rules we must obey)
 
-The fleet's shared rules live in one place and this file links to them rather
-than pasting: the [operator's constitution](https://github.com/minerva-sky/workspace/blob/master/WORLD.md#constitution-what-rules-we-must-obey).
-That covers the autonomy ladder (L0 propose in an issue, L1 open a PR the
-maintainer merges, L2 merge after a quiet period on green CI, L3 merge on green
-CI and report in a digest), how a class gets promoted (maintainer approval on
-the acceptance record) and demoted (any revert, immediately).
+Agent contributions follow an autonomy ladder: L0 propose in an issue, L1 open
+a PR the maintainer merges, L2 merge after a quiet period on green CI, L3 merge
+on green CI and report in a digest. A class of change is promoted only by
+maintainer approval on its acceptance record, and demoted immediately by any
+revert.
 
 Local additions for claude_memory:
 
@@ -113,7 +111,7 @@ That split stays: this file says what to build, that one says how.
 Improvements arrive as GitHub issues. This repo does not yet run a project
 loop, and the origin and state labels below do not exist here yet; issues today
 are human-originated and carry the default GitHub labels. When a loop is
-configured, its issues carry the fleet's labels (`loop:quality`,
+configured, its issues carry origin labels (`loop:quality`,
 `loop:security`, `loop:deps`, `loop:research`, `loop:self`; `status:analyzed`,
 `status:deferred`, `status:wont-do`, `status:blocked`), a closed
 `status:wont-do` issue records the reason in its final comment, and proposals
@@ -121,9 +119,8 @@ check closed and deferred issues, and `docs/improvements.md`, before re-raising
 an idea. The improvements file is the older institutional memory and still
 counts.
 
-Each change class has an autonomy level per the constitution above. Every class
-starts at L0 or L1, and the current level per class is recorded on the
-operator's side, not here.
+Each change class has an autonomy level on the ladder above. Every class
+starts at L0 or L1 and moves only by maintainer approval.
 
 ## CHARTER (why this exists, what territory, what freedoms)
 
